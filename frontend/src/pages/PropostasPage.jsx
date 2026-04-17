@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,7 +27,10 @@ async function fetchLogoBase64() {
       reader.onload = () => resolve(reader.result);
       reader.readAsDataURL(blob);
     });
-  } catch { return null; }
+  } catch (err) {
+    console.error('Logo fetch CORS error:', err.message);
+    return null;
+  }
 }
 
 async function generatePDF(proposal) {
@@ -36,7 +39,9 @@ async function generatePDF(proposal) {
 
   // Header
   if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 15, 10, 40, 20); } catch {}
+    try { doc.addImage(logoBase64, 'PNG', 15, 10, 40, 20); } catch (imgErr) {
+      console.error('Logo embed error:', imgErr.message);
+    }
   }
   doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
@@ -129,15 +134,18 @@ export default function PropostasPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
 
-  const fetchProposals = async () => {
+  const fetchProposals = useCallback(async () => {
     try {
       const { data } = await api.get('/proposals');
       setProposals(data);
-    } catch { toast.error('Erro ao carregar propostas'); }
+    } catch (err) {
+      console.error('Proposals fetch error:', err.message);
+      toast.error('Erro ao carregar propostas');
+    }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchProposals(); }, []);
+  useEffect(() => { fetchProposals(); }, [fetchProposals]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Eliminar esta proposta?')) return;
@@ -178,15 +186,17 @@ export default function PropostasPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-6">
-          {loading ? (
+          {loading && (
             <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
-          ) : Object.keys(grouped).length === 0 ? (
+          )}
+          {!loading && Object.keys(grouped).length === 0 && (
             <div className="text-center py-16 text-zinc-500">
               <ClipboardList size={48} className="mx-auto mb-4 text-zinc-700" />
               <p>Nenhuma proposta encontrada</p>
               <p className="text-sm mt-1">Gere propostas a partir de um orcamento</p>
             </div>
-          ) : (
+          )}
+          {!loading && Object.keys(grouped).length > 0 && (
             <div className="space-y-8">
               {Object.entries(grouped).map(([budgetId, props]) => (
                 <div key={budgetId}>

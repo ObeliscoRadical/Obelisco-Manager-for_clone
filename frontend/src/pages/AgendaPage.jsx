@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Plus, Trash2, Clock, CalendarDays } from 'lucide-react';
 import { toast } from 'sonner';
@@ -17,19 +17,30 @@ export default function AgendaPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '' });
 
-  const fetchAppointments = async () => {
+  const fetchAppointments = useCallback(async () => {
     try { const { data } = await api.get('/appointments'); setAppointments(data); }
-    catch { toast.error('Erro ao carregar agenda'); }
+    catch (err) {
+      console.error('Appointments fetch error:', err.message);
+      toast.error('Erro ao carregar agenda');
+    }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchAppointments(); }, []);
+  useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
   const dayAppointments = appointments.filter(a => a.date === selectedDateStr);
 
   // Dates that have appointments
   const appointmentDates = [...new Set(appointments.map(a => a.date))];
+
+  const calendarModifiers = useMemo(() => ({
+    hasAppointment: appointmentDates.map(d => new Date(d + 'T00:00:00')),
+  }), [appointmentDates]);
+
+  const calendarModifiersStyles = useMemo(() => ({
+    hasAppointment: { fontWeight: 'bold', textDecoration: 'underline', textDecorationColor: '#FACC15' },
+  }), []);
 
   const openNew = () => {
     setForm({ title: '', client_name: '', date: selectedDateStr, time_start: '09:00', time_end: '10:00', notes: '' });
@@ -78,12 +89,8 @@ export default function AgendaPage() {
               selected={selectedDate}
               onSelect={(d) => d && setSelectedDate(d)}
               className="rounded-2xl"
-              modifiers={{
-                hasAppointment: appointmentDates.map(d => new Date(d + 'T00:00:00')),
-              }}
-              modifiersStyles={{
-                hasAppointment: { fontWeight: 'bold', textDecoration: 'underline', textDecorationColor: '#FACC15' },
-              }}
+              modifiers={calendarModifiers}
+              modifiersStyles={calendarModifiersStyles}
             />
           </CardContent>
         </Card>
@@ -97,14 +104,16 @@ export default function AgendaPage() {
             <span className="text-zinc-500 text-sm">({dayAppointments.length} agendamento{dayAppointments.length !== 1 ? 's' : ''})</span>
           </div>
 
-          {loading ? (
+          {loading && (
             <div className="flex justify-center py-8"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
-          ) : dayAppointments.length === 0 ? (
+          )}
+          {!loading && dayAppointments.length === 0 && (
             <div className="text-center py-12 text-zinc-500 bg-zinc-900 rounded-3xl border border-zinc-800">
               <Clock size={36} className="mx-auto mb-3 text-zinc-700" />
               <p>Sem agendamentos neste dia</p>
             </div>
-          ) : (
+          )}
+          {!loading && dayAppointments.length > 0 && (
             <div className="space-y-3">
               {dayAppointments.sort((a, b) => a.time_start.localeCompare(b.time_start)).map(a => (
                 <Card key={a.id} className="bg-zinc-900 border-zinc-800 rounded-2xl hover:shadow-[0_0_15px_rgba(250,204,21,0.1)] transition-all duration-300">
@@ -135,6 +144,7 @@ export default function AgendaPage() {
         <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Novo Agendamento</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Crie um novo agendamento na sua agenda</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>

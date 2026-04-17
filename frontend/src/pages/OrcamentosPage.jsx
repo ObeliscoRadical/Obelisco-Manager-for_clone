@@ -1,16 +1,18 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Pencil, FileText, Calculator } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
-const defaultItem = { category: '', name: '', quantity: 1, unit_cost: 0, margin: 0.6 };
+
+let itemIdCounter = 0;
+const createItem = () => ({ _key: `item-${++itemIdCounter}`, category: '', name: '', quantity: 1, unit_cost: 0, margin: 0.6 });
 
 const statusColors = {
   rascunho: 'bg-zinc-700 text-zinc-300',
@@ -33,17 +35,20 @@ export default function OrcamentosPage() {
   const [title, setTitle] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
-  const [items, setItems] = useState([{ ...defaultItem }]);
+  const [items, setItems] = useState([createItem()]);
 
-  const fetchBudgets = async () => {
+  const fetchBudgets = useCallback(async () => {
     try {
       const { data } = await api.get('/budgets');
       setBudgets(data);
-    } catch { toast.error('Erro ao carregar orcamentos'); }
+    } catch (err) {
+      console.error('Budgets fetch error:', err.message);
+      toast.error('Erro ao carregar orcamentos');
+    }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchBudgets(); }, []);
+  useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
 
   const openNew = () => {
     setEditingBudget(null);
@@ -61,7 +66,7 @@ export default function OrcamentosPage() {
     setDialogOpen(true);
   };
 
-  const addItem = () => setItems([...items, { ...defaultItem }]);
+  const addItem = () => setItems([...items, createItem()]);
   const removeItem = (idx) => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)); };
   const updateItem = (idx, field, value) => {
     const next = [...items];
@@ -69,13 +74,13 @@ export default function OrcamentosPage() {
     setItems(next);
   };
 
-  const totalCost = useMemo(() => items.reduce((s, i) => s + i.unit_cost * i.quantity, 0), [items]);
-  const totalPrice = useMemo(() => items.reduce((s, i) => s + i.unit_cost * (1 + i.margin) * i.quantity, 0), [items]);
+  const totalCost = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * item.quantity, 0), [items]);
+  const totalPrice = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * (1 + item.margin) * item.quantity, 0), [items]);
 
   const handleSave = async () => {
     if (!title || !clientName) { toast.error('Preencha o titulo e nome do cliente'); return; }
     try {
-      const payload = { title, client_name: clientName, client_phone: clientPhone, items };
+      const payload = { title, client_name: clientName, client_phone: clientPhone, items: items.map(({ _key, ...rest }) => rest) };
       if (editingBudget) {
         await api.put(`/budgets/${editingBudget.id}`, payload);
         toast.success('Orcamento atualizado');
@@ -85,7 +90,10 @@ export default function OrcamentosPage() {
       }
       setDialogOpen(false);
       fetchBudgets();
-    } catch { toast.error('Erro ao guardar orcamento'); }
+    } catch (err) {
+      console.error('Save budget error:', err.message);
+      toast.error('Erro ao guardar orcamento');
+    }
   };
 
   const handleGenerateProposals = async (budgetId) => {
@@ -117,14 +125,16 @@ export default function OrcamentosPage() {
         </Button>
       </div>
 
-      {loading ? (
+      {loading && (
         <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
-      ) : budgets.length === 0 ? (
+      )}
+      {!loading && budgets.length === 0 && (
         <div className="text-center py-16 text-zinc-500">
           <FileText size={48} className="mx-auto mb-4 text-zinc-700" />
           <p>Nenhum orcamento criado</p>
         </div>
-      ) : (
+      )}
+      {!loading && budgets.length > 0 && (
         <div className="rounded-3xl border border-zinc-800 bg-zinc-900 overflow-hidden">
           <Table>
             <TableHeader>
@@ -163,6 +173,9 @@ export default function OrcamentosPage() {
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
               {editingBudget ? 'Editar Orcamento' : 'Novo Orcamento'}
             </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">
+              {editingBudget ? 'Atualize os detalhes do orcamento' : 'Preencha os detalhes do novo orcamento'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6 mt-4">
@@ -207,7 +220,7 @@ export default function OrcamentosPage() {
                       const salePrice = item.unit_cost * (1 + item.margin);
                       const total = salePrice * item.quantity;
                       return (
-                        <TableRow key={idx} className="border-zinc-800/50">
+                        <TableRow key={item._key} className="border-zinc-800/50">
                           <TableCell className="p-1"><Input value={item.category} onChange={e => updateItem(idx, 'category', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm" placeholder="Cat." /></TableCell>
                           <TableCell className="p-1"><Input value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm" placeholder="Nome" /></TableCell>
                           <TableCell className="p-1"><Input type="number" min="0" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm w-16" /></TableCell>

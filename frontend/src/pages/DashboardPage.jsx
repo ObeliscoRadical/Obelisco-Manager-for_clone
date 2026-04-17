@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,12 +21,20 @@ export default function DashboardPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.get('/dashboard/stats')
-      .then(({ data }) => setStats(data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+  const fetchStats = useCallback(async () => {
+    try {
+      const { data } = await api.get('/dashboard/stats');
+      setStats(data);
+    } catch (err) {
+      console.error('Dashboard stats error:', err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -53,9 +61,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {kpis.map((kpi, i) => (
+        {kpis.map((kpi) => (
           <Card
-            key={i}
+            key={kpi.label}
             data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s/g, '-')}`}
             className="bg-zinc-900 border-zinc-800 rounded-3xl hover:shadow-[0_0_15px_rgba(250,204,21,0.15)] transition-all duration-300"
           >
@@ -78,8 +86,8 @@ export default function DashboardPage() {
             <h3 className="text-xl font-black uppercase tracking-tight text-white mb-4">Obras Recentes</h3>
             {stats?.recent_works?.length > 0 ? (
               <div className="space-y-3">
-                {stats.recent_works.map((w, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-zinc-800">
+                {stats.recent_works.map((w) => (
+                  <div key={w.id || w.title} className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-zinc-800">
                     <div>
                       <p className="text-sm font-medium text-white">{w.title}</p>
                       <p className="text-xs text-zinc-500">{w.client_name}</p>
@@ -101,8 +109,8 @@ export default function DashboardPage() {
             <h3 className="text-xl font-black uppercase tracking-tight text-white mb-4">Orcamentos Recentes</h3>
             {stats?.recent_budgets?.length > 0 ? (
               <div className="space-y-3">
-                {stats.recent_budgets.map((b, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-zinc-800">
+                {stats.recent_budgets.map((b) => (
+                  <div key={b.id || b.title} className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/50 border border-zinc-800">
                     <div>
                       <p className="text-sm font-medium text-white">{b.title}</p>
                       <p className="text-xs text-zinc-500">{b.client_name}</p>

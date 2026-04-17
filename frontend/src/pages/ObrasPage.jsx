@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -32,13 +32,16 @@ export default function ObrasPage() {
   const [editingWork, setEditingWork] = useState(null);
   const [form, setForm] = useState({ ...emptyWork });
 
-  const fetchWorks = async () => {
+  const fetchWorks = useCallback(async () => {
     try { const { data } = await api.get('/works'); setWorks(data); }
-    catch { toast.error('Erro ao carregar obras'); }
+    catch (err) {
+      console.error('Works fetch error:', err.message);
+      toast.error('Erro ao carregar obras');
+    }
     finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { fetchWorks(); }, []);
+  useEffect(() => { fetchWorks(); }, [fetchWorks]);
 
   const openNew = () => { setEditingWork(null); setForm({ ...emptyWork }); setDialogOpen(true); };
   const openEdit = (w) => {
@@ -79,14 +82,16 @@ export default function ObrasPage() {
         </Button>
       </div>
 
-      {loading ? (
+      {loading && (
         <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
-      ) : works.length === 0 ? (
+      )}
+      {!loading && works.length === 0 && (
         <div className="text-center py-16 text-zinc-500">
           <HardHat size={48} className="mx-auto mb-4 text-zinc-700" />
           <p>Nenhuma obra registada</p>
         </div>
-      ) : (
+      )}
+      {!loading && works.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {works.map(w => {
             const margin = w.predicted_cost > 0 ? ((w.predicted_cost - w.real_cost) / w.predicted_cost * 100) : 0;
@@ -130,6 +135,9 @@ export default function ObrasPage() {
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
               {editingWork ? 'Editar Obra' : 'Nova Obra'}
             </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">
+              {editingWork ? 'Atualize os detalhes da obra' : 'Preencha os detalhes da nova obra'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
