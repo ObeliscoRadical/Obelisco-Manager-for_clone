@@ -489,7 +489,269 @@ async def get_dashboard_stats(user=Depends(get_current_user)):
     }
 
 
-# --- Startup & Shutdown ---
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+import json as json_module
+
+
+# --- Catalogo de Categorias e Itens para Eletricistas/Telecom ---
+
+CATEGORIES_CATALOG = [
+    {
+        "id": "cabos_fios",
+        "name": "Cabos e Fios",
+        "items": [
+            {"name": "Cabo H05VV-F 3G2,5mm", "unit": "metro"},
+            {"name": "Cabo H05VV-F 3G1,5mm", "unit": "metro"},
+            {"name": "Cabo H05VV-F 5G2,5mm", "unit": "metro"},
+            {"name": "Cabo VV 3x2,5mm", "unit": "metro"},
+            {"name": "Cabo VV 3x4mm", "unit": "metro"},
+            {"name": "Fio H07V-U 2,5mm (azul/castanho/verde-amarelo)", "unit": "metro"},
+            {"name": "Fio H07V-U 1,5mm", "unit": "metro"},
+            {"name": "Fio H07V-U 4mm", "unit": "metro"},
+            {"name": "Fio H07V-U 6mm", "unit": "metro"},
+            {"name": "Cabo coaxial RG6", "unit": "metro"},
+            {"name": "Cabo UTP Cat5e", "unit": "metro"},
+            {"name": "Cabo UTP Cat6", "unit": "metro"},
+            {"name": "Cabo UTP Cat6 (bobine 305m)", "unit": "unidade"},
+            {"name": "Cabo fibra optica monomodo", "unit": "metro"},
+            {"name": "Cabo de alarme 4 condutores", "unit": "metro"},
+            {"name": "Cabo LSZH 3G2,5mm", "unit": "metro"},
+        ]
+    },
+    {
+        "id": "quadros_protecao",
+        "name": "Quadros e Protecao",
+        "items": [
+            {"name": "Quadro eletrico 12 modulos", "unit": "unidade"},
+            {"name": "Quadro eletrico 24 modulos", "unit": "unidade"},
+            {"name": "Quadro eletrico 36 modulos", "unit": "unidade"},
+            {"name": "Disjuntor monofasico 10A", "unit": "unidade"},
+            {"name": "Disjuntor monofasico 16A", "unit": "unidade"},
+            {"name": "Disjuntor monofasico 20A", "unit": "unidade"},
+            {"name": "Disjuntor monofasico 32A", "unit": "unidade"},
+            {"name": "Disjuntor trifasico 32A", "unit": "unidade"},
+            {"name": "Diferencial 40A 30mA bipolar", "unit": "unidade"},
+            {"name": "Diferencial 63A 30mA tetrapolar", "unit": "unidade"},
+            {"name": "Descarregador de sobretensao Tipo 2", "unit": "unidade"},
+            {"name": "Contactor 25A", "unit": "unidade"},
+            {"name": "Rele horario digital", "unit": "unidade"},
+            {"name": "Barramento de ligacao", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "tomadas_interruptores",
+        "name": "Tomadas e Interruptores",
+        "items": [
+            {"name": "Tomada Schuko encastrar (branca)", "unit": "unidade"},
+            {"name": "Tomada Schuko dupla encastrar", "unit": "unidade"},
+            {"name": "Interruptor simples encastrar", "unit": "unidade"},
+            {"name": "Interruptor duplo encastrar", "unit": "unidade"},
+            {"name": "Comutador de escada", "unit": "unidade"},
+            {"name": "Comutador de lustre", "unit": "unidade"},
+            {"name": "Inversor de grupo", "unit": "unidade"},
+            {"name": "Tomada RJ45 Cat6 encastrar", "unit": "unidade"},
+            {"name": "Tomada TV/SAT encastrar", "unit": "unidade"},
+            {"name": "Espelho/Placa 1 posto", "unit": "unidade"},
+            {"name": "Espelho/Placa 2 postos", "unit": "unidade"},
+            {"name": "Tomada industrial CEE 16A", "unit": "unidade"},
+            {"name": "Tomada industrial CEE 32A", "unit": "unidade"},
+            {"name": "Regulador de intensidade (dimmer)", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "iluminacao",
+        "name": "Iluminacao",
+        "items": [
+            {"name": "Downlight LED encastrar 12W", "unit": "unidade"},
+            {"name": "Downlight LED encastrar 18W", "unit": "unidade"},
+            {"name": "Projetor LED exterior 30W", "unit": "unidade"},
+            {"name": "Projetor LED exterior 50W", "unit": "unidade"},
+            {"name": "Projetor LED exterior 100W", "unit": "unidade"},
+            {"name": "Fita LED 5m branco quente", "unit": "unidade"},
+            {"name": "Fita LED 5m RGB", "unit": "unidade"},
+            {"name": "Lampada LED E27 10W", "unit": "unidade"},
+            {"name": "Lampada LED E14 6W", "unit": "unidade"},
+            {"name": "Lampada LED GU10 7W", "unit": "unidade"},
+            {"name": "Armadura estanque LED 36W 120cm", "unit": "unidade"},
+            {"name": "Painel LED 60x60 40W", "unit": "unidade"},
+            {"name": "Aplique LED exterior", "unit": "unidade"},
+            {"name": "Sensor de movimento PIR", "unit": "unidade"},
+            {"name": "Sensor crepuscular", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "calhas_tubos",
+        "name": "Calhas e Tubos",
+        "items": [
+            {"name": "Tubo VD 20mm (vara 3m)", "unit": "unidade"},
+            {"name": "Tubo VD 25mm (vara 3m)", "unit": "unidade"},
+            {"name": "Tubo VD 32mm (vara 3m)", "unit": "unidade"},
+            {"name": "Tubo corrugado 20mm (rolo 50m)", "unit": "unidade"},
+            {"name": "Tubo corrugado 25mm (rolo 50m)", "unit": "unidade"},
+            {"name": "Tubo corrugado 32mm (rolo 25m)", "unit": "unidade"},
+            {"name": "Calha DLP 40x25mm (2m)", "unit": "unidade"},
+            {"name": "Calha DLP 60x40mm (2m)", "unit": "unidade"},
+            {"name": "Calha de chao 50x12mm", "unit": "metro"},
+            {"name": "Caixa de derivacao 100x100", "unit": "unidade"},
+            {"name": "Caixa de derivacao 150x150", "unit": "unidade"},
+            {"name": "Caixa de aparelhagem (fundo)", "unit": "unidade"},
+            {"name": "Braçadeira clip 20mm", "unit": "unidade"},
+            {"name": "Braçadeira clip 25mm", "unit": "unidade"},
+            {"name": "Abraçadeira nylon 200mm (saco 100)", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "telecomunicacoes",
+        "name": "Telecomunicacoes",
+        "items": [
+            {"name": "Router WiFi 6 dual band", "unit": "unidade"},
+            {"name": "Access Point WiFi 6", "unit": "unidade"},
+            {"name": "Switch Gigabit 8 portas", "unit": "unidade"},
+            {"name": "Switch Gigabit 16 portas", "unit": "unidade"},
+            {"name": "Switch PoE 8 portas", "unit": "unidade"},
+            {"name": "Patch panel 24 portas Cat6", "unit": "unidade"},
+            {"name": "Conector RJ45 Cat6 (saco 100)", "unit": "unidade"},
+            {"name": "Patch cord Cat6 1m", "unit": "unidade"},
+            {"name": "Patch cord Cat6 3m", "unit": "unidade"},
+            {"name": "Bastidor rack 6U parede", "unit": "unidade"},
+            {"name": "Bastidor rack 12U parede", "unit": "unidade"},
+            {"name": "Bastidor rack 42U chao", "unit": "unidade"},
+            {"name": "Organizador de cabos 1U", "unit": "unidade"},
+            {"name": "Tomada fibra optica SC/APC", "unit": "unidade"},
+            {"name": "Camera IP PoE 4MP", "unit": "unidade"},
+            {"name": "NVR 8 canais PoE", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "ferramentas_acessorios",
+        "name": "Ferramentas e Acessorios",
+        "items": [
+            {"name": "Multimetro digital profissional", "unit": "unidade"},
+            {"name": "Alicate de corte diagonal", "unit": "unidade"},
+            {"name": "Alicate universal isolado 1000V", "unit": "unidade"},
+            {"name": "Alicate de cravar RJ45", "unit": "unidade"},
+            {"name": "Alicate descarnar cabos", "unit": "unidade"},
+            {"name": "Detetor de tensao sem contacto", "unit": "unidade"},
+            {"name": "Chave de fendas isolada 1000V (jogo)", "unit": "unidade"},
+            {"name": "Fita isoladora preta 20m", "unit": "unidade"},
+            {"name": "Fita isoladora (pack 10 cores)", "unit": "unidade"},
+            {"name": "Terminais de cravar (caixa sortida)", "unit": "unidade"},
+            {"name": "Passa fios aço 20m", "unit": "unidade"},
+            {"name": "Passa fios nylon 15m", "unit": "unidade"},
+            {"name": "Testador de cabos RJ45/RJ11", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "carregamento_ev",
+        "name": "Carregamento Veiculo Eletrico",
+        "items": [
+            {"name": "Wallbox monofasico 7.4kW", "unit": "unidade"},
+            {"name": "Wallbox trifasico 11kW", "unit": "unidade"},
+            {"name": "Wallbox trifasico 22kW", "unit": "unidade"},
+            {"name": "Cabo de carregamento Tipo 2 (5m)", "unit": "unidade"},
+            {"name": "Protecao diferencial Tipo B 40A", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "energia_solar",
+        "name": "Energia Solar",
+        "items": [
+            {"name": "Painel solar fotovoltaico 400W", "unit": "unidade"},
+            {"name": "Painel solar fotovoltaico 550W", "unit": "unidade"},
+            {"name": "Inversor hibrido monofasico 5kW", "unit": "unidade"},
+            {"name": "Inversor string trifasico 10kW", "unit": "unidade"},
+            {"name": "Bateria de litio 5kWh", "unit": "unidade"},
+            {"name": "Bateria de litio 10kWh", "unit": "unidade"},
+            {"name": "Estrutura montagem telhado (kit 4 paineis)", "unit": "unidade"},
+            {"name": "Cabo solar 6mm (vermelho)", "unit": "metro"},
+            {"name": "Cabo solar 6mm (preto)", "unit": "metro"},
+            {"name": "Conector MC4 (par)", "unit": "unidade"},
+        ]
+    },
+    {
+        "id": "domotica",
+        "name": "Domotica e Automacao",
+        "items": [
+            {"name": "Interruptor inteligente WiFi", "unit": "unidade"},
+            {"name": "Tomada inteligente WiFi", "unit": "unidade"},
+            {"name": "Lampada inteligente E27 WiFi RGB", "unit": "unidade"},
+            {"name": "Controlador de estores WiFi", "unit": "unidade"},
+            {"name": "Hub Zigbee/Z-Wave", "unit": "unidade"},
+            {"name": "Sensor de porta/janela", "unit": "unidade"},
+            {"name": "Sensor de temperatura/humidade", "unit": "unidade"},
+            {"name": "Campainha video WiFi (video doorbell)", "unit": "unidade"},
+            {"name": "Fechadura inteligente", "unit": "unidade"},
+        ]
+    },
+]
+
+
+# --- Categories & Price Lookup Endpoints ---
+
+class PriceLookupRequest(BaseModel):
+    item_name: str
+
+
+@api_router.get("/categories")
+async def get_categories(user=Depends(get_current_user)):
+    return CATEGORIES_CATALOG
+
+
+@api_router.post("/price-lookup")
+async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)):
+    llm_key = os.environ.get("EMERGENT_LLM_KEY")
+    if not llm_key:
+        raise HTTPException(status_code=500, detail="Chave LLM nao configurada")
+
+    try:
+        chat = LlmChat(
+            api_key=llm_key,
+            session_id=f"price-{uuid.uuid4()}",
+            system_message=(
+                "Es um especialista em precos de material eletrico e telecomunicacoes em Portugal. "
+                "O utilizador vai dar-te o nome de um item/material. "
+                "Deves responder APENAS com um objeto JSON valido com estes campos: "
+                '{"price": <numero em EUR>, "price_min": <preco minimo>, "price_max": <preco maximo>, "unit": "metro/unidade/pack", "source": "<breve descricao de onde vem o preco>"} '
+                "Baseia-te em precos de retalho em Portugal (lojas como Leroy Merlin, Voltimum, Material Eletrico Online, Jolar, EDP Store, etc). "
+                "Se nao conseguires estimar, devolve price: 0. "
+                "NAO incluas texto adicional, apenas o JSON."
+            )
+        ).with_model("openai", "gpt-5.2")
+
+        user_msg = UserMessage(text=f"Preco medio de retalho em Portugal para: {input.item_name}")
+        response = await chat.send_message(user_msg)
+
+        # Parse the JSON response
+        response_text = response.strip()
+        # Handle markdown code blocks
+        if response_text.startswith("```"):
+            response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text[3:]
+            if response_text.endswith("```"):
+                response_text = response_text[:-3]
+            response_text = response_text.strip()
+
+        price_data = json_module.loads(response_text)
+        return {
+            "item_name": input.item_name,
+            "price": price_data.get("price", 0),
+            "price_min": price_data.get("price_min", 0),
+            "price_max": price_data.get("price_max", 0),
+            "unit": price_data.get("unit", "unidade"),
+            "source": price_data.get("source", "Estimativa IA"),
+        }
+    except json_module.JSONDecodeError:
+        logger.error(f"Price lookup JSON parse error for: {input.item_name}, response: {response_text}")
+        return {
+            "item_name": input.item_name,
+            "price": 0,
+            "price_min": 0,
+            "price_max": 0,
+            "unit": "unidade",
+            "source": "Erro ao interpretar resposta",
+        }
+    except Exception as e:
+        logger.error(f"Price lookup error for: {input.item_name}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro na pesquisa de preco: {str(e)}")
 
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@obelisco.pt")

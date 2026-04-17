@@ -5,8 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, FileText, Calculator } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -36,6 +37,8 @@ export default function OrcamentosPage() {
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [items, setItems] = useState([createItem()]);
+  const [categories, setCategories] = useState([]);
+  const [searchingPrice, setSearchingPrice] = useState({});
 
   const fetchBudgets = useCallback(async () => {
     try {
@@ -48,7 +51,16 @@ export default function OrcamentosPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
+  const fetchCategories = useCallback(async () => {
+    try {
+      const { data } = await api.get('/categories');
+      setCategories(data);
+    } catch (err) {
+      console.error('Categories fetch error:', err.message);
+    }
+  }, []);
+
+  useEffect(() => { fetchBudgets(); fetchCategories(); }, [fetchBudgets, fetchCategories]);
 
   const openNew = () => {
     setEditingBudget(null);
@@ -68,10 +80,54 @@ export default function OrcamentosPage() {
 
   const addItem = () => setItems([...items, createItem()]);
   const removeItem = (idx) => { if (items.length > 1) setItems(items.filter((_, i) => i !== idx)); };
+
   const updateItem = (idx, field, value) => {
     const next = [...items];
     next[idx] = { ...next[idx], [field]: field === 'category' || field === 'name' ? value : (parseFloat(value) || 0) };
     setItems(next);
+  };
+
+  const handleCategoryChange = (idx, categoryId) => {
+    const next = [...items];
+    const cat = categories.find(c => c.id === categoryId);
+    next[idx] = { ...next[idx], category: cat ? cat.name : categoryId };
+    setItems(next);
+  };
+
+  const handleItemSelect = (idx, itemName) => {
+    const next = [...items];
+    next[idx] = { ...next[idx], name: itemName };
+    setItems(next);
+  };
+
+  const searchPrice = async (idx) => {
+    const item = items[idx];
+    if (!item.name) { toast.error('Insira o nome do item primeiro'); return; }
+    const searchKey = item._key;
+    setSearchingPrice(prev => ({ ...prev, [searchKey]: true }));
+    try {
+      const { data } = await api.post('/price-lookup', { item_name: item.name });
+      if (data.price > 0) {
+        const next = [...items];
+        next[idx] = { ...next[idx], unit_cost: data.price };
+        setItems(next);
+        toast.success(
+          `${item.name}: ${formatEuro(data.price)} (${formatEuro(data.price_min)} - ${formatEuro(data.price_max)}) | ${data.source}`
+        );
+      } else {
+        toast.error(`Nao foi possivel encontrar preco para: ${item.name}`);
+      }
+    } catch (err) {
+      console.error('Price lookup error:', err.message);
+      toast.error('Erro na pesquisa de preco');
+    } finally {
+      setSearchingPrice(prev => ({ ...prev, [searchKey]: false }));
+    }
+  };
+
+  const getCategoryItems = (categoryName) => {
+    const cat = categories.find(c => c.name === categoryName);
+    return cat ? cat.items : [];
   };
 
   const totalCost = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * item.quantity, 0), [items]);
@@ -168,13 +224,13 @@ export default function OrcamentosPage() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
               {editingBudget ? 'Editar Orcamento' : 'Novo Orcamento'}
             </DialogTitle>
             <DialogDescription className="text-zinc-500 text-sm">
-              {editingBudget ? 'Atualize os detalhes do orcamento' : 'Preencha os detalhes do novo orcamento'}
+              {editingBudget ? 'Atualize os detalhes do orcamento' : 'Preencha os detalhes do novo orcamento. Use as categorias pre-definidas e pesquise precos atualizados.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -196,44 +252,100 @@ export default function OrcamentosPage() {
 
             <div>
               <div className="flex items-center justify-between mb-3">
-                <Label className="text-zinc-300 text-base font-semibold">Itens do Orcamento</Label>
+                <div>
+                  <Label className="text-zinc-300 text-base font-semibold">Itens do Orcamento</Label>
+                  <p className="text-xs text-zinc-500 mt-0.5">Selecione categoria e item, ou escreva livremente. Clique na lupa para pesquisar precos.</p>
+                </div>
                 <Button data-testid="add-item-btn" onClick={addItem} variant="outline" size="sm" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-full text-xs">
                   <Plus size={14} className="mr-1" /> Item
                 </Button>
               </div>
-              <div className="rounded-xl border border-zinc-800 overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800 hover:bg-transparent">
-                      <TableHead className="text-zinc-500 text-xs">Categoria</TableHead>
-                      <TableHead className="text-zinc-500 text-xs">Item</TableHead>
-                      <TableHead className="text-zinc-500 text-xs w-20">Qtd</TableHead>
-                      <TableHead className="text-zinc-500 text-xs w-28">Custo (EUR)</TableHead>
-                      <TableHead className="text-zinc-500 text-xs w-20">Margem</TableHead>
-                      <TableHead className="text-zinc-500 text-xs w-28">Preco (EUR)</TableHead>
-                      <TableHead className="text-zinc-500 text-xs w-28">Total (EUR)</TableHead>
-                      <TableHead className="w-10"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {items.map((item, idx) => {
-                      const salePrice = item.unit_cost * (1 + item.margin);
-                      const total = salePrice * item.quantity;
-                      return (
-                        <TableRow key={item._key} className="border-zinc-800/50">
-                          <TableCell className="p-1"><Input value={item.category} onChange={e => updateItem(idx, 'category', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm" placeholder="Cat." /></TableCell>
-                          <TableCell className="p-1"><Input value={item.name} onChange={e => updateItem(idx, 'name', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm" placeholder="Nome" /></TableCell>
-                          <TableCell className="p-1"><Input type="number" min="0" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm w-16" /></TableCell>
-                          <TableCell className="p-1"><Input type="number" min="0" step="0.01" value={item.unit_cost} onChange={e => updateItem(idx, 'unit_cost', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm w-24" /></TableCell>
-                          <TableCell className="p-1"><Input type="number" min="0" step="0.01" value={item.margin} onChange={e => updateItem(idx, 'margin', e.target.value)} className="bg-transparent border-zinc-800 text-white h-9 rounded-lg text-sm w-16" /></TableCell>
-                          <TableCell className="text-zinc-300 text-sm px-2">{salePrice.toFixed(2)}</TableCell>
-                          <TableCell className="text-yellow-400 font-medium text-sm px-2">{total.toFixed(2)}</TableCell>
-                          <TableCell className="p-1"><button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button></TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+              <div className="space-y-3">
+                {items.map((item, idx) => {
+                  const salePrice = item.unit_cost * (1 + item.margin);
+                  const total = salePrice * item.quantity;
+                  const catItems = getCategoryItems(item.category);
+                  const isSearching = searchingPrice[item._key];
+                  return (
+                    <div key={item._key} className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
+                      <div className="grid grid-cols-[1fr_1fr] gap-2 mb-2">
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Categoria</label>
+                          <Select value={categories.find(c => c.name === item.category)?.id || ''} onValueChange={(v) => handleCategoryChange(idx, v)}>
+                            <SelectTrigger data-testid={`item-category-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
+                              <SelectValue placeholder="Selecionar categoria..." />
+                            </SelectTrigger>
+                            <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
+                              {categories.map(cat => (
+                                <SelectItem key={cat.id} value={cat.id} className="text-white hover:bg-zinc-800 text-sm">{cat.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Item</label>
+                          {catItems.length > 0 ? (
+                            <Select value={item.name || ''} onValueChange={(v) => handleItemSelect(idx, v)}>
+                              <SelectTrigger data-testid={`item-name-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
+                                <SelectValue placeholder="Selecionar item..." />
+                              </SelectTrigger>
+                              <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
+                                {catItems.map(ci => (
+                                  <SelectItem key={ci.name} value={ci.name} className="text-white hover:bg-zinc-800 text-sm">{ci.name}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              data-testid={`item-name-input-${idx}`}
+                              value={item.name}
+                              onChange={e => updateItem(idx, 'name', e.target.value)}
+                              className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm"
+                              placeholder="Nome do item..."
+                            />
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-[80px_1fr_80px_100px_100px_40px] gap-2 items-end">
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Qtd</label>
+                          <Input type="number" min="0" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Custo Unitario (EUR)</label>
+                          <div className="flex gap-1">
+                            <Input type="number" min="0" step="0.01" value={item.unit_cost} onChange={e => updateItem(idx, 'unit_cost', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm flex-1" />
+                            <Button
+                              data-testid={`search-price-${idx}`}
+                              onClick={() => searchPrice(idx)}
+                              disabled={isSearching}
+                              size="sm"
+                              className="bg-yellow-400/20 text-yellow-400 hover:bg-yellow-400/30 rounded-lg h-9 w-9 p-0 shrink-0"
+                              title="Pesquisar preco na internet"
+                            >
+                              {isSearching ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                            </Button>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Margem</label>
+                          <Input type="number" min="0" step="0.01" value={item.margin} onChange={e => updateItem(idx, 'margin', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm" />
+                        </div>
+                        <div className="text-center">
+                          <label className="text-xs text-zinc-500 mb-1 block">Preco</label>
+                          <p className="text-sm text-zinc-300 h-9 flex items-center justify-center">{formatEuro(salePrice)}</p>
+                        </div>
+                        <div className="text-center">
+                          <label className="text-xs text-zinc-500 mb-1 block">Total</label>
+                          <p className="text-sm text-yellow-400 font-semibold h-9 flex items-center justify-center">{formatEuro(total)}</p>
+                        </div>
+                        <div className="flex items-center justify-center h-9">
+                          <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
