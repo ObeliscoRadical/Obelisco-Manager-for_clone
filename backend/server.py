@@ -708,17 +708,32 @@ async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)
             api_key=llm_key,
             session_id=f"price-{uuid.uuid4()}",
             system_message=(
-                "Es um especialista em precos de material eletrico e telecomunicacoes em Portugal. "
+                "Es um especialista em precos de material eletrico e telecomunicacoes em Portugal, "
+                "com experiencia em orcamentacao para empresas de eletricistas na zona de Lisboa. "
                 "O utilizador vai dar-te o nome de um item/material. "
                 "Deves responder APENAS com um objeto JSON valido com estes campos: "
-                '{"price": <numero em EUR>, "price_min": <preco minimo>, "price_max": <preco maximo>, "unit": "metro/unidade/pack", "source": "<breve descricao de onde vem o preco>"} '
-                "Baseia-te em precos de retalho em Portugal (lojas como Leroy Merlin, Voltimum, Material Eletrico Online, Jolar, EDP Store, etc). "
+                '{"price": <preco medio de compra em EUR>, '
+                '"price_min": <preco minimo>, '
+                '"price_max": <preco maximo>, '
+                '"margin": <margem recomendada como decimal, ex: 0.65 para 65%>, '
+                '"install_cost": <custo estimado de instalacao/mao de obra por unidade em EUR>, '
+                '"unit": "metro/unidade/pack", '
+                '"source": "<breve descricao>"} '
+                "REGRAS PARA A MARGEM: "
+                "- A margem deve cobrir: mao de obra do eletricista (media 15-25 EUR/hora em Lisboa), "
+                "deslocacao (taxa media 35 EUR na Grande Lisboa), "
+                "desgaste de ferramentas, seguro, impostos da empresa, e lucro. "
+                "- Para itens simples (cabos, tomadas, interruptores): margem entre 0.80 e 1.20 (80-120%). "
+                "- Para itens complexos (quadros, wallbox, paineis solares): margem entre 0.40 e 0.70 (40-70%). "
+                "- Para ferramentas (sem instalacao): margem entre 0.15 e 0.30 (15-30%). "
+                "- install_cost e o valor aproximado da mao de obra para instalar 1 unidade desse item. "
+                "Baseia-te em precos de retalho em Portugal (Leroy Merlin, Voltimum, Material Eletrico Online, Jolar, etc). "
                 "Se nao conseguires estimar, devolve price: 0. "
                 "NAO incluas texto adicional, apenas o JSON."
             )
         ).with_model("openai", "gpt-5.2")
 
-        user_msg = UserMessage(text=f"Preco medio de retalho em Portugal para: {input.item_name}")
+        user_msg = UserMessage(text=f"Preco medio de compra e margem de instalacao em Lisboa para: {input.item_name}")
         response = await chat.send_message(user_msg)
 
         # Parse the JSON response
@@ -736,6 +751,8 @@ async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)
             "price": price_data.get("price", 0),
             "price_min": price_data.get("price_min", 0),
             "price_max": price_data.get("price_max", 0),
+            "margin": price_data.get("margin", 0.6),
+            "install_cost": price_data.get("install_cost", 0),
             "unit": price_data.get("unit", "unidade"),
             "source": price_data.get("source", "Estimativa IA"),
         }
@@ -746,6 +763,8 @@ async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)
             "price": 0,
             "price_min": 0,
             "price_max": 0,
+            "margin": 0.6,
+            "install_cost": 0,
             "unit": "unidade",
             "source": "Erro ao interpretar resposta",
         }

@@ -104,24 +104,38 @@ export default function OrcamentosPage() {
     const next = [...items];
     next[idx] = { ...next[idx], name: itemName, _customName: false };
     setItems(next);
+    // Auto-search price when item is selected
+    if (itemName) {
+      searchPrice(idx, itemName);
+    }
   };
 
-  const searchPrice = async (idx) => {
+  const searchPrice = async (idx, overrideName) => {
     const item = items[idx];
-    if (!item.name) { toast.error('Insira o nome do item primeiro'); return; }
+    const itemName = overrideName || item.name;
+    if (!itemName) { toast.error('Insira o nome do item primeiro'); return; }
     const searchKey = item._key;
     setSearchingPrice(prev => ({ ...prev, [searchKey]: true }));
     try {
-      const { data } = await api.post('/price-lookup', { item_name: item.name });
+      const { data } = await api.post('/price-lookup', { item_name: itemName });
       if (data.price > 0) {
-        const next = [...items];
-        next[idx] = { ...next[idx], unit_cost: data.price };
-        setItems(next);
+        setItems(prev => {
+          const next = [...prev];
+          next[idx] = {
+            ...next[idx],
+            name: overrideName || next[idx].name,
+            unit_cost: data.price,
+            margin: data.margin || 0.6,
+          };
+          return next;
+        });
+        const marginPct = ((data.margin || 0.6) * 100).toFixed(0);
         toast.success(
-          `${item.name}: ${formatEuro(data.price)} (${formatEuro(data.price_min)} - ${formatEuro(data.price_max)}) | ${data.source}`
+          `${itemName}: ${formatEuro(data.price)} | Margem sugerida: ${marginPct}% (inclui mao de obra ${formatEuro(data.install_cost)})`,
+          { duration: 6000 }
         );
       } else {
-        toast.error(`Nao foi possivel encontrar preco para: ${item.name}`);
+        toast.error(`Nao foi possivel encontrar preco para: ${itemName}`);
       }
     } catch (err) {
       console.error('Price lookup error:', err.message);
@@ -338,7 +352,7 @@ export default function OrcamentosPage() {
                             <Input type="number" min="0" step="0.01" value={item.unit_cost} onChange={e => updateItem(idx, 'unit_cost', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm flex-1" />
                             <Button
                               data-testid={`search-price-${idx}`}
-                              onClick={() => searchPrice(idx)}
+                              onClick={() => searchPrice(idx, undefined)}
                               disabled={isSearching}
                               size="sm"
                               className="bg-yellow-400/20 text-yellow-400 hover:bg-yellow-400/30 rounded-lg h-9 w-9 p-0 shrink-0"
