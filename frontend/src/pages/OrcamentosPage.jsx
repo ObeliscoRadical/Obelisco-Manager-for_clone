@@ -53,7 +53,7 @@ export default function OrcamentosPage() {
   const openNew = () => {
     setEditingBudget(null);
     setTitle(''); setClientName(''); setClientPhone('');
-    setItems([{ ...defaultItem }]);
+    setItems([createItem()]);
     setDialogOpen(true);
   };
 
@@ -62,7 +62,7 @@ export default function OrcamentosPage() {
     setTitle(budget.title);
     setClientName(budget.client_name);
     setClientPhone(budget.client_phone || '');
-    setItems(budget.items?.length > 0 ? budget.items.map(i => ({ ...i })) : [{ ...defaultItem }]);
+    setItems(budget.items?.length > 0 ? budget.items.map(i => ({ ...i, _key: `item-${++itemIdCounter}` })) : [createItem()]);
     setDialogOpen(true);
   };
 
