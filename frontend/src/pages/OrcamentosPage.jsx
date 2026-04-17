@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2 } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -277,37 +277,45 @@ export default function OrcamentosPage() {
                       <div className="grid grid-cols-[1fr_1fr] gap-2 mb-2">
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Categoria</label>
-                          <Select
-                            value={categories.find(c => c.name === item.category)?.id || undefined}
-                            onValueChange={(v) => handleCategoryChange(idx, v)}
-                          >
-                            <SelectTrigger data-testid={`item-category-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
-                              <SelectValue placeholder="Selecionar categoria..." />
-                            </SelectTrigger>
-                            <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
+                          <div className="relative">
+                            <select
+                              data-testid={`item-category-${idx}`}
+                              value={categories.find(c => c.name === item.category)?.id || ''}
+                              onChange={(e) => handleCategoryChange(idx, e.target.value)}
+                              className="w-full h-9 bg-zinc-900 border border-zinc-700 text-white rounded-lg text-sm pl-3 pr-8 appearance-none cursor-pointer focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none"
+                            >
+                              <option value="" className="bg-zinc-900 text-zinc-500">Selecionar categoria...</option>
                               {categories.map(cat => (
-                                <SelectItem key={cat.id} value={cat.id} className="text-white hover:bg-zinc-800 text-sm">{cat.name}</SelectItem>
+                                <option key={cat.id} value={cat.id} className="bg-zinc-900 text-white">{cat.name}</option>
                               ))}
-                            </SelectContent>
-                          </Select>
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                          </div>
                         </div>
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Item</label>
                           {catItems.length > 0 && !item._customName ? (
-                            <Select
-                              value={item.name || undefined}
-                              onValueChange={(v) => handleItemSelect(idx, v)}
-                            >
-                              <SelectTrigger data-testid={`item-name-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
-                                <SelectValue placeholder="Selecionar item..." />
-                              </SelectTrigger>
-                              <SelectContent className="bg-zinc-900 border-zinc-800 max-h-60">
+                            <div className="relative">
+                              <select
+                                data-testid={`item-name-${idx}`}
+                                value={item.name || ''}
+                                onChange={(e) => {
+                                  if (e.target.value === '__custom__') {
+                                    handleItemSelect(idx, '__custom__');
+                                  } else {
+                                    handleItemSelect(idx, e.target.value);
+                                  }
+                                }}
+                                className="w-full h-9 bg-zinc-900 border border-zinc-700 text-white rounded-lg text-sm pl-3 pr-8 appearance-none cursor-pointer focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none"
+                              >
+                                <option value="" className="bg-zinc-900 text-zinc-500">Selecionar item...</option>
                                 {catItems.map(ci => (
-                                  <SelectItem key={ci.name} value={ci.name} className="text-white hover:bg-zinc-800 text-sm">{ci.name}</SelectItem>
+                                  <option key={ci.name} value={ci.name} className="bg-zinc-900 text-white">{ci.name}</option>
                                 ))}
-                                <SelectItem value="__custom__" className="text-yellow-400 hover:bg-zinc-800 text-sm border-t border-zinc-700 mt-1">+ Escrever outro item...</SelectItem>
-                              </SelectContent>
-                            </Select>
+                                <option value="__custom__" className="bg-zinc-900 text-yellow-400">+ Escrever outro item...</option>
+                              </select>
+                              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
+                            </div>
                           ) : (
                             <Input
                               data-testid={`item-name-input-${idx}`}
