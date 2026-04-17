@@ -90,13 +90,19 @@ export default function OrcamentosPage() {
   const handleCategoryChange = (idx, categoryId) => {
     const next = [...items];
     const cat = categories.find(c => c.id === categoryId);
-    next[idx] = { ...next[idx], category: cat ? cat.name : categoryId };
+    next[idx] = { ...next[idx], category: cat ? cat.name : categoryId, name: '' };
     setItems(next);
   };
 
   const handleItemSelect = (idx, itemName) => {
+    if (itemName === '__custom__') {
+      const next = [...items];
+      next[idx] = { ...next[idx], name: '', _customName: true };
+      setItems(next);
+      return;
+    }
     const next = [...items];
-    next[idx] = { ...next[idx], name: itemName };
+    next[idx] = { ...next[idx], name: itemName, _customName: false };
     setItems(next);
   };
 
@@ -136,7 +142,7 @@ export default function OrcamentosPage() {
   const handleSave = async () => {
     if (!title || !clientName) { toast.error('Preencha o titulo e nome do cliente'); return; }
     try {
-      const payload = { title, client_name: clientName, client_phone: clientPhone, items: items.map(({ _key, ...rest }) => rest) };
+      const payload = { title, client_name: clientName, client_phone: clientPhone, items: items.map(({ _key, _customName, ...rest }) => rest) };
       if (editingBudget) {
         await api.put(`/budgets/${editingBudget.id}`, payload);
         toast.success('Orcamento atualizado');
@@ -271,7 +277,10 @@ export default function OrcamentosPage() {
                       <div className="grid grid-cols-[1fr_1fr] gap-2 mb-2">
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Categoria</label>
-                          <Select value={categories.find(c => c.name === item.category)?.id || ''} onValueChange={(v) => handleCategoryChange(idx, v)}>
+                          <Select
+                            value={categories.find(c => c.name === item.category)?.id || undefined}
+                            onValueChange={(v) => handleCategoryChange(idx, v)}
+                          >
                             <SelectTrigger data-testid={`item-category-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
                               <SelectValue placeholder="Selecionar categoria..." />
                             </SelectTrigger>
@@ -284,8 +293,11 @@ export default function OrcamentosPage() {
                         </div>
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Item</label>
-                          {catItems.length > 0 ? (
-                            <Select value={item.name || ''} onValueChange={(v) => handleItemSelect(idx, v)}>
+                          {catItems.length > 0 && !item._customName ? (
+                            <Select
+                              value={item.name || undefined}
+                              onValueChange={(v) => handleItemSelect(idx, v)}
+                            >
                               <SelectTrigger data-testid={`item-name-${idx}`} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm">
                                 <SelectValue placeholder="Selecionar item..." />
                               </SelectTrigger>
@@ -293,6 +305,7 @@ export default function OrcamentosPage() {
                                 {catItems.map(ci => (
                                   <SelectItem key={ci.name} value={ci.name} className="text-white hover:bg-zinc-800 text-sm">{ci.name}</SelectItem>
                                 ))}
+                                <SelectItem value="__custom__" className="text-yellow-400 hover:bg-zinc-800 text-sm border-t border-zinc-700 mt-1">+ Escrever outro item...</SelectItem>
                               </SelectContent>
                             </Select>
                           ) : (
@@ -301,7 +314,7 @@ export default function OrcamentosPage() {
                               value={item.name}
                               onChange={e => updateItem(idx, 'name', e.target.value)}
                               className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm"
-                              placeholder="Nome do item..."
+                              placeholder="Escreva o nome do item..."
                             />
                           )}
                         </div>
