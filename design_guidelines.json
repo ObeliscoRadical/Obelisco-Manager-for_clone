@@ -1,0 +1,88 @@
+{
+  "theme": "dark",
+  "archetype": "4",
+  "archetype_name": "Swiss & High-Contrast (Adapted for Dark Industrial)",
+  "typography": {
+    "headings": {
+      "font_family": "Outfit",
+      "classes": "font-black uppercase tracking-tight",
+      "h1": "text-4xl sm:text-5xl",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl",
+      "h3": "text-xl sm:text-2xl",
+      "h4": "text-lg sm:text-xl"
+    },
+    "body": {
+      "font_family": "Manrope",
+      "classes": "font-medium text-zinc-300",
+      "base": "text-base",
+      "small": "text-sm",
+      "xs": "text-xs uppercase tracking-[0.2em]"
+    }
+  },
+  "colors": {
+    "background": "bg-zinc-950",
+    "surface_cards": "bg-zinc-900",
+    "surface_hover": "hover:bg-zinc-800",
+    "border": "border-zinc-800",
+    "primary": "bg-yellow-400 text-zinc-950",
+    "primary_hover": "hover:bg-yellow-500",
+    "text_primary": "text-white",
+    "text_secondary": "text-zinc-400",
+    "success": "bg-green-500 text-white",
+    "success_hover": "hover:bg-green-600",
+    "destructive": "bg-red-500 text-white"
+  },
+  "effects_and_surfaces": {
+    "card_radius": "rounded-3xl",
+    "button_radius": "rounded-full",
+    "input_radius": "rounded-xl",
+    "card_hover_glow": "hover:shadow-[0_0_15px_rgba(250,204,21,0.3)] transition-all duration-300",
+    "glassmorphism": "backdrop-blur-xl bg-zinc-950/70 border-b border-zinc-800"
+  },
+  "layout_and_spacing": {
+    "container_padding": "p-6 md:p-8 lg:p-12",
+    "grid_gap": "gap-6 md:gap-8",
+    "sidebar_width": "w-72",
+    "card_padding": "p-6 sm:p-8"
+  },
+  "components_strategy": {
+    "buttons": "Always use fully rounded corners (rounded-full) for primary actions to contrast with the 3xl card corners. Primary button is yellow-400 with black text. WhatsApp button must use green-500.",
+    "cards": "Use zinc-900 with zinc-800 borders, rounded-3xl. Add the yellow hover glow (hover:shadow-[0_0_15px_rgba(250,204,21,0.3)]) on interactive cards (like dashboard stats or selectable proposals).",
+    "tables": "Go cardless or place within a rounded-3xl container. Use zinc-800 for table header borders and zinc-800/50 for row borders. Ensure text contrast is high.",
+    "forms": "Use Shadcn components heavily customized. Inputs should have zinc-900 background, zinc-800 border, rounded-xl. Focus state: focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400.",
+    "modals": "Use Shadcn dialog. Background zinc-950, border zinc-800, rounded-3xl.",
+    "charts": "Use Shadcn charts (Recharts). Primary bar/line color should be yellow-400 (#FACC15), secondary can be zinc-600."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "duotone or regular, depending on emphasis"
+  },
+  "media_urls": [
+    {
+      "category": "logo",
+      "url": "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png",
+      "description": "Obelisco Radical official logo. Use in sidebar, header, login page, and PDF exports."
+    },
+    {
+      "category": "background",
+      "url": "https://images.unsplash.com/photo-1760043186309-69c11f4c08ca?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHwxfHxlbGVjdHJpY2FsJTIwZW5naW5lZXJpbmclMjBkYXJrJTIwYmFja2dyb3VuZHxlbnwwfHx8fDE3NzY0MTAzMDJ8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Dark electrical engineering background. Use for the login page right/left split screen to give it an industrial feel. Add a heavy overlay (e.g. bg-zinc-950/80) to ensure text readability if overlaid."
+    }
+  ],
+  "accessibility_and_motion": {
+    "hover_states": "All interactive elements must have explicit hover text/bg colors. e.g. hover:text-yellow-400.",
+    "focus_states": "Use focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2 focus:ring-offset-zinc-950.",
+    "transitions": "Use transition-all duration-300 ease-out for buttons, cards, and links.",
+    "testing": "Add data-testid attributes to all buttons, links, inputs, and key data points (e.g. data-testid='login-button', data-testid='metric-total-obras')."
+  },
+  "specific_instructions_for_main_agent": [
+    "Force dark mode by adding 'dark' class to the root or html tag, or by modifying tailwind.config.js default theme. The user specifically requested a dark layout.",
+    "All headings must be uppercase and font-black (e.g. font-black uppercase tracking-tight text-white).",
+    "The primary accent color is yellow-400 (#FACC15). Use it for primary buttons, active links, and chart highlights.",
+    "WhatsApp buttons must be green-500.",
+    "Make sure cards use rounded-3xl and have the yellow hover glow effect.",
+    "Ensure the PDF Export feature uses the logo media url provided.",
+    "Use '@phosphor-icons/react' for icons. You will need to install it: yarn add @phosphor-icons/react.",
+    "In tailwind.config.js, update colors to map primary to yellow-400, background to zinc-950, card to zinc-900, border to zinc-800, etc."
+  ]
+}
