@@ -691,6 +691,65 @@ CATEGORIES_CATALOG = [
 class PriceLookupRequest(BaseModel):
     item_name: str
 
+class ProposalSettingsUpdate(BaseModel):
+    payment_methods: Optional[List[str]] = None
+    payment_split: Optional[str] = None
+    validity_days: Optional[int] = None
+    warranty_text: Optional[str] = None
+    conditions: Optional[List[str]] = None
+    notes: Optional[str] = None
+
+
+# --- Logo endpoint (serves logo as base64 to avoid CORS) ---
+
+@api_router.get("/logo")
+async def get_logo():
+    logo_path = Path(__file__).parent / "logo.png"
+    if not logo_path.exists():
+        raise HTTPException(status_code=404, detail="Logo nao encontrado")
+    import base64
+    with open(logo_path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode()
+    return {"logo": f"data:image/png;base64,{b64}"}
+
+
+# --- Proposal Settings ---
+
+DEFAULT_PROPOSAL_SETTINGS = {
+    "payment_methods": ["Transferencia Bancaria", "MB Way", "Multibanco", "Cartao de Credito/Debito"],
+    "payment_split": "50% no inicio dos trabalhos, 50% na conclusao",
+    "validity_days": 30,
+    "warranty_text": "Garantia conforme a proposta selecionada",
+    "conditions": [
+        "Valores em EUR com IVA incluido",
+        "Deslocacao incluida na zona da Grande Lisboa",
+        "Material e mao de obra incluidos",
+        "Alteracoes ao orcamento podem afetar o valor final",
+    ],
+    "notes": "",
+}
+
+@api_router.get("/proposal-settings")
+async def get_proposal_settings(user=Depends(get_current_user)):
+    settings = await db.proposal_settings.find_one({}, {"_id": 0})
+    if not settings:
+        return DEFAULT_PROPOSAL_SETTINGS
+    return settings
+
+@api_router.put("/proposal-settings")
+async def update_proposal_settings(input: ProposalSettingsUpdate, user=Depends(get_current_user)):
+    update_data = {k: v for k, v in input.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="Nada para atualizar")
+    existing = await db.proposal_settings.find_one({})
+    if existing:
+        await db.proposal_settings.update_one({"_id": existing["_id"]}, {"$set": update_data})
+    else:
+        doc = {**DEFAULT_PROPOSAL_SETTINGS, **update_data}
+        await db.proposal_settings.insert_one(doc)
+    settings = await db.proposal_settings.find_one({}, {"_id": 0})
+    return settings
+
 
 @api_router.get("/categories")
 async def get_categories(user=Depends(get_current_user)):

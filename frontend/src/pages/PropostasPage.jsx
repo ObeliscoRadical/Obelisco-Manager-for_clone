@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, MessageCircle, HardHat, Trash2, ClipboardList } from 'lucide-react';
+import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
-const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
 const tierColors = {
   basico: 'bg-zinc-700 text-zinc-200',
@@ -18,110 +20,109 @@ const tierColors = {
   premium: 'bg-green-500/20 text-green-400',
 };
 
-async function fetchLogoBase64() {
-  try {
-    const resp = await fetch(LOGO_URL);
-    const blob = await resp.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result);
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    console.error('Logo fetch CORS error:', err.message);
-    return null;
-  }
-}
+const PAYMENT_OPTIONS = [
+  'Transferencia Bancaria',
+  'MB Way',
+  'Multibanco',
+  'Cartao de Credito/Debito',
+  'Numerario',
+  'Cheque',
+];
 
-async function generatePDF(proposal) {
+const SPLIT_OPTIONS = [
+  '50% no inicio dos trabalhos, 50% na conclusao',
+  '30% no inicio, 40% a meio, 30% na conclusao',
+  '100% no inicio dos trabalhos',
+  '100% na conclusao dos trabalhos',
+  'Pagamento a 30 dias apos conclusao',
+];
+
+async function generatePDF(proposal, settings, logoBase64) {
   const doc = new jsPDF();
   const pageW = doc.internal.pageSize.width;
   const pageH = doc.internal.pageSize.height;
-  const logoBase64 = await fetchLogoBase64();
 
-  // ===== DARK HEADER BAND =====
-  doc.setFillColor(9, 9, 11); // zinc-950
+  // ===== DARK HEADER =====
+  doc.setFillColor(9, 9, 11);
   doc.rect(0, 0, pageW, 52, 'F');
-
-  // Yellow accent line
-  doc.setFillColor(250, 204, 21); // yellow-400
+  doc.setFillColor(250, 204, 21);
   doc.rect(0, 52, pageW, 2, 'F');
 
-  // Logo in header
+  // Logo
   if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 15, 8, 45, 22); } catch (e) {
-      console.error('Logo embed error:', e.message);
+    try { doc.addImage(logoBase64, 'PNG', 15, 6, 50, 28); } catch (e) {
+      console.error('Logo error:', e.message);
     }
   }
 
-  // Company name
+  // Company text
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('OBELISCO RADICAL', 65, 18);
+  doc.text('OBELISCO RADICAL', 70, 18);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(161, 161, 170); // zinc-400
-  doc.text('ELETRICIDADE & TELECOMUNICACOES', 65, 24);
+  doc.setTextColor(161, 161, 170);
+  doc.text('ELETRICIDADE & TELECOMUNICACOES', 70, 24);
+  doc.setFontSize(6);
+  doc.text('Tel: +351 911 132 401 | obeliscoradical@gmail.com', 70, 30);
+  doc.text('Grande Lisboa | www.obeliscoradical.pt', 70, 35);
 
-  // Proposal label right
+  // PROPOSTA right
   doc.setTextColor(250, 204, 21);
-  doc.setFontSize(20);
+  doc.setFontSize(22);
   doc.setFont('helvetica', 'bold');
   doc.text('PROPOSTA', pageW - 15, 22, { align: 'right' });
-  doc.setFontSize(10);
+  doc.setFontSize(11);
   doc.setTextColor(255, 255, 255);
   doc.text(proposal.label.toUpperCase(), pageW - 15, 30, { align: 'right' });
 
-  // Date badge
-  doc.setFillColor(39, 39, 42); // zinc-800
+  // Date
+  doc.setFillColor(39, 39, 42);
   doc.roundedRect(pageW - 60, 36, 45, 10, 2, 2, 'F');
   doc.setFontSize(7);
   doc.setTextColor(200, 200, 200);
   doc.text(new Date().toLocaleDateString('pt-PT'), pageW - 38, 42.5, { align: 'center' });
 
-  // ===== CLIENT INFO BOX =====
+  // ===== CLIENT BOX =====
   let y = 62;
-  doc.setFillColor(24, 24, 27); // zinc-900
-  doc.roundedRect(15, y, pageW - 30, 28, 3, 3, 'F');
+  doc.setFillColor(24, 24, 27);
+  doc.roundedRect(15, y, pageW - 30, 24, 3, 3, 'F');
   doc.setDrawColor(39, 39, 42);
-  doc.roundedRect(15, y, pageW - 30, 28, 3, 3, 'S');
+  doc.roundedRect(15, y, pageW - 30, 24, 3, 3, 'S');
 
   doc.setTextColor(161, 161, 170);
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'normal');
-  doc.text('CLIENTE', 22, y + 8);
-  doc.text('TELEFONE', 120, y + 8);
-  doc.text('REFERENCIA', 120, y + 18);
+  doc.setFontSize(6.5);
+  doc.text('CLIENTE', 22, y + 7);
+  doc.text('TELEFONE', 110, y + 7);
+  doc.text('REF.', 160, y + 7);
 
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text(proposal.client_name || '-', 22, y + 15);
-  doc.setFontSize(10);
+  doc.text(proposal.client_name || '-', 22, y + 16);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text(proposal.client_phone || '-', 120, y + 15);
-  doc.setFontSize(8);
+  doc.text(proposal.client_phone || '-', 110, y + 16);
   doc.setTextColor(250, 204, 21);
-  doc.text(proposal.id ? proposal.id.substring(0, 8).toUpperCase() : '-', 120, y + 24);
+  doc.setFontSize(8);
+  doc.text(proposal.id ? proposal.id.substring(0, 8).toUpperCase() : '-', 160, y + 16);
 
-  // ===== PROPOSAL TITLE =====
-  y = 98;
-  doc.setTextColor(255, 255, 255);
+  // ===== TITLE =====
+  y = 94;
+  doc.setTextColor(40, 40, 40);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
   doc.text(proposal.title || 'Proposta', 15, y);
-
-  // Description
-  y += 7;
-  doc.setTextColor(161, 161, 170);
+  y += 6;
+  doc.setTextColor(120, 120, 120);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   const descLines = doc.splitTextToSize(proposal.description || '', pageW - 30);
   doc.text(descLines, 15, y);
-  y += descLines.length * 4 + 6;
+  y += descLines.length * 4 + 5;
 
-  // ===== ITEMS TABLE (PVP ONLY - no margins/costs shown) =====
+  // ===== ITEMS TABLE (PVP ONLY) =====
   const tableData = (proposal.items || []).map(item => {
     const pvpUnit = item.unit_cost * (1 + (item.margin || 0));
     const pvpTotal = pvpUnit * (item.quantity || 0);
@@ -135,99 +136,113 @@ async function generatePDF(proposal) {
 
   autoTable(doc, {
     startY: y,
-    head: [['Descricao', 'Qtd', 'Preco Unit.', 'Total']],
+    head: [['Descricao do Servico', 'Qtd', 'Preco Unit.', 'Total']],
     body: tableData,
     theme: 'plain',
-    headStyles: {
-      fillColor: [250, 204, 21],
-      textColor: [9, 9, 11],
-      fontStyle: 'bold',
-      fontSize: 8,
-      cellPadding: 4,
-    },
-    bodyStyles: {
-      fontSize: 8,
-      textColor: [60, 60, 60],
-      cellPadding: 3.5,
-    },
+    headStyles: { fillColor: [250, 204, 21], textColor: [9, 9, 11], fontStyle: 'bold', fontSize: 8, cellPadding: 4 },
+    bodyStyles: { fontSize: 8, textColor: [60, 60, 60], cellPadding: 3.5 },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     columnStyles: {
       0: { cellWidth: 'auto' },
-      1: { cellWidth: 22, halign: 'center' },
-      2: { cellWidth: 32, halign: 'right' },
-      3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' },
+      1: { cellWidth: 20, halign: 'center' },
+      2: { cellWidth: 30, halign: 'right' },
+      3: { cellWidth: 30, halign: 'right', fontStyle: 'bold' },
     },
     margin: { left: 15, right: 15 },
   });
 
   let finalY = doc.lastAutoTable.finalY + 8;
 
-  // ===== TOTALS BOX =====
+  // ===== TOTAL BOX =====
   doc.setFillColor(9, 9, 11);
-  doc.roundedRect(pageW - 95, finalY, 80, 30, 3, 3, 'F');
-
-  // Subtotal
+  doc.roundedRect(pageW - 95, finalY, 80, 28, 3, 3, 'F');
   doc.setTextColor(161, 161, 170);
   doc.setFontSize(7);
   doc.text('SUBTOTAL', pageW - 88, finalY + 8);
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(9);
-  doc.text(formatEuro(proposal.base_value * proposal.multiplier), pageW - 22, finalY + 8, { align: 'right' });
-
-  // Yellow line
+  doc.text(formatEuro(proposal.final_value), pageW - 22, finalY + 8, { align: 'right' });
   doc.setFillColor(250, 204, 21);
   doc.rect(pageW - 88, finalY + 12, 66, 0.5, 'F');
-
-  // VALOR FINAL
   doc.setTextColor(250, 204, 21);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
   doc.text('VALOR TOTAL', pageW - 88, finalY + 19);
   doc.setFontSize(14);
-  doc.text(formatEuro(proposal.final_value), pageW - 22, finalY + 26, { align: 'right' });
+  doc.text(formatEuro(proposal.final_value), pageW - 22, finalY + 25, { align: 'right' });
 
-  finalY += 40;
+  finalY += 38;
 
-  // ===== CONDITIONS =====
-  if (finalY < pageH - 60) {
+  // ===== PAYMENT & CONDITIONS =====
+  const payMethods = settings?.payment_methods?.join(', ') || 'Transferencia Bancaria, MB Way';
+  const paySplit = settings?.payment_split || '50% no inicio, 50% na conclusao';
+  const validDays = settings?.validity_days || 30;
+  const warrantyText = settings?.warranty_text || 'Garantia conforme proposta';
+  const conditions = settings?.conditions || [];
+  const notes = settings?.notes || '';
+
+  if (finalY < pageH - 70) {
+    // Payment box
     doc.setFillColor(24, 24, 27);
-    doc.roundedRect(15, finalY, pageW - 30, 22, 3, 3, 'F');
-    doc.setTextColor(161, 161, 170);
+    doc.roundedRect(15, finalY, pageW - 30, 16, 3, 3, 'F');
+    doc.setTextColor(250, 204, 21);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text('FORMA DE PAGAMENTO', 22, finalY + 6);
+    doc.setTextColor(220, 220, 220);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Metodos aceites: ${payMethods}`, 22, finalY + 11);
+    doc.text(`Condicoes: ${paySplit}`, 22, finalY + 15);
+
+    finalY += 22;
+
+    // Conditions box
+    doc.setFillColor(24, 24, 27);
+    const condLines = [
+      `Proposta valida por ${validDays} dias`,
+      warrantyText,
+      ...conditions,
+    ];
+    if (notes) condLines.push(`Nota: ${notes}`);
+    const boxH = 8 + condLines.length * 4;
+    doc.roundedRect(15, finalY, pageW - 30, boxH, 3, 3, 'F');
+    doc.setTextColor(250, 204, 21);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CONDICOES GERAIS', 22, finalY + 6);
+    doc.setTextColor(180, 180, 180);
     doc.setFontSize(6.5);
     doc.setFont('helvetica', 'normal');
-    doc.text('CONDICOES', 22, finalY + 6);
-    doc.setFontSize(6);
-    doc.text('Proposta valida por 30 dias. Valores em EUR com IVA incluido. Pagamento: 50% no inicio, 50% na conclusao.', 22, finalY + 11);
-    doc.text('Garantia conforme proposta selecionada. Deslocacao incluida na zona da Grande Lisboa.', 22, finalY + 15);
-    doc.text(`Proposta ${proposal.label}: ${proposal.description || ''}`, 22, finalY + 19);
+    condLines.forEach((line, i) => {
+      doc.text(`- ${line}`, 22, finalY + 10 + i * 4);
+    });
   }
 
-  // ===== DARK FOOTER =====
+  // ===== FOOTER =====
   doc.setFillColor(9, 9, 11);
-  doc.rect(0, pageH - 20, pageW, 20, 'F');
+  doc.rect(0, pageH - 18, pageW, 18, 'F');
   doc.setFillColor(250, 204, 21);
-  doc.rect(0, pageH - 20, pageW, 1, 'F');
-
+  doc.rect(0, pageH - 18, pageW, 0.8, 'F');
   doc.setTextColor(161, 161, 170);
   doc.setFontSize(7);
-  doc.text('Obelisco Radical - Eletricidade & Telecomunicacoes', 15, pageH - 12);
-  doc.text('Tel: +351 911 132 401  |  obeliscoradical@gmail.com  |  www.obeliscoradical.pt', 15, pageH - 7);
-
+  doc.text('Obelisco Radical - Eletricidade & Telecomunicacoes', 15, pageH - 10);
+  doc.text('Tel: +351 911 132 401  |  obeliscoradical@gmail.com  |  www.obeliscoradical.pt', 15, pageH - 5);
   doc.setTextColor(250, 204, 21);
-  doc.text('Grande Lisboa', pageW - 15, pageH - 10, { align: 'right' });
+  doc.text('Grande Lisboa', pageW - 15, pageH - 8, { align: 'right' });
 
-  // Subtle watermark logo
+  // Watermark
   if (logoBase64) {
     try {
       doc.saveGraphicsState();
       doc.setGState(new doc.GState({ opacity: 0.03 }));
       doc.addImage(logoBase64, 'PNG', pageW / 2 - 40, pageH / 2 - 20, 80, 40);
       doc.restoreGraphicsState();
-    } catch (e) { /* ignore watermark errors */ }
+    } catch (e) { /* ignore */ }
   }
 
   doc.save(`Proposta_${proposal.label}_${proposal.client_name.replace(/\s/g, '_')}.pdf`);
-  toast.success('Proposta PDF gerada!');
+  toast.success('Proposta PDF gerada com logo!');
 }
 
 function sendWhatsApp(proposal) {
@@ -241,6 +256,10 @@ export default function PropostasPage() {
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('all');
+  const [logoBase64, setLogoBase64] = useState(null);
+  const [settings, setSettings] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [editSettings, setEditSettings] = useState(null);
 
   const fetchProposals = useCallback(async () => {
     try {
@@ -253,7 +272,71 @@ export default function PropostasPage() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchProposals(); }, [fetchProposals]);
+  const fetchLogo = useCallback(async () => {
+    try {
+      const { data } = await api.get('/logo');
+      setLogoBase64(data.logo);
+    } catch (err) {
+      console.error('Logo fetch error:', err.message);
+    }
+  }, []);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const { data } = await api.get('/proposal-settings');
+      setSettings(data);
+    } catch (err) {
+      console.error('Settings fetch error:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProposals();
+    fetchLogo();
+    fetchSettings();
+  }, [fetchProposals, fetchLogo, fetchSettings]);
+
+  const openSettings = () => {
+    setEditSettings(settings ? { ...settings } : {
+      payment_methods: ['Transferencia Bancaria', 'MB Way', 'Multibanco'],
+      payment_split: '50% no inicio dos trabalhos, 50% na conclusao',
+      validity_days: 30,
+      warranty_text: 'Garantia conforme a proposta selecionada',
+      conditions: ['Valores em EUR com IVA incluido', 'Deslocacao incluida na zona da Grande Lisboa', 'Material e mao de obra incluidos'],
+      notes: '',
+    });
+    setSettingsOpen(true);
+  };
+
+  const togglePayMethod = (method) => {
+    const current = editSettings.payment_methods || [];
+    if (current.includes(method)) {
+      setEditSettings({ ...editSettings, payment_methods: current.filter(m => m !== method) });
+    } else {
+      setEditSettings({ ...editSettings, payment_methods: [...current, method] });
+    }
+  };
+
+  const toggleCondition = (cond) => {
+    const current = editSettings.conditions || [];
+    if (current.includes(cond)) {
+      setEditSettings({ ...editSettings, conditions: current.filter(c => c !== cond) });
+    } else {
+      setEditSettings({ ...editSettings, conditions: [...current, cond] });
+    }
+  };
+
+  const saveSettings = async () => {
+    try {
+      const { data } = await api.put('/proposal-settings', editSettings);
+      setSettings(data);
+      setSettingsOpen(false);
+      toast.success('Definicoes de proposta guardadas');
+    } catch (err) {
+      console.error('Settings save error:', err.message);
+      toast.error('Erro ao guardar definicoes');
+    }
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Eliminar esta proposta?')) return;
@@ -269,8 +352,6 @@ export default function PropostasPage() {
   };
 
   const filtered = activeTab === 'all' ? proposals : proposals.filter(p => p.tier === activeTab);
-
-  // Group by budget
   const grouped = filtered.reduce((acc, p) => {
     const key = p.budget_id || 'sem-orcamento';
     if (!acc[key]) acc[key] = [];
@@ -278,11 +359,25 @@ export default function PropostasPage() {
     return acc;
   }, {});
 
+  const DEFAULT_CONDITIONS = [
+    'Valores em EUR com IVA incluido',
+    'Deslocacao incluida na zona da Grande Lisboa',
+    'Material e mao de obra incluidos',
+    'Alteracoes ao orcamento podem afetar o valor final',
+    'Trabalhos executados por tecnicos certificados',
+    'Limpeza do local apos conclusao dos trabalhos',
+  ];
+
   return (
     <div data-testid="propostas-page" className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Propostas</h1>
-        <p className="text-zinc-400 mt-1 font-medium">Visualize, exporte e envie propostas</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Propostas</h1>
+          <p className="text-zinc-400 mt-1 font-medium">Visualize, exporte e envie propostas</p>
+        </div>
+        <Button data-testid="settings-btn" onClick={openSettings} className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-full font-medium">
+          <Settings size={16} className="mr-2" /> Pagamento e Condicoes
+        </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -321,17 +416,13 @@ export default function PropostasPage() {
                           <p className="text-sm text-zinc-400 mb-4">{p.client_name}</p>
                           <p className="text-xs text-zinc-500 mb-1">{p.description}</p>
                           <div className="mt-4 pt-4 border-t border-zinc-800">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs text-zinc-500">Base</span>
-                              <span className="text-sm text-zinc-400">{formatEuro(p.base_value)}</span>
-                            </div>
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-zinc-500 font-semibold">VALOR FINAL</span>
                               <span className="text-2xl font-black text-yellow-400">{formatEuro(p.final_value)}</span>
                             </div>
                           </div>
                           <div className="mt-5 flex gap-2">
-                            <Button data-testid={`export-pdf-${p.id}`} onClick={() => generatePDF(p)} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">
+                            <Button data-testid={`export-pdf-${p.id}`} onClick={() => generatePDF(p, settings, logoBase64)} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">
                               <Download size={14} className="mr-1" /> PDF
                             </Button>
                             <Button data-testid={`send-whatsapp-${p.id}`} onClick={() => sendWhatsApp(p)} size="sm" className="flex-1 bg-green-500 text-white hover:bg-green-600 rounded-full text-xs font-semibold">
@@ -351,6 +442,129 @@ export default function PropostasPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Pagamento e Condicoes</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Configure formas de pagamento e condicoes que aparecem nas propostas PDF</DialogDescription>
+          </DialogHeader>
+          {editSettings && (
+            <div className="space-y-6 mt-4">
+              {/* Payment Methods */}
+              <div>
+                <Label className="text-zinc-300 text-sm font-semibold">Formas de Pagamento Aceites</Label>
+                <div className="grid grid-cols-2 gap-2 mt-2">
+                  {PAYMENT_OPTIONS.map(method => {
+                    const active = editSettings.payment_methods?.includes(method);
+                    return (
+                      <button
+                        key={method}
+                        data-testid={`pay-method-${method.replace(/\s/g, '-').toLowerCase()}`}
+                        onClick={() => togglePayMethod(method)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm transition-all ${
+                          active
+                            ? 'bg-yellow-400/20 border border-yellow-400/50 text-yellow-400'
+                            : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                        }`}
+                      >
+                        {active ? <Check size={14} /> : <X size={14} className="opacity-30" />}
+                        {method}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Payment Split */}
+              <div>
+                <Label className="text-zinc-300 text-sm font-semibold">Condicoes de Pagamento</Label>
+                <div className="space-y-2 mt-2">
+                  {SPLIT_OPTIONS.map(opt => (
+                    <button
+                      key={opt}
+                      onClick={() => setEditSettings({ ...editSettings, payment_split: opt })}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl text-sm transition-all ${
+                        editSettings.payment_split === opt
+                          ? 'bg-yellow-400/20 border border-yellow-400/50 text-yellow-400'
+                          : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Validity & Warranty */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Validade (dias)</Label>
+                  <Input
+                    data-testid="validity-days"
+                    type="number"
+                    min="1"
+                    value={editSettings.validity_days || 30}
+                    onChange={e => setEditSettings({ ...editSettings, validity_days: parseInt(e.target.value) || 30 })}
+                    className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl"
+                  />
+                </div>
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Garantia</Label>
+                  <Input
+                    data-testid="warranty-text"
+                    value={editSettings.warranty_text || ''}
+                    onChange={e => setEditSettings({ ...editSettings, warranty_text: e.target.value })}
+                    className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl"
+                    placeholder="Ex: Garantia de 2 anos"
+                  />
+                </div>
+              </div>
+
+              {/* Conditions Checklist */}
+              <div>
+                <Label className="text-zinc-300 text-sm font-semibold">Condicoes Gerais</Label>
+                <div className="space-y-2 mt-2">
+                  {DEFAULT_CONDITIONS.map(cond => {
+                    const active = editSettings.conditions?.includes(cond);
+                    return (
+                      <button
+                        key={cond}
+                        onClick={() => toggleCondition(cond)}
+                        className={`w-full text-left flex items-center gap-2 px-3 py-2 rounded-xl text-sm transition-all ${
+                          active
+                            ? 'bg-yellow-400/10 border border-yellow-400/30 text-zinc-200'
+                            : 'bg-zinc-900 border border-zinc-800 text-zinc-500 hover:border-zinc-700'
+                        }`}
+                      >
+                        {active ? <Check size={14} className="text-yellow-400 shrink-0" /> : <X size={14} className="opacity-30 shrink-0" />}
+                        {cond}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <Label className="text-zinc-300 text-sm font-semibold">Nota adicional</Label>
+                <Input
+                  data-testid="proposal-notes"
+                  value={editSettings.notes || ''}
+                  onChange={e => setEditSettings({ ...editSettings, notes: e.target.value })}
+                  className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl"
+                  placeholder="Ex: Orcamento sujeito a visita tecnica"
+                />
+              </div>
+
+              <Button data-testid="save-settings-btn" onClick={saveSettings} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
+                Guardar Definicoes
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
