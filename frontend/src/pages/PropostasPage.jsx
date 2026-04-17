@@ -35,91 +35,199 @@ async function fetchLogoBase64() {
 
 async function generatePDF(proposal) {
   const doc = new jsPDF();
+  const pageW = doc.internal.pageSize.width;
+  const pageH = doc.internal.pageSize.height;
   const logoBase64 = await fetchLogoBase64();
 
-  // Header
+  // ===== DARK HEADER BAND =====
+  doc.setFillColor(9, 9, 11); // zinc-950
+  doc.rect(0, 0, pageW, 52, 'F');
+
+  // Yellow accent line
+  doc.setFillColor(250, 204, 21); // yellow-400
+  doc.rect(0, 52, pageW, 2, 'F');
+
+  // Logo in header
   if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 15, 10, 40, 20); } catch (imgErr) {
-      console.error('Logo embed error:', imgErr.message);
+    try { doc.addImage(logoBase64, 'PNG', 15, 8, 45, 22); } catch (e) {
+      console.error('Logo embed error:', e.message);
     }
   }
-  doc.setFontSize(22);
-  doc.setFont('helvetica', 'bold');
-  doc.text('PROPOSTA', 140, 22);
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'normal');
-  doc.text(proposal.label.toUpperCase(), 140, 30);
 
-  // Line
-  doc.setDrawColor(250, 204, 21);
-  doc.setLineWidth(1);
-  doc.line(15, 38, 195, 38);
-
-  // Client info
+  // Company name
+  doc.setTextColor(255, 255, 255);
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('Cliente:', 15, 48);
+  doc.text('OBELISCO RADICAL', 65, 18);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.text(proposal.client_name, 50, 48);
-  if (proposal.client_phone) {
-    doc.setFont('helvetica', 'bold');
-    doc.text('Telefone:', 15, 55);
-    doc.setFont('helvetica', 'normal');
-    doc.text(proposal.client_phone, 50, 55);
-  }
+  doc.setTextColor(161, 161, 170); // zinc-400
+  doc.text('ELETRICIDADE & TELECOMUNICACOES', 65, 24);
+
+  // Proposal label right
+  doc.setTextColor(250, 204, 21);
+  doc.setFontSize(20);
   doc.setFont('helvetica', 'bold');
-  doc.text('Data:', 130, 48);
+  doc.text('PROPOSTA', pageW - 15, 22, { align: 'right' });
+  doc.setFontSize(10);
+  doc.setTextColor(255, 255, 255);
+  doc.text(proposal.label.toUpperCase(), pageW - 15, 30, { align: 'right' });
+
+  // Date badge
+  doc.setFillColor(39, 39, 42); // zinc-800
+  doc.roundedRect(pageW - 60, 36, 45, 10, 2, 2, 'F');
+  doc.setFontSize(7);
+  doc.setTextColor(200, 200, 200);
+  doc.text(new Date().toLocaleDateString('pt-PT'), pageW - 38, 42.5, { align: 'center' });
+
+  // ===== CLIENT INFO BOX =====
+  let y = 62;
+  doc.setFillColor(24, 24, 27); // zinc-900
+  doc.roundedRect(15, y, pageW - 30, 28, 3, 3, 'F');
+  doc.setDrawColor(39, 39, 42);
+  doc.roundedRect(15, y, pageW - 30, 28, 3, 3, 'S');
+
+  doc.setTextColor(161, 161, 170);
+  doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
-  doc.text(new Date().toLocaleDateString('pt-PT'), 150, 48);
+  doc.text('CLIENTE', 22, y + 8);
+  doc.text('TELEFONE', 120, y + 8);
+  doc.text('REFERENCIA', 120, y + 18);
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text(proposal.client_name || '-', 22, y + 15);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text(proposal.client_phone || '-', 120, y + 15);
+  doc.setFontSize(8);
+  doc.setTextColor(250, 204, 21);
+  doc.text(proposal.id ? proposal.id.substring(0, 8).toUpperCase() : '-', 120, y + 24);
+
+  // ===== PROPOSAL TITLE =====
+  y = 98;
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(13);
+  doc.setFont('helvetica', 'bold');
+  doc.text(proposal.title || 'Proposta', 15, y);
 
   // Description
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'italic');
-  doc.text(proposal.description || '', 15, 68, { maxWidth: 180 });
-
-  // Items table
-  const tableData = (proposal.items || []).map(item => [
-    item.category || '-',
-    item.name || '-',
-    item.quantity?.toString() || '0',
-    formatEuro(item.unit_cost),
-    `${((item.margin || 0) * 100).toFixed(0)}%`,
-    formatEuro(item.unit_cost * (1 + (item.margin || 0)) * (item.quantity || 0)),
-  ]);
-
-  autoTable(doc, {
-    startY: 78,
-    head: [['Categoria', 'Item', 'Qtd', 'Custo', 'Margem', 'Total']],
-    body: tableData,
-    theme: 'grid',
-    headStyles: { fillColor: [250, 204, 21], textColor: [9, 9, 11], fontStyle: 'bold', fontSize: 9 },
-    bodyStyles: { fontSize: 9 },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
-  });
-
-  const finalY = doc.lastAutoTable.finalY + 15;
-
-  // Totals
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`Valor Base: ${formatEuro(proposal.base_value)}`, 15, finalY);
-  doc.text(`Multiplicador: x${proposal.multiplier}`, 15, finalY + 8);
-  doc.setFontSize(16);
-  doc.setDrawColor(250, 204, 21);
-  doc.setLineWidth(0.5);
-  doc.line(15, finalY + 14, 195, finalY + 14);
-  doc.text(`VALOR FINAL: ${formatEuro(proposal.final_value)}`, 15, finalY + 24);
-
-  // Footer
-  const pageHeight = doc.internal.pageSize.height;
+  y += 7;
+  doc.setTextColor(161, 161, 170);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(120, 120, 120);
-  doc.text('Obelisco Radical - Eletricidade | Tel: +351 911 132 401 | obeliscoradical@gmail.com', 15, pageHeight - 15);
-  doc.text('Grande Lisboa | www.obeliscoradical.pt', 15, pageHeight - 10);
+  const descLines = doc.splitTextToSize(proposal.description || '', pageW - 30);
+  doc.text(descLines, 15, y);
+  y += descLines.length * 4 + 6;
 
-  doc.save(`proposta-${proposal.tier}-${proposal.client_name.replace(/\s/g, '_')}.pdf`);
-  toast.success('PDF gerado!');
+  // ===== ITEMS TABLE (PVP ONLY - no margins/costs shown) =====
+  const tableData = (proposal.items || []).map(item => {
+    const pvpUnit = item.unit_cost * (1 + (item.margin || 0));
+    const pvpTotal = pvpUnit * (item.quantity || 0);
+    return [
+      item.name || '-',
+      (item.quantity || 0).toString(),
+      formatEuro(pvpUnit),
+      formatEuro(pvpTotal),
+    ];
+  });
+
+  autoTable(doc, {
+    startY: y,
+    head: [['Descricao', 'Qtd', 'Preco Unit.', 'Total']],
+    body: tableData,
+    theme: 'plain',
+    headStyles: {
+      fillColor: [250, 204, 21],
+      textColor: [9, 9, 11],
+      fontStyle: 'bold',
+      fontSize: 8,
+      cellPadding: 4,
+    },
+    bodyStyles: {
+      fontSize: 8,
+      textColor: [60, 60, 60],
+      cellPadding: 3.5,
+    },
+    alternateRowStyles: { fillColor: [248, 248, 248] },
+    columnStyles: {
+      0: { cellWidth: 'auto' },
+      1: { cellWidth: 22, halign: 'center' },
+      2: { cellWidth: 32, halign: 'right' },
+      3: { cellWidth: 32, halign: 'right', fontStyle: 'bold' },
+    },
+    margin: { left: 15, right: 15 },
+  });
+
+  let finalY = doc.lastAutoTable.finalY + 8;
+
+  // ===== TOTALS BOX =====
+  doc.setFillColor(9, 9, 11);
+  doc.roundedRect(pageW - 95, finalY, 80, 30, 3, 3, 'F');
+
+  // Subtotal
+  doc.setTextColor(161, 161, 170);
+  doc.setFontSize(7);
+  doc.text('SUBTOTAL', pageW - 88, finalY + 8);
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(9);
+  doc.text(formatEuro(proposal.base_value * proposal.multiplier), pageW - 22, finalY + 8, { align: 'right' });
+
+  // Yellow line
+  doc.setFillColor(250, 204, 21);
+  doc.rect(pageW - 88, finalY + 12, 66, 0.5, 'F');
+
+  // VALOR FINAL
+  doc.setTextColor(250, 204, 21);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('VALOR TOTAL', pageW - 88, finalY + 19);
+  doc.setFontSize(14);
+  doc.text(formatEuro(proposal.final_value), pageW - 22, finalY + 26, { align: 'right' });
+
+  finalY += 40;
+
+  // ===== CONDITIONS =====
+  if (finalY < pageH - 60) {
+    doc.setFillColor(24, 24, 27);
+    doc.roundedRect(15, finalY, pageW - 30, 22, 3, 3, 'F');
+    doc.setTextColor(161, 161, 170);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text('CONDICOES', 22, finalY + 6);
+    doc.setFontSize(6);
+    doc.text('Proposta valida por 30 dias. Valores em EUR com IVA incluido. Pagamento: 50% no inicio, 50% na conclusao.', 22, finalY + 11);
+    doc.text('Garantia conforme proposta selecionada. Deslocacao incluida na zona da Grande Lisboa.', 22, finalY + 15);
+    doc.text(`Proposta ${proposal.label}: ${proposal.description || ''}`, 22, finalY + 19);
+  }
+
+  // ===== DARK FOOTER =====
+  doc.setFillColor(9, 9, 11);
+  doc.rect(0, pageH - 20, pageW, 20, 'F');
+  doc.setFillColor(250, 204, 21);
+  doc.rect(0, pageH - 20, pageW, 1, 'F');
+
+  doc.setTextColor(161, 161, 170);
+  doc.setFontSize(7);
+  doc.text('Obelisco Radical - Eletricidade & Telecomunicacoes', 15, pageH - 12);
+  doc.text('Tel: +351 911 132 401  |  obeliscoradical@gmail.com  |  www.obeliscoradical.pt', 15, pageH - 7);
+
+  doc.setTextColor(250, 204, 21);
+  doc.text('Grande Lisboa', pageW - 15, pageH - 10, { align: 'right' });
+
+  // Subtle watermark logo
+  if (logoBase64) {
+    try {
+      doc.saveGraphicsState();
+      doc.setGState(new doc.GState({ opacity: 0.03 }));
+      doc.addImage(logoBase64, 'PNG', pageW / 2 - 40, pageH / 2 - 20, 80, 40);
+      doc.restoreGraphicsState();
+    } catch (e) { /* ignore watermark errors */ }
+  }
+
+  doc.save(`Proposta_${proposal.label}_${proposal.client_name.replace(/\s/g, '_')}.pdf`);
+  toast.success('Proposta PDF gerada!');
 }
 
 function sendWhatsApp(proposal) {
