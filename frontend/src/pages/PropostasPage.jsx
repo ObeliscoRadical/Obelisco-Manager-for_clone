@@ -188,7 +188,6 @@ async function generatePDF(proposal, settings, logoBase64) {
   const paySplit = proposal.payment_split || settings?.payment_split || '50% no inicio, 50% na conclusao';
   const payNotes = proposal.payment_notes || '';
   const validDays = settings?.validity_days || 30;
-  const warrantyText = settings?.warranty_text || 'Garantia conforme proposta';
   const conditions = settings?.conditions || [];
   const notes = settings?.notes || '';
 
@@ -213,12 +212,19 @@ async function generatePDF(proposal, settings, logoBase64) {
 
     finalY += payBoxH + 6;
 
-    // Conditions box
+    // Conditions box - always enforce 2yr warranty & IVA not included
     doc.setFillColor(24, 24, 27);
+    const WARRANTY_LINE = 'Garantia de 2 anos sobre mao de obra e materiais fornecidos';
+    const IVA_LINE = 'Valores em EUR, IVA NAO incluido (a acrescer a taxa legal em vigor)';
     const condLines = [
       `Proposta valida por ${validDays} dias`,
-      warrantyText,
-      ...conditions,
+      WARRANTY_LINE,
+      IVA_LINE,
+      // Keep other user-configured conditions but exclude any IVA/warranty duplicates
+      ...conditions.filter(c => {
+        const l = c.toLowerCase();
+        return !l.includes('iva') && !l.includes('garantia');
+      }),
     ];
     if (notes) condLines.push(`Nota: ${notes}`);
     const boxH = 8 + condLines.length * 4;
@@ -324,8 +330,8 @@ export default function PropostasPage() {
       payment_methods: ['Transferencia Bancaria', 'MB Way', 'Multibanco'],
       payment_split: '50% no inicio dos trabalhos, 50% na conclusao',
       validity_days: 30,
-      warranty_text: 'Garantia conforme a proposta selecionada',
-      conditions: ['Valores em EUR com IVA incluido', 'Deslocacao incluida na zona da Grande Lisboa', 'Material e mao de obra incluidos'],
+      warranty_text: 'Garantia de 2 anos sobre mao de obra e materiais fornecidos',
+      conditions: ['Valores em EUR, IVA NAO incluido (a acrescer a taxa legal em vigor)', 'Deslocacao incluida na zona da Grande Lisboa', 'Material e mao de obra incluidos'],
       notes: '',
     });
     setSettingsOpen(true);

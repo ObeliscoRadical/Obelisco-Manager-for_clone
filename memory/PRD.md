@@ -34,7 +34,12 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
-### Feb 18, 2026 (later)
+### Feb 18, 2026 (v3)
+- **Feature**: Todas as propostas (Básico/Profissional/Premium) agora têm **garantia de 2 anos** uniforme (antes eram 1/2/5 anos).
+- **Feature**: "IVA NÃO incluído (a acrescer a taxa legal em vigor)" aparece obrigatoriamente no PDF em duas localizações: (a) descrição do tier da proposta, (b) condições gerais forçadas (mesmo que o utilizador remova das settings, o PDF injeta-as).
+- **Migration**: 18 propostas antigas atualizadas em DB para refletir nova descrição.
+
+### Feb 18, 2026 (v2)
 - **Feature**: Budget-level discount system (both per-item AND global). Each item has its own `discount_type` (percentage/value) and `discount_value`. Global discount applies on top of subtotal. Discount does NOT appear as separate line in PDF - silently reduces final total (user choice).
 - **Feature**: Per-budget payment methods, conditions and observation notes (replaces global-only settings). Payment methods = multi-select chips; conditions = preset options + custom text; notes = free-form textarea. Validation enforces required payment fields before save. Proposals inherit budget's payment config, PDF uses per-proposal data (fallback to global settings).
 - **Testing**: 45/45 backend + frontend tests passed.

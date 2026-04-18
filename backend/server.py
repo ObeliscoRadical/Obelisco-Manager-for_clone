@@ -326,9 +326,9 @@ async def generate_proposals(budget_id: str, user=Depends(get_current_user)):
 
     base_price = budget["total_price"]
     tiers = [
-        {"tier": "basico", "label": "Basico", "multiplier": 1.0, "description": "Servico padrao com materiais standard. Garantia de 1 ano."},
-        {"tier": "profissional", "label": "Profissional", "multiplier": 1.15, "description": "Materiais premium, garantia estendida de 2 anos, suporte prioritario."},
-        {"tier": "premium", "label": "Premium", "multiplier": 1.30, "description": "Materiais top de gama, garantia de 5 anos, execucao prioritaria, suporte 24/7."},
+        {"tier": "basico", "label": "Basico", "multiplier": 1.0, "description": "Servico padrao com materiais standard. Garantia de 2 anos. IVA nao incluido."},
+        {"tier": "profissional", "label": "Profissional", "multiplier": 1.15, "description": "Materiais premium, garantia de 2 anos, suporte prioritario. IVA nao incluido."},
+        {"tier": "premium", "label": "Premium", "multiplier": 1.30, "description": "Materiais top de gama, garantia de 2 anos, execucao prioritaria, suporte 24/7. IVA nao incluido."},
     ]
 
     proposals = []
@@ -840,9 +840,9 @@ DEFAULT_PROPOSAL_SETTINGS = {
     "payment_methods": ["Transferencia Bancaria", "MB Way", "Multibanco", "Cartao de Credito/Debito"],
     "payment_split": "50% no inicio dos trabalhos, 50% na conclusao",
     "validity_days": 30,
-    "warranty_text": "Garantia conforme a proposta selecionada",
+    "warranty_text": "Garantia de 2 anos sobre mao de obra e materiais fornecidos",
     "conditions": [
-        "Valores em EUR com IVA incluido",
+        "Valores em EUR, IVA NAO incluido (a acrescer a taxa legal em vigor)",
         "Deslocacao incluida na zona da Grande Lisboa",
         "Material e mao de obra incluidos",
         "Alteracoes ao orcamento podem afetar o valor final",
