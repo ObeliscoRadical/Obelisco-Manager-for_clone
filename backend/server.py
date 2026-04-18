@@ -822,7 +822,70 @@ async def update_proposal_settings(input: ProposalSettingsUpdate, user=Depends(g
 
 @api_router.get("/categories")
 async def get_categories(user=Depends(get_current_user)):
-    return CATEGORIES_CATALOG
+    # Merge static catalog with custom items from materials_db
+    import copy
+    result = copy.deepcopy(CATEGORIES_CATALOG)
+    cat_map = {c["name"]: c for c in result}
+
+    # Get custom items from materials_db that are not in the static catalog
+    custom_materials = await db.materials_db.find({"active": True, "custom": True}, {"_id": 0}).to_list(2000)
+    for mat in custom_materials:
+        cat_name = mat.get("category", "")
+        if not cat_name:
+            continue
+        if cat_name in cat_map:
+            # Add to existing category if not already there
+            existing_names = {i["name"] for i in cat_map[cat_name]["items"]}
+            if mat["description"] not in existing_names:
+                cat_map[cat_name]["items"].append({"name": mat["description"], "unit": mat.get("unit", "unidade")})
+        else:
+            # Create new category
+            new_cat = {"id": cat_name.lower().replace(" ", "_"), "name": cat_name, "items": [{"name": mat["description"], "unit": mat.get("unit", "unidade")}]}
+            result.append(new_cat)
+            cat_map[cat_name] = new_cat
+
+    return result
+
+
+class SaveCustomItemInput(BaseModel):
+    category: str
+    name: str
+    unit_cost: float = 0
+    unit: str = "unidade"
+
+@api_router.post("/categories/save-item")
+async def save_custom_item(input: SaveCustomItemInput, user=Depends(get_current_user)):
+    """Save a custom item to the materials database so it appears in future category dropdowns"""
+    if not input.name or not input.category:
+        raise HTTPException(status_code=400, detail="Nome e categoria obrigatorios")
+
+    # Check if already exists
+    existing = await db.materials_db.find_one({"description": input.name, "category": input.category})
+    if existing:
+        # Update price if changed
+        if input.unit_cost > 0 and input.unit_cost != existing.get("purchase_price", 0):
+            history = existing.get("price_history", [])
+            history.append({"price": input.unit_cost, "date": datetime.now(timezone.utc).isoformat()})
+            await db.materials_db.update_one(
+                {"_id": existing["_id"]},
+                {"$set": {"purchase_price": input.unit_cost, "market_price": input.unit_cost, "price_history": history, "price_updated_at": datetime.now(timezone.utc).isoformat()}}
+            )
+        return {"message": "Item atualizado", "new": False}
+
+    # Create new material
+    doc = {
+        "id": str(uuid.uuid4()), "code": "", "description": input.name,
+        "category": input.category, "subcategory": "", "brand": "", "supplier": "",
+        "unit": input.unit, "purchase_price": input.unit_cost, "market_price": input.unit_cost,
+        "waste_pct": 5, "notes": "Adicionado automaticamente via orcamento", "active": True,
+        "custom": True,
+        "price_history": [{"price": input.unit_cost, "date": datetime.now(timezone.utc).isoformat()}] if input.unit_cost > 0 else [],
+        "price_updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.materials_db.insert_one(doc)
+    doc.pop("_id", None)
+    return {"message": "Item guardado na categoria", "new": True, "item": doc}
 
 
 @api_router.post("/price-lookup")

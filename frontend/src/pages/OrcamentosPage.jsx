@@ -164,8 +164,23 @@ export default function OrcamentosPage() {
         await api.post('/budgets', payload);
         toast.success('Orcamento criado');
       }
+
+      // Auto-save custom items to categories for future use
+      for (const item of items) {
+        if (item.name && item.category && item.unit_cost > 0) {
+          const catItems = getCategoryItems(item.category);
+          const alreadyExists = catItems.some(ci => ci.name === item.name);
+          if (!alreadyExists) {
+            try {
+              await api.post('/categories/save-item', { category: item.category, name: item.name, unit_cost: item.unit_cost, unit: 'unidade' });
+            } catch { /* ignore save errors */ }
+          }
+        }
+      }
+
       setDialogOpen(false);
       fetchBudgets();
+      fetchCategories(); // Refresh categories to include new items
     } catch (err) {
       console.error('Save budget error:', err.message);
       toast.error('Erro ao guardar orcamento');
@@ -376,13 +391,24 @@ export default function OrcamentosPage() {
                               <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 pointer-events-none" />
                             </div>
                           ) : (
-                            <Input
-                              data-testid={`item-name-input-${idx}`}
-                              value={item.name}
-                              onChange={e => updateItem(idx, 'name', e.target.value)}
-                              className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm"
-                              placeholder="Escreva o nome do item..."
-                            />
+                            <div className="flex gap-1">
+                              <Input
+                                data-testid={`item-name-input-${idx}`}
+                                value={item.name}
+                                onChange={e => updateItem(idx, 'name', e.target.value)}
+                                className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm flex-1"
+                                placeholder="Escreva o nome do item..."
+                              />
+                              {catItems.length > 0 && (
+                                <button
+                                  onClick={() => { const next = [...items]; next[idx] = { ...next[idx], _customName: false, name: '' }; setItems(next); }}
+                                  className="h-9 w-9 shrink-0 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-400 hover:text-yellow-400 flex items-center justify-center"
+                                  title="Voltar a lista"
+                                >
+                                  <ChevronDown size={14} />
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
