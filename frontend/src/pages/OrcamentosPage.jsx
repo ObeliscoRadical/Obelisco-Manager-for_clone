@@ -13,7 +13,16 @@ import { toast } from 'sonner';
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 
 let itemIdCounter = 0;
-const createItem = () => ({ _key: `item-${++itemIdCounter}`, category: '', name: '', quantity: 1, unit_cost: 0, margin: 0.6 });
+const createItem = () => ({ _key: `item-${++itemIdCounter}`, category: '', name: '', quantity: 1, unit_cost: 0, margin: 0.6, discount_type: 'percentage', discount_value: 0 });
+
+const PAYMENT_METHODS_OPTIONS = ['Transferencia Bancaria', 'MB Way', 'Multibanco', 'Cartao de Credito/Debito', 'Numerario', 'Cheque'];
+const PAYMENT_SPLIT_OPTIONS = [
+  '50% no inicio dos trabalhos, 50% na conclusao',
+  '30% no inicio, 40% a meio, 30% na conclusao',
+  '100% adiantado',
+  '100% na conclusao',
+  '40% no inicio, 60% na entrega',
+];
 
 const statusColors = {
   rascunho: 'bg-zinc-700 text-zinc-300',
@@ -39,6 +48,13 @@ export default function OrcamentosPage() {
   const [items, setItems] = useState([createItem()]);
   const [categories, setCategories] = useState([]);
   const [searchingPrice, setSearchingPrice] = useState({});
+  // Global discount
+  const [discountType, setDiscountType] = useState('percentage');
+  const [discountValue, setDiscountValue] = useState(0);
+  // Payment
+  const [paymentMethods, setPaymentMethods] = useState([]);
+  const [paymentSplit, setPaymentSplit] = useState('');
+  const [paymentNotes, setPaymentNotes] = useState('');
 
   const fetchBudgets = useCallback(async () => {
     try {
@@ -66,6 +82,8 @@ export default function OrcamentosPage() {
     setEditingBudget(null);
     setTitle(''); setClientName(''); setClientPhone('');
     setItems([createItem()]);
+    setDiscountType('percentage'); setDiscountValue(0);
+    setPaymentMethods([]); setPaymentSplit(''); setPaymentNotes('');
     setDialogOpen(true);
   };
 
@@ -74,7 +92,12 @@ export default function OrcamentosPage() {
     setTitle(budget.title);
     setClientName(budget.client_name);
     setClientPhone(budget.client_phone || '');
-    setItems(budget.items?.length > 0 ? budget.items.map(i => ({ ...i, _key: `item-${++itemIdCounter}` })) : [createItem()]);
+    setItems(budget.items?.length > 0 ? budget.items.map(i => ({ discount_type: 'percentage', discount_value: 0, ...i, _key: `item-${++itemIdCounter}` })) : [createItem()]);
+    setDiscountType(budget.discount_type || 'percentage');
+    setDiscountValue(budget.discount_value || 0);
+    setPaymentMethods(budget.payment_methods || []);
+    setPaymentSplit(budget.payment_split || '');
+    setPaymentNotes(budget.payment_notes || '');
     setDialogOpen(true);
   };
 
@@ -83,7 +106,8 @@ export default function OrcamentosPage() {
 
   const updateItem = (idx, field, value) => {
     const next = [...items];
-    next[idx] = { ...next[idx], [field]: field === 'category' || field === 'name' ? value : (parseFloat(value) || 0) };
+    const stringFields = ['category', 'name', 'discount_type', 'unit'];
+    next[idx] = { ...next[idx], [field]: stringFields.includes(field) ? value : (parseFloat(value) || 0) };
     setItems(next);
   };
 
@@ -196,12 +220,42 @@ export default function OrcamentosPage() {
   };
 
   const totalCost = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * item.quantity, 0), [items]);
-  const totalPrice = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * (1 + item.margin) * item.quantity, 0), [items]);
+
+  const subtotalAfterItemDiscounts = useMemo(() => items.reduce((sum, item) => {
+    let line = item.unit_cost * (1 + (item.margin || 0)) * item.quantity;
+    const dv = item.discount_value || 0;
+    if (dv > 0) {
+      if (item.discount_type === 'value') line = Math.max(0, line - dv);
+      else line = line * (1 - dv / 100);
+    }
+    return sum + line;
+  }, 0), [items]);
+
+  const totalPrice = useMemo(() => {
+    let t = subtotalAfterItemDiscounts;
+    if (discountValue > 0) {
+      if (discountType === 'value') t = Math.max(0, t - discountValue);
+      else t = t * (1 - discountValue / 100);
+    }
+    return t;
+  }, [subtotalAfterItemDiscounts, discountType, discountValue]);
 
   const handleSave = async () => {
     if (!title || !clientName) { toast.error('Preencha o titulo e nome do cliente'); return; }
+    if (!paymentMethods.length) { toast.error('Selecione pelo menos uma forma de pagamento'); return; }
+    if (!paymentSplit) { toast.error('Selecione as condicoes de pagamento'); return; }
     try {
-      const payload = { title, client_name: clientName, client_phone: clientPhone, items: items.map(({ _key, _customName, ...rest }) => rest) };
+      const payload = {
+        title,
+        client_name: clientName,
+        client_phone: clientPhone,
+        items: items.map(({ _key, _customName, ...rest }) => rest),
+        discount_type: discountType,
+        discount_value: discountValue || 0,
+        payment_methods: paymentMethods,
+        payment_split: paymentSplit,
+        payment_notes: paymentNotes,
+      };
       if (editingBudget) {
         await api.put(`/budgets/${editingBudget.id}`, payload);
         toast.success('Orcamento atualizado');
@@ -401,7 +455,13 @@ export default function OrcamentosPage() {
               <div className="space-y-3">
                 {items.map((item, idx) => {
                   const salePrice = item.unit_cost * (1 + item.margin);
-                  const total = salePrice * item.quantity;
+                  const lineGross = salePrice * item.quantity;
+                  const dv = item.discount_value || 0;
+                  let lineTotalWithDiscount = lineGross;
+                  if (dv > 0) {
+                    if (item.discount_type === 'value') lineTotalWithDiscount = Math.max(0, lineGross - dv);
+                    else lineTotalWithDiscount = lineGross * (1 - dv / 100);
+                  }
                   const catItems = getCategoryItems(item.category);
                   const isSearching = searchingPrice[item._key];
                   return (
@@ -470,10 +530,10 @@ export default function OrcamentosPage() {
                           )}
                         </div>
                       </div>
-                      <div className="grid grid-cols-[80px_1fr_80px_100px_100px_40px] gap-2 items-end">
+                      <div className="grid grid-cols-[70px_1fr_70px_90px_90px_100px_30px] gap-2 items-end">
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Qtd</label>
-                          <Input type="number" min="0" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm" />
+                          <Input data-testid={`item-qty-${idx}`} type="number" min="0" value={item.quantity} onChange={e => updateItem(idx, 'quantity', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm" />
                         </div>
                         <div>
                           <label className="text-xs text-zinc-500 mb-1 block">Custo Unitario (EUR)</label>
@@ -495,13 +555,28 @@ export default function OrcamentosPage() {
                           <label className="text-xs text-zinc-500 mb-1 block">Margem</label>
                           <Input type="number" min="0" step="0.01" value={item.margin} onChange={e => updateItem(idx, 'margin', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm" />
                         </div>
+                        <div>
+                          <label className="text-xs text-zinc-500 mb-1 block">Desconto</label>
+                          <div className="flex gap-1">
+                            <Input data-testid={`item-discount-val-${idx}`} type="number" min="0" step="0.01" value={item.discount_value || 0} onChange={e => updateItem(idx, 'discount_value', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-sm flex-1 px-2" />
+                            <button
+                              type="button"
+                              data-testid={`item-discount-type-${idx}`}
+                              onClick={() => updateItem(idx, 'discount_type', item.discount_type === 'value' ? 'percentage' : 'value')}
+                              className="h-9 w-7 shrink-0 bg-zinc-800 border border-zinc-700 rounded-lg text-xs text-yellow-400 font-semibold hover:bg-zinc-700"
+                              title="Alternar entre % e EUR"
+                            >
+                              {item.discount_type === 'value' ? '€' : '%'}
+                            </button>
+                          </div>
+                        </div>
                         <div className="text-center">
                           <label className="text-xs text-zinc-500 mb-1 block">Preco</label>
                           <p className="text-sm text-zinc-300 h-9 flex items-center justify-center">{formatEuro(salePrice)}</p>
                         </div>
                         <div className="text-center">
                           <label className="text-xs text-zinc-500 mb-1 block">Total</label>
-                          <p className="text-sm text-yellow-400 font-semibold h-9 flex items-center justify-center">{formatEuro(total)}</p>
+                          <p className="text-sm text-yellow-400 font-semibold h-9 flex items-center justify-center">{formatEuro(lineTotalWithDiscount)}</p>
                         </div>
                         <div className="flex items-center justify-center h-9">
                           <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-300 p-1"><Trash2 size={14} /></button>
@@ -513,14 +588,112 @@ export default function OrcamentosPage() {
               </div>
             </div>
 
+            {/* Global Discount + Payment Methods/Conditions */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5 rounded-2xl bg-zinc-900/50 border border-zinc-800">
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Desconto Global <span className="text-zinc-500 font-normal">(aplicado sobre o subtotal)</span></Label>
+                  <div className="flex gap-2 mt-2">
+                    <div className="flex rounded-lg overflow-hidden border border-zinc-700">
+                      <button
+                        type="button"
+                        data-testid="global-discount-type-pct"
+                        onClick={() => setDiscountType('percentage')}
+                        className={`px-3 py-2 text-sm font-medium transition ${discountType === 'percentage' ? 'bg-yellow-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                      >%</button>
+                      <button
+                        type="button"
+                        data-testid="global-discount-type-val"
+                        onClick={() => setDiscountType('value')}
+                        className={`px-3 py-2 text-sm font-medium transition ${discountType === 'value' ? 'bg-yellow-400 text-zinc-950' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                      >EUR</button>
+                    </div>
+                    <Input
+                      data-testid="global-discount-value"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountValue}
+                      onChange={e => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-10 text-sm flex-1"
+                      placeholder={discountType === 'percentage' ? 'Ex: 10 (para 10%)' : 'Ex: 150 (para -150€)'}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Observacoes sobre Pagamento <span className="text-zinc-500 font-normal">(opcional)</span></Label>
+                  <textarea
+                    data-testid="payment-notes"
+                    value={paymentNotes}
+                    onChange={e => setPaymentNotes(e.target.value)}
+                    rows={3}
+                    placeholder="Ex: Prazo de pagamento a 30 dias apos fatura; IVA nao incluido..."
+                    className="w-full mt-2 bg-zinc-900 border border-zinc-700 text-white rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none"
+                  />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Formas de Pagamento <span className="text-red-400">*</span></Label>
+                  <div className="grid grid-cols-2 gap-2 mt-2">
+                    {PAYMENT_METHODS_OPTIONS.map(method => {
+                      const active = paymentMethods.includes(method);
+                      return (
+                        <button
+                          key={method}
+                          type="button"
+                          data-testid={`pay-method-${method.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
+                          onClick={() => {
+                            if (active) setPaymentMethods(paymentMethods.filter(m => m !== method));
+                            else setPaymentMethods([...paymentMethods, method]);
+                          }}
+                          className={`px-3 py-2 rounded-lg text-xs font-medium text-left transition border ${active ? 'bg-yellow-400 text-zinc-950 border-yellow-400' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-zinc-500'}`}
+                        >
+                          {method}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-zinc-300 text-sm font-semibold">Condicoes de Pagamento <span className="text-red-400">*</span></Label>
+                  <div className="space-y-1.5 mt-2">
+                    {PAYMENT_SPLIT_OPTIONS.map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        data-testid={`pay-split-${opt.slice(0, 12).replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}
+                        onClick={() => setPaymentSplit(opt)}
+                        className={`w-full px-3 py-2 rounded-lg text-xs font-medium text-left transition border ${paymentSplit === opt ? 'bg-yellow-400 text-zinc-950 border-yellow-400' : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:border-zinc-500'}`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                    <Input
+                      value={PAYMENT_SPLIT_OPTIONS.includes(paymentSplit) ? '' : paymentSplit}
+                      onChange={e => setPaymentSplit(e.target.value)}
+                      placeholder="Ou escreva condicoes personalizadas..."
+                      className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-              <div className="flex gap-8">
+              <div className="flex gap-8 flex-wrap">
                 <div>
                   <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Custo Total</p>
                   <p className="text-xl font-bold text-zinc-300">{formatEuro(totalCost)}</p>
                 </div>
+                {discountValue > 0 && (
+                  <div>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Subtotal</p>
+                    <p className="text-xl font-bold text-zinc-400 line-through">{formatEuro(subtotalAfterItemDiscounts)}</p>
+                  </div>
+                )}
                 <div>
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Preco Total</p>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Preco Final</p>
                   <p className="text-xl font-bold text-yellow-400">{formatEuro(totalPrice)}</p>
                 </div>
                 <div>

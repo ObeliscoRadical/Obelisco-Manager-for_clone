@@ -126,7 +126,13 @@ async function generatePDF(proposal, settings, logoBase64) {
   // ===== ITEMS TABLE (PVP ONLY) =====
   const tableData = (proposal.items || []).map(item => {
     const pvpUnit = item.unit_cost * (1 + (item.margin || 0));
-    const pvpTotal = pvpUnit * (item.quantity || 0);
+    let pvpTotal = pvpUnit * (item.quantity || 0);
+    // Apply per-item discount silently to line total
+    const dv = item.discount_value || 0;
+    if (dv > 0) {
+      if (item.discount_type === 'value') pvpTotal = Math.max(0, pvpTotal - dv);
+      else pvpTotal = pvpTotal * (1 - dv / 100);
+    }
     return [
       item.name || '-',
       (item.quantity || 0).toString(),
@@ -174,18 +180,23 @@ async function generatePDF(proposal, settings, logoBase64) {
 
   finalY += 38;
 
-  // ===== PAYMENT & CONDITIONS =====
-  const payMethods = settings?.payment_methods?.join(', ') || 'Transferencia Bancaria, MB Way';
-  const paySplit = settings?.payment_split || '50% no inicio, 50% na conclusao';
+  // ===== PAYMENT & CONDITIONS (prefer proposal-specific, fallback to global settings) =====
+  const payMethodsArr = (proposal.payment_methods && proposal.payment_methods.length > 0)
+    ? proposal.payment_methods
+    : (settings?.payment_methods || ['Transferencia Bancaria', 'MB Way']);
+  const payMethods = payMethodsArr.join(', ');
+  const paySplit = proposal.payment_split || settings?.payment_split || '50% no inicio, 50% na conclusao';
+  const payNotes = proposal.payment_notes || '';
   const validDays = settings?.validity_days || 30;
   const warrantyText = settings?.warranty_text || 'Garantia conforme proposta';
   const conditions = settings?.conditions || [];
   const notes = settings?.notes || '';
 
   if (finalY < pageH - 70) {
-    // Payment box
+    // Payment box (taller if notes)
+    const payBoxH = payNotes ? 24 : 16;
     doc.setFillColor(24, 24, 27);
-    doc.roundedRect(15, finalY, pageW - 30, 16, 3, 3, 'F');
+    doc.roundedRect(15, finalY, pageW - 30, payBoxH, 3, 3, 'F');
     doc.setTextColor(250, 204, 21);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
@@ -195,8 +206,12 @@ async function generatePDF(proposal, settings, logoBase64) {
     doc.setFont('helvetica', 'normal');
     doc.text(`Metodos aceites: ${payMethods}`, 22, finalY + 11);
     doc.text(`Condicoes: ${paySplit}`, 22, finalY + 15);
+    if (payNotes) {
+      const nLines = doc.splitTextToSize(`Obs: ${payNotes}`, pageW - 44);
+      doc.text(nLines.slice(0, 2), 22, finalY + 20);
+    }
 
-    finalY += 22;
+    finalY += payBoxH + 6;
 
     // Conditions box
     doc.setFillColor(24, 24, 27);

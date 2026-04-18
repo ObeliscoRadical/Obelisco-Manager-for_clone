@@ -95,15 +95,23 @@ class LoginInput(BaseModel):
 class BudgetItemModel(BaseModel):
     category: str = ""
     name: str = ""
+    unit: str = ""
     quantity: float = 1
     unit_cost: float = 0
     margin: float = 0.6
+    discount_type: str = "percentage"  # "percentage" or "value"
+    discount_value: float = 0
 
 class BudgetCreate(BaseModel):
     title: str
     client_name: str
     client_phone: str = ""
     items: List[BudgetItemModel] = []
+    discount_type: str = "percentage"  # "percentage" or "value"
+    discount_value: float = 0
+    payment_methods: List[str] = []
+    payment_split: str = ""
+    payment_notes: str = ""
 
 class BudgetUpdate(BaseModel):
     title: Optional[str] = None
@@ -111,6 +119,11 @@ class BudgetUpdate(BaseModel):
     client_phone: Optional[str] = None
     items: Optional[List[BudgetItemModel]] = None
     status: Optional[str] = None
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    payment_methods: Optional[List[str]] = None
+    payment_split: Optional[str] = None
+    payment_notes: Optional[str] = None
 
 class StatusUpdate(BaseModel):
     status: str
@@ -198,9 +211,26 @@ async def refresh(request: Request, response: Response):
 
 # --- Budget Endpoints ---
 
-def calc_budget_totals(items):
+def calc_budget_totals(items, discount_type="percentage", discount_value=0):
     total_cost = sum(i.get("unit_cost", 0) * i.get("quantity", 0) for i in items)
-    total_price = sum(i.get("unit_cost", 0) * (1 + i.get("margin", 0)) * i.get("quantity", 0) for i in items)
+    # Price per item = unit_cost * (1 + margin) * qty, then apply per-item discount
+    total_price = 0
+    for i in items:
+        line = i.get("unit_cost", 0) * (1 + i.get("margin", 0)) * i.get("quantity", 0)
+        dtype = i.get("discount_type", "percentage")
+        dval = i.get("discount_value", 0) or 0
+        if dval > 0:
+            if dtype == "percentage":
+                line = line * (1 - dval / 100)
+            else:
+                line = max(0, line - dval)
+        total_price += line
+    # Apply global discount
+    if discount_value and discount_value > 0:
+        if discount_type == "percentage":
+            total_price = total_price * (1 - discount_value / 100)
+        else:
+            total_price = max(0, total_price - discount_value)
     return round(total_cost, 2), round(total_price, 2)
 
 @api_router.get("/budgets")
@@ -211,13 +241,18 @@ async def get_budgets(user=Depends(get_current_user)):
 @api_router.post("/budgets")
 async def create_budget(input: BudgetCreate, user=Depends(get_current_user)):
     items = [item.model_dump() for item in input.items]
-    total_cost, total_price = calc_budget_totals(items)
+    total_cost, total_price = calc_budget_totals(items, input.discount_type, input.discount_value)
     doc = {
         "id": str(uuid.uuid4()),
         "title": input.title,
         "client_name": input.client_name,
         "client_phone": input.client_phone,
         "items": items,
+        "discount_type": input.discount_type,
+        "discount_value": input.discount_value,
+        "payment_methods": input.payment_methods,
+        "payment_split": input.payment_split,
+        "payment_notes": input.payment_notes,
         "total_cost": total_cost,
         "total_price": total_price,
         "status": "rascunho",
@@ -246,9 +281,21 @@ async def update_budget(budget_id: str, input: BudgetUpdate, user=Depends(get_cu
             update_data[k] = v
 
     if "items" in update_data:
-        total_cost, total_price = calc_budget_totals(update_data["items"])
+        # Merge with existing budget to get latest discount values
+        existing = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
+        dtype = update_data.get("discount_type", existing.get("discount_type", "percentage") if existing else "percentage")
+        dval = update_data.get("discount_value", existing.get("discount_value", 0) if existing else 0)
+        total_cost, total_price = calc_budget_totals(update_data["items"], dtype, dval)
         update_data["total_cost"] = total_cost
         update_data["total_price"] = total_price
+    elif "discount_type" in update_data or "discount_value" in update_data:
+        existing = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
+        if existing:
+            dtype = update_data.get("discount_type", existing.get("discount_type", "percentage"))
+            dval = update_data.get("discount_value", existing.get("discount_value", 0))
+            total_cost, total_price = calc_budget_totals(existing.get("items", []), dtype, dval)
+            update_data["total_cost"] = total_cost
+            update_data["total_price"] = total_price
 
     if not update_data:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
@@ -300,6 +347,11 @@ async def generate_proposals(budget_id: str, user=Depends(get_current_user)):
             "final_value": round(base_price * t["multiplier"], 2),
             "description": t["description"],
             "status": "pendente",
+            "payment_methods": budget.get("payment_methods", []),
+            "payment_split": budget.get("payment_split", ""),
+            "payment_notes": budget.get("payment_notes", ""),
+            "discount_type": budget.get("discount_type", "percentage"),
+            "discount_value": budget.get("discount_value", 0),
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.proposals.insert_one(prop)
@@ -2016,14 +2068,13 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
             m = try_float(cells[margin_idx], 0)
             margin = m / 100 if m > 1 else (m if m > 0 else 0.6)
 
-        items.append({"category": category, "name": name, "unit": unit, "quantity": qty, "unit_cost": cost, "margin": margin})
+        items.append({"category": category, "name": name, "unit": unit, "quantity": qty, "unit_cost": cost, "margin": margin, "discount_type": "percentage", "discount_value": 0})
         logger.info(f"  Item: '{name}' qty={qty} cost={cost}")
 
     if not items:
         raise HTTPException(status_code=400, detail="Nenhum item encontrado. Verifique que o Excel tem colunas com descricao e quantidade.")
 
-    total_cost = sum(i["unit_cost"] * i["quantity"] for i in items)
-    total_price = sum(i["unit_cost"] * (1 + i["margin"]) * i["quantity"] for i in items)
+    total_cost, total_price = calc_budget_totals(items, "percentage", 0)
 
     doc = {
         "id": str(uuid.uuid4()),
@@ -2031,8 +2082,13 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
         "client_name": "A definir",
         "client_phone": "",
         "items": items,
-        "total_cost": round(total_cost, 2),
-        "total_price": round(total_price, 2),
+        "discount_type": "percentage",
+        "discount_value": 0,
+        "payment_methods": [],
+        "payment_split": "",
+        "payment_notes": "",
+        "total_cost": total_cost,
+        "total_price": total_price,
         "status": "rascunho",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": user["id"],
