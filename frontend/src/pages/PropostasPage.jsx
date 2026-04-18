@@ -11,6 +11,7 @@ import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Chec
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import QRCode from 'qrcode';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 
@@ -219,17 +220,24 @@ async function generatePDF(proposal, settings, logoBase64) {
     });
   }
 
-  // ===== FOOTER =====
+  // ===== FOOTER WITH QR CODE =====
   doc.setFillColor(9, 9, 11);
-  doc.rect(0, pageH - 18, pageW, 18, 'F');
+  doc.rect(0, pageH - 25, pageW, 25, 'F');
   doc.setFillColor(250, 204, 21);
-  doc.rect(0, pageH - 18, pageW, 0.8, 'F');
+  doc.rect(0, pageH - 25, pageW, 0.8, 'F');
+
+  // QR Code
+  try {
+    const qrDataUrl = await QRCode.toDataURL('https://www.obeliscoradical.pt', { width: 200, margin: 1, color: { dark: '#FACC15', light: '#09090b' } });
+    doc.addImage(qrDataUrl, 'PNG', pageW - 32, pageH - 23, 18, 18);
+  } catch (e) { console.error('QR error:', e.message); }
+
   doc.setTextColor(161, 161, 170);
   doc.setFontSize(7);
-  doc.text('Obelisco Radical - Eletricidade & Telecomunicacoes', 15, pageH - 10);
-  doc.text('Tel: +351 911 132 401  |  obeliscoradical@gmail.com  |  www.obeliscoradical.pt', 15, pageH - 5);
+  doc.text('Obelisco Radical - Eletricidade & Telecomunicacoes', 15, pageH - 16);
+  doc.text('Tel: +351 911 132 401  |  obeliscoradical@gmail.com', 15, pageH - 11);
+  doc.text('www.obeliscoradical.pt  |  Grande Lisboa', 15, pageH - 6);
   doc.setTextColor(250, 204, 21);
-  doc.text('Grande Lisboa', pageW - 15, pageH - 8, { align: 'right' });
 
   // Watermark
   if (logoBase64) {

@@ -2,7 +2,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / '.env')
 
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
@@ -1623,6 +1624,251 @@ async def delete_user(user_id: str, user=Depends(get_current_user)):
 @api_router.get("/roles")
 async def get_roles(user=Depends(get_current_user)):
     return {"roles": VALID_ROLES, "permissions": ROLE_PERMISSIONS}
+
+
+# ============================================================
+# FASE 3 - EXCEL, VERSIONING, TEMPLATES, FAVORITES
+# ============================================================
+
+# --- Excel Export ---
+
+@api_router.get("/budgets/{budget_id}/export-excel")
+async def export_budget_excel(budget_id: str, user=Depends(get_current_user)):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    import io
+
+    budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Orcamento"
+
+    # Styles
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="FACC15", end_color="FACC15", fill_type="solid")
+    yellow_font = Font(bold=True, color="FACC15", size=12)
+
+    # Title
+    ws.merge_cells("A1:G1")
+    ws["A1"] = f"Orcamento: {budget['title']}"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = f"Cliente: {budget['client_name']}"
+    ws["A3"] = f"Telefone: {budget.get('client_phone', '')}"
+    ws["A4"] = f"Data: {datetime.now(timezone.utc).strftime('%d/%m/%Y')}"
+
+    # Headers
+    headers = ["Categoria", "Item", "Quantidade", "Custo Unit. (EUR)", "Margem", "Preco Unit. (EUR)", "Total (EUR)"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=6, column=col, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="center")
+
+    # Items
+    for i, item in enumerate(budget.get("items", []), 7):
+        ws.cell(row=i, column=1, value=item.get("category", ""))
+        ws.cell(row=i, column=2, value=item.get("name", ""))
+        ws.cell(row=i, column=3, value=item.get("quantity", 0))
+        ws.cell(row=i, column=4, value=item.get("unit_cost", 0))
+        ws.cell(row=i, column=5, value=f"{item.get('margin', 0) * 100:.0f}%")
+        pvp = item.get("unit_cost", 0) * (1 + item.get("margin", 0))
+        ws.cell(row=i, column=6, value=round(pvp, 2))
+        ws.cell(row=i, column=7, value=round(pvp * item.get("quantity", 0), 2))
+
+    # Totals
+    last_row = 7 + len(budget.get("items", []))
+    ws.cell(row=last_row + 1, column=6, value="TOTAL:").font = Font(bold=True)
+    ws.cell(row=last_row + 1, column=7, value=budget.get("total_price", 0)).font = yellow_font
+
+    # Column widths
+    for col_widths in [(1, 20), (2, 40), (3, 12), (4, 15), (5, 10), (6, 15), (7, 15)]:
+        ws.column_dimensions[chr(64 + col_widths[0])].width = col_widths[1]
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"orcamento_{budget['title'].replace(' ', '_')}.xlsx"
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                           headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+# --- Excel Import ---
+
+@api_router.post("/budgets/import-excel")
+async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_current_user)):
+    from openpyxl import load_workbook
+    import io
+
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="Ficheiro deve ser .xlsx ou .xls")
+
+    content = await file.read()
+    wb = load_workbook(io.BytesIO(content))
+    ws = wb.active
+
+    items = []
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        if not row or not any(row):
+            continue
+        cells = list(row)
+        name = str(cells[0] or cells[1] or "").strip() if len(cells) > 1 else str(cells[0] or "").strip()
+        if not name:
+            continue
+        qty = float(cells[2]) if len(cells) > 2 and cells[2] else 1
+        cost = float(cells[3]) if len(cells) > 3 and cells[3] else 0
+        margin = float(cells[4]) / 100 if len(cells) > 4 and cells[4] and isinstance(cells[4], (int, float)) else 0.6
+        category = str(cells[0] or "") if len(cells) > 1 else ""
+
+        items.append({"category": category, "name": str(cells[1] or name), "quantity": qty, "unit_cost": cost, "margin": margin})
+
+    if not items:
+        raise HTTPException(status_code=400, detail="Nenhum item encontrado no ficheiro")
+
+    total_cost = sum(i["unit_cost"] * i["quantity"] for i in items)
+    total_price = sum(i["unit_cost"] * (1 + i["margin"]) * i["quantity"] for i in items)
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "title": f"Importado: {file.filename}",
+        "client_name": "A definir",
+        "client_phone": "",
+        "items": items,
+        "total_cost": round(total_cost, 2),
+        "total_price": round(total_price, 2),
+        "status": "rascunho",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user["id"],
+    }
+    await db.budgets.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+# --- Budget Versioning ---
+
+@api_router.post("/budgets/{budget_id}/save-version")
+async def save_budget_version(budget_id: str, user=Depends(get_current_user)):
+    budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+
+    versions = await db.budget_versions.find({"budget_id": budget_id}).to_list(100)
+    version_num = len(versions) + 1
+
+    version_doc = {
+        "id": str(uuid.uuid4()),
+        "budget_id": budget_id,
+        "version": version_num,
+        "snapshot": budget,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user["id"],
+    }
+    await db.budget_versions.insert_one(version_doc)
+    version_doc.pop("_id", None)
+    return version_doc
+
+@api_router.get("/budgets/{budget_id}/versions")
+async def get_budget_versions(budget_id: str, user=Depends(get_current_user)):
+    versions = await db.budget_versions.find({"budget_id": budget_id}, {"_id": 0}).sort("version", -1).to_list(100)
+    return versions
+
+@api_router.get("/budgets/{budget_id}/versions/{version_id}")
+async def get_budget_version(budget_id: str, version_id: str, user=Depends(get_current_user)):
+    version = await db.budget_versions.find_one({"id": version_id, "budget_id": budget_id}, {"_id": 0})
+    if not version:
+        raise HTTPException(status_code=404, detail="Versao nao encontrada")
+    return version
+
+@api_router.post("/budgets/{budget_id}/duplicate")
+async def duplicate_budget(budget_id: str, user=Depends(get_current_user)):
+    budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+
+    new_doc = {**budget}
+    new_doc["id"] = str(uuid.uuid4())
+    new_doc["title"] = f"{budget['title']} (copia)"
+    new_doc["status"] = "rascunho"
+    new_doc["created_at"] = datetime.now(timezone.utc).isoformat()
+    new_doc["created_by"] = user["id"]
+    await db.budgets.insert_one(new_doc)
+    new_doc.pop("_id", None)
+    return new_doc
+
+
+# --- Text Templates ---
+
+class TextTemplateInput(BaseModel):
+    name: str
+    category: str = "geral"
+    content: str = ""
+
+@api_router.get("/text-templates")
+async def get_text_templates(user=Depends(get_current_user)):
+    templates = await db.text_templates.find({}, {"_id": 0}).to_list(200)
+    if not templates:
+        defaults = [
+            {"id": str(uuid.uuid4()), "name": "Objeto da Empreitada", "category": "proposta", "content": "Fornecimento, montagem, instalacao e ensaio de todas as instalacoes eletricas e de telecomunicacoes, conforme mapa de quantidades anexo."},
+            {"id": str(uuid.uuid4()), "name": "Exclusao Fornecimento Dono Obra", "category": "exclusoes", "content": "Exclui-se do presente valor o fornecimento dos materiais/equipamentos a definir pelo Dono de Obra, mantendo-se incluidos, quando aplicavel, os respetivos trabalhos de instalacao, ligacao e ensaio."},
+            {"id": str(uuid.uuid4()), "name": "Exclusao Geral", "category": "exclusoes", "content": "Excluem-se trabalhos de construcao civil, pintura, reposicao de pavimentos e quaisquer outros trabalhos nao mencionados no mapa de quantidades."},
+            {"id": str(uuid.uuid4()), "name": "Prazo Standard", "category": "prazo", "content": "O prazo de execucao estimado e de [X] dias uteis, contados a partir da data de adjudicacao e disponibilizacao dos espacos para intervencao."},
+            {"id": str(uuid.uuid4()), "name": "Garantia Standard", "category": "garantia", "content": "Garantia de [X] anos sobre a mao de obra e de acordo com a garantia do fabricante para os materiais fornecidos."},
+            {"id": str(uuid.uuid4()), "name": "Observacoes Tecnicas", "category": "tecnico", "content": "Todos os trabalhos serao executados por tecnicos certificados, de acordo com as normas RTIEBT e regulamentos em vigor. Sera emitido certificado de conformidade no final da obra."},
+            {"id": str(uuid.uuid4()), "name": "Condicoes ITED", "category": "tecnico", "content": "As instalacoes ITED serao executadas por instaladores certificados ANACOM, com emissao de ficha tecnica e certificacao obrigatoria."},
+            {"id": str(uuid.uuid4()), "name": "Condicoes CCTV", "category": "tecnico", "content": "O sistema de videovigilancia sera instalado em conformidade com a legislacao vigente (Lei 34/2013). A configuracao e registo junto da CNPD e responsabilidade do cliente."},
+        ]
+        for t in defaults:
+            t["created_at"] = datetime.now(timezone.utc).isoformat()
+            await db.text_templates.insert_one(t)
+        return [{k: v for k, v in t.items() if k != "_id"} for t in defaults]
+    return templates
+
+@api_router.post("/text-templates")
+async def create_text_template(input: TextTemplateInput, user=Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), **input.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.text_templates.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/text-templates/{template_id}")
+async def update_text_template(template_id: str, input: TextTemplateInput, user=Depends(get_current_user)):
+    result = await db.text_templates.update_one({"id": template_id}, {"$set": input.model_dump()})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Template nao encontrado")
+    return await db.text_templates.find_one({"id": template_id}, {"_id": 0})
+
+@api_router.delete("/text-templates/{template_id}")
+async def delete_text_template(template_id: str, user=Depends(get_current_user)):
+    r = await db.text_templates.delete_one({"id": template_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Eliminado"}
+
+
+# --- Favorite Items ---
+
+@api_router.get("/favorites")
+async def get_favorites(user=Depends(get_current_user)):
+    favs = await db.favorites.find({"user_id": user["id"]}, {"_id": 0}).to_list(200)
+    return favs
+
+@api_router.post("/favorites")
+async def add_favorite(item: BudgetItemModel, user=Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), "user_id": user["id"], **item.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.favorites.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/favorites/{fav_id}")
+async def remove_favorite(fav_id: str, user=Depends(get_current_user)):
+    r = await db.favorites.delete_one({"id": fav_id, "user_id": user["id"]})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Removido"}
 
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@obelisco.pt")

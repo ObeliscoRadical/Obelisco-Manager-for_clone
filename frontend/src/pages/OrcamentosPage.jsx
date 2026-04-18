@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown, Download, Upload, Copy, History } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -189,6 +189,40 @@ export default function OrcamentosPage() {
     } catch { toast.error('Erro ao eliminar'); }
   };
 
+  const handleExportExcel = (budgetId) => {
+    window.open(`${process.env.REACT_APP_BACKEND_URL}/api/budgets/${budgetId}/export-excel`, '_blank');
+  };
+
+  const handleDuplicate = async (budgetId) => {
+    try {
+      await api.post(`/budgets/${budgetId}/duplicate`);
+      toast.success('Orcamento duplicado');
+      fetchBudgets();
+    } catch { toast.error('Erro ao duplicar'); }
+  };
+
+  const handleSaveVersion = async (budgetId) => {
+    try {
+      const { data } = await api.post(`/budgets/${budgetId}/save-version`);
+      toast.success(`Versao ${data.version} guardada`);
+    } catch { toast.error('Erro ao guardar versao'); }
+  };
+
+  const handleImportExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      await api.post('/budgets/import-excel', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success('Orcamento importado de Excel');
+      fetchBudgets();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao importar');
+    }
+    e.target.value = '';
+  };
+
   return (
     <div data-testid="orcamentos-page" className="space-y-6">
       <div className="flex items-center justify-between">
@@ -196,9 +230,17 @@ export default function OrcamentosPage() {
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Orcamentos</h1>
           <p className="text-zinc-400 mt-1 font-medium">Gere e calcule os seus orcamentos</p>
         </div>
-        <Button data-testid="new-budget-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-          <Plus size={18} className="mr-2" /> Novo Orcamento
-        </Button>
+        <div className="flex gap-2">
+          <label className="cursor-pointer">
+            <input type="file" accept=".xlsx,.xls" onChange={handleImportExcel} className="hidden" />
+            <span className="inline-flex items-center gap-2 px-4 py-2 bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-full font-medium text-sm transition">
+              <Upload size={16} /> Importar Excel
+            </span>
+          </label>
+          <Button data-testid="new-budget-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
+            <Plus size={18} className="mr-2" /> Novo Orcamento
+          </Button>
+        </div>
       </div>
 
       {loading && (
@@ -231,9 +273,12 @@ export default function OrcamentosPage() {
                   <TableCell><Badge className={statusColors[b.status]}>{statusLabels[b.status] || b.status}</Badge></TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      <Button data-testid={`edit-budget-${b.id}`} variant="ghost" size="sm" onClick={() => openEdit(b)} className="text-zinc-400 hover:text-white h-8 w-8 p-0"><Pencil size={15} /></Button>
-                      <Button data-testid={`generate-proposals-${b.id}`} variant="ghost" size="sm" onClick={() => handleGenerateProposals(b.id)} className="text-yellow-400 hover:text-yellow-300 h-8 w-8 p-0"><Calculator size={15} /></Button>
-                      <Button data-testid={`delete-budget-${b.id}`} variant="ghost" size="sm" onClick={() => handleDelete(b.id)} className="text-red-400 hover:text-red-300 h-8 w-8 p-0"><Trash2 size={15} /></Button>
+                      <Button data-testid={`edit-budget-${b.id}`} variant="ghost" size="sm" onClick={() => openEdit(b)} className="text-zinc-400 hover:text-white h-8 w-8 p-0" title="Editar"><Pencil size={15} /></Button>
+                      <Button data-testid={`generate-proposals-${b.id}`} variant="ghost" size="sm" onClick={() => handleGenerateProposals(b.id)} className="text-yellow-400 hover:text-yellow-300 h-8 w-8 p-0" title="Gerar Propostas"><Calculator size={15} /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleExportExcel(b.id)} className="text-green-400 hover:text-green-300 h-8 w-8 p-0" title="Excel"><Download size={15} /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDuplicate(b.id)} className="text-blue-400 hover:text-blue-300 h-8 w-8 p-0" title="Duplicar"><Copy size={15} /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleSaveVersion(b.id)} className="text-purple-400 hover:text-purple-300 h-8 w-8 p-0" title="Guardar Versao"><History size={15} /></Button>
+                      <Button data-testid={`delete-budget-${b.id}`} variant="ghost" size="sm" onClick={() => handleDelete(b.id)} className="text-red-400 hover:text-red-300 h-8 w-8 p-0" title="Eliminar"><Trash2 size={15} /></Button>
                     </div>
                   </TableCell>
                 </TableRow>
