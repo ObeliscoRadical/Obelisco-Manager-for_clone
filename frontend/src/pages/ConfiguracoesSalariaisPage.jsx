@@ -14,7 +14,7 @@ export default function ConfiguracoesSalariaisPage() {
     try {
       const { data } = await api.get('/payroll/settings');
       setS(data);
-    } catch { toast.error('Erro ao carregar configuracoes'); }
+    } catch { toast.error('Erro ao carregar configurações'); }
   }, []);
 
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
@@ -23,7 +23,7 @@ export default function ConfiguracoesSalariaisPage() {
     setSaving(true);
     try {
       await api.put('/payroll/settings', s);
-      toast.success('Configuracoes guardadas');
+      toast.success('Configurações guardadas');
     } catch { toast.error('Erro ao guardar'); }
     finally { setSaving(false); }
   };
@@ -44,7 +44,7 @@ export default function ConfiguracoesSalariaisPage() {
     <div data-testid="config-salariais-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Configuracoes Salariais</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Configurações Salariais</h1>
           <p className="text-zinc-400 mt-1 font-medium">Tabelas legais PT (editaveis). Defaults 2026.</p>
         </div>
         <Button data-testid="save-config-btn" onClick={save} disabled={saving} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">

@@ -13,8 +13,8 @@ import { toast } from 'sonner';
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 
 const statusOptions = [
-  { value: 'orcamento', label: 'Orcamento' },
-  { value: 'em_execucao', label: 'Em Execucao' },
+  { value: 'orçamento', label: 'Orçamento' },
+  { value: 'em_execução', label: 'Em Execução' },
   { value: 'finalizado', label: 'Finalizado' },
 ];
 const statusColors = {
@@ -23,7 +23,7 @@ const statusColors = {
   finalizado: 'bg-green-500/20 text-green-400',
 };
 
-const emptyWork = { title: '', client_name: '', client_phone: '', status: 'orcamento', predicted_cost: 0, real_cost: 0, notes: '', start_date: '', end_date: '' };
+const emptyWork = { title: '', client_name: '', client_phone: '', status: 'orçamento', predicted_cost: 0, real_cost: 0, notes: '', start_date: '', end_date: '' };
 
 export default function ObrasPage() {
   const [works, setWorks] = useState([]);
@@ -179,7 +179,7 @@ export default function ObrasPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-zinc-300 text-sm">Data Inicio</Label>
+                <Label className="text-zinc-300 text-sm">Data Início</Label>
                 <Input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
               </div>
               <div>
@@ -189,7 +189,7 @@ export default function ObrasPage() {
             </div>
             <div>
               <Label className="text-zinc-300 text-sm">Notas</Label>
-              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Observacoes..." />
+              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Observações..." />
             </div>
             <Button data-testid="save-work-btn" onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
               {editingWork ? 'Atualizar Obra' : 'Criar Obra'}

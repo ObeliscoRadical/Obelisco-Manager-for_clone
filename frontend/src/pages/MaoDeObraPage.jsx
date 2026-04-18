@@ -29,7 +29,7 @@ export default function MaoDeObraPage() {
   const openEdit = (l) => { setEditing(l); setForm({ type: l.type, description: l.description, cost_hour: l.cost_hour, sell_hour: l.sell_hour, charges: l.charges || '', notes: l.notes || '' }); setDialogOpen(true); };
 
   const handleSave = async () => {
-    if (!form.type || !form.description) { toast.error('Preencha tipo e descricao'); return; }
+    if (!form.type || !form.description) { toast.error('Preencha tipo e descrição'); return; }
     try {
       if (editing) { await api.put(`/labor/${editing.id}`, form); toast.success('Atualizado'); }
       else { await api.post('/labor', form); toast.success('Criado'); }
@@ -47,7 +47,7 @@ export default function MaoDeObraPage() {
     <div data-testid="mao-de-obra-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Mao de Obra</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Mão de Obra</h1>
           <p className="text-zinc-400 mt-1 font-medium">Tipos de recurso e custos por hora</p>
         </div>
         <Button data-testid="new-labor-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
@@ -58,7 +58,7 @@ export default function MaoDeObraPage() {
       {loading ? (
         <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
       ) : labor.length === 0 ? (
-        <div className="text-center py-16 text-zinc-500"><Users size={48} className="mx-auto mb-4 text-zinc-700" /><p>Sem tipos de mao de obra</p></div>
+        <div className="text-center py-16 text-zinc-500"><Users size={48} className="mx-auto mb-4 text-zinc-700" /><p>Sem tipos de mão de obra</p></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {labor.map(l => {
@@ -95,13 +95,13 @@ export default function MaoDeObraPage() {
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div><Label className="text-zinc-300 text-sm">Tipo</Label><Input value={form.type} onChange={e => setForm({ ...form, type: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: eletricista" /></div>
-            <div><Label className="text-zinc-300 text-sm">Descricao</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Eletricista certificado" /></div>
+            <div><Label className="text-zinc-300 text-sm">Descrição</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Eletricista certificado" /></div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label className="text-zinc-300 text-sm">Custo/hora (EUR)</Label><Input type="number" step="0.5" value={form.cost_hour} onChange={e => setForm({ ...form, cost_hour: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
               <div><Label className="text-zinc-300 text-sm">Venda/hora (EUR)</Label><Input type="number" step="0.5" value={form.sell_hour} onChange={e => setForm({ ...form, sell_hour: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             </div>
             <div><Label className="text-zinc-300 text-sm">Encargos incluidos</Label><Input value={form.charges} onChange={e => setForm({ ...form, charges: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="SS+seguro+..." /></div>
-            <div><Label className="text-zinc-300 text-sm">Observacoes</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
+            <div><Label className="text-zinc-300 text-sm">Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             <Button onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">Guardar</Button>
           </div>
         </DialogContent>

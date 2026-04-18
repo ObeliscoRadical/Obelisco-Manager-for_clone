@@ -28,7 +28,7 @@ export default function DefinicoesPage() {
     try {
       const { data } = await api.put('/system-settings', settings);
       setSettings(data);
-      toast.success('Definicoes guardadas');
+      toast.success('Definições guardadas');
     } catch { toast.error('Erro ao guardar'); }
   };
 
@@ -43,11 +43,11 @@ export default function DefinicoesPage() {
   const totalIndirect = Object.values(indirects).reduce((s, v) => s + v, 0);
 
   return (
-    <div data-testid="definicoes-page" className="space-y-6">
+    <div data-testid="definições-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Definicoes</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Configuracoes do motor de orcamentacao</p>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Definições</h1>
+          <p className="text-zinc-400 mt-1 font-medium">Configurações do motor de orcamentacao</p>
         </div>
         <Button data-testid="save-settings" onClick={save} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
           <Save size={16} className="mr-2" /> Guardar
@@ -112,7 +112,7 @@ export default function DefinicoesPage() {
                 <h3 className="text-lg font-bold text-white">Custos Indiretos</h3>
                 <div className="bg-yellow-400/20 text-yellow-400 rounded-full px-3 py-1 text-sm font-bold">Total: {formatPct(totalIndirect.toFixed(1))}</div>
               </div>
-              <p className="text-zinc-400 text-sm">Percentagem aplicada sobre o custo direto (material + mao de obra)</p>
+              <p className="text-zinc-400 text-sm">Percentagem aplicada sobre o custo direto (material + mão de obra)</p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 {Object.entries(indirects).map(([key, val]) => (
                   <div key={key}>

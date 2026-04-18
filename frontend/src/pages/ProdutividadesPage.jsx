@@ -59,7 +59,7 @@ export default function ProdutividadesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Produtividades</h1>
-          <p className="text-zinc-400 mt-1 font-medium">{items.length} itens com tempo de execucao definido</p>
+          <p className="text-zinc-400 mt-1 font-medium">{items.length} itens com tempo de execução definido</p>
         </div>
         <Button data-testid="new-prod-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
           <Plus size={16} className="mr-2" /> Nova Produtividade
@@ -80,13 +80,13 @@ export default function ProdutividadesPage() {
           <Table>
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
-                <TableHead className="text-zinc-400 text-xs uppercase">Item / Servico</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase">Item / Serviço</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Unid.</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Tempo/Un</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Dificuldade</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Tecnico</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Perda %</TableHead>
-                <TableHead className="text-zinc-400 text-xs uppercase text-right">Acoes</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -113,10 +113,10 @@ export default function ProdutividadesPage() {
         <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">{editing ? 'Editar' : 'Nova'} Produtividade</DialogTitle>
-            <DialogDescription className="text-zinc-500 text-sm">Tempo medio de execucao por unidade</DialogDescription>
+            <DialogDescription className="text-zinc-500 text-sm">Tempo medio de execução por unidade</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <div><Label className="text-zinc-300 text-sm">Item / Tipo de servico *</Label><Input value={form.item} onChange={e => setForm({ ...form, item: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Tomada simples encastrar" /></div>
+            <div><Label className="text-zinc-300 text-sm">Item / Tipo de serviço *</Label><Input value={form.item} onChange={e => setForm({ ...form, item: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Tomada simples encastrar" /></div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label className="text-zinc-300 text-sm">Unidade</Label><Input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="un/m" /></div>
               <div><Label className="text-zinc-300 text-sm">Tempo por unidade (min)</Label><Input type="number" value={form.time_min} onChange={e => setForm({ ...form, time_min: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
@@ -134,7 +134,7 @@ export default function ProdutividadesPage() {
               </div>
             </div>
             <div><Label className="text-zinc-300 text-sm">Perda de produtividade (%)</Label><Input type="number" value={form.loss_pct} onChange={e => setForm({ ...form, loss_pct: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
-            <div><Label className="text-zinc-300 text-sm">Observacoes</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
+            <div><Label className="text-zinc-300 text-sm">Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             <Button onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">Guardar</Button>
           </div>
         </DialogContent>

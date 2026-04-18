@@ -360,7 +360,7 @@ def create_payroll_router(db, get_current_user):
     async def get_employee(emp_id: str, user=Depends(get_current_user)):
         e = await db.employees.find_one({"id": emp_id}, {"_id": 0})
         if not e:
-            raise HTTPException(status_code=404, detail="Funcionario nao encontrado")
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado")
         return e
 
     @payroll_router.put("/employees/{emp_id}")
@@ -370,7 +370,7 @@ def create_payroll_router(db, get_current_user):
             raise HTTPException(status_code=400, detail="Nada para atualizar")
         r = await db.employees.update_one({"id": emp_id}, {"$set": data})
         if r.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Funcionario nao encontrado")
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado")
         e = await db.employees.find_one({"id": emp_id}, {"_id": 0})
         return e
 
@@ -378,7 +378,7 @@ def create_payroll_router(db, get_current_user):
     async def delete_employee(emp_id: str, user=Depends(get_current_user)):
         r = await db.employees.delete_one({"id": emp_id})
         if r.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Funcionario nao encontrado")
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado")
         return {"ok": True}
 
     # ----- Attendance -----
@@ -397,7 +397,7 @@ def create_payroll_router(db, get_current_user):
     async def create_attendance(input: AttendanceCreate, user=Depends(get_current_user)):
         existing = await db.attendance.find_one({"employee_id": input.employee_id, "date": input.date})
         if existing:
-            raise HTTPException(status_code=400, detail="Ja existe registo deste funcionario para esta data")
+            raise HTTPException(status_code=400, detail="Já existe registo deste funcionario para esta data")
         doc = {**input.model_dump(), "id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat()}
         await db.attendance.insert_one(doc)
         doc.pop("_id", None)
@@ -410,7 +410,7 @@ def create_payroll_router(db, get_current_user):
             raise HTTPException(status_code=400, detail="Nada para atualizar")
         r = await db.attendance.update_one({"id": att_id}, {"$set": data})
         if r.matched_count == 0:
-            raise HTTPException(status_code=404, detail="Registo nao encontrado")
+            raise HTTPException(status_code=404, detail="Registo não encontrado")
         rec = await db.attendance.find_one({"id": att_id}, {"_id": 0})
         return rec
 
@@ -418,7 +418,7 @@ def create_payroll_router(db, get_current_user):
     async def delete_attendance(att_id: str, user=Depends(get_current_user)):
         r = await db.attendance.delete_one({"id": att_id})
         if r.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Registo nao encontrado")
+            raise HTTPException(status_code=404, detail="Registo não encontrado")
         return {"ok": True}
 
     # ----- Payroll Run -----
@@ -431,7 +431,7 @@ def create_payroll_router(db, get_current_user):
     async def create_run(input: PayrollRunCreate, user=Depends(get_current_user)):
         existing = await db.payroll_runs.find_one({"month": input.month, "year": input.year})
         if existing:
-            raise HTTPException(status_code=400, detail=f"Processamento de {input.month}/{input.year} ja existe")
+            raise HTTPException(status_code=400, detail=f"Processamento de {input.month}/{input.year} já existe")
 
         settings = await db.payroll_settings.find_one({}, {"_id": 0}) or {}
         settings = {**DEFAULT_PAYROLL_SETTINGS, **settings}
@@ -492,7 +492,7 @@ def create_payroll_router(db, get_current_user):
     async def get_run(run_id: str, user=Depends(get_current_user)):
         run = await db.payroll_runs.find_one({"id": run_id}, {"_id": 0})
         if not run:
-            raise HTTPException(status_code=404, detail="Processamento nao encontrado")
+            raise HTTPException(status_code=404, detail="Processamento não encontrado")
         items = await db.payroll_items.find({"payroll_run_id": run_id}, {"_id": 0}).sort("employee_name", 1).to_list(500)
         return {"run": run, "items": items}
 
@@ -500,13 +500,13 @@ def create_payroll_router(db, get_current_user):
     async def update_payroll_item(run_id: str, item_id: str, input: PayrollItemUpdate, user=Depends(get_current_user)):
         run = await db.payroll_runs.find_one({"id": run_id}, {"_id": 0})
         if not run:
-            raise HTTPException(status_code=404, detail="Processamento nao encontrado")
+            raise HTTPException(status_code=404, detail="Processamento não encontrado")
         if run.get("status") == "fechado":
-            raise HTTPException(status_code=400, detail="Processamento fechado - nao pode editar")
+            raise HTTPException(status_code=400, detail="Processamento fechado - não pode editar")
 
         item = await db.payroll_items.find_one({"id": item_id, "payroll_run_id": run_id}, {"_id": 0})
         if not item:
-            raise HTTPException(status_code=404, detail="Item nao encontrado")
+            raise HTTPException(status_code=404, detail="Item não encontrado")
 
         emp = await db.employees.find_one({"id": item["employee_id"]}, {"_id": 0})
         settings = await db.payroll_settings.find_one({}, {"_id": 0}) or {}
@@ -577,9 +577,9 @@ def create_payroll_router(db, get_current_user):
     async def close_run(run_id: str, user=Depends(get_current_user)):
         run = await db.payroll_runs.find_one({"id": run_id}, {"_id": 0})
         if not run:
-            raise HTTPException(status_code=404, detail="Processamento nao encontrado")
+            raise HTTPException(status_code=404, detail="Processamento não encontrado")
         if run.get("status") == "fechado":
-            raise HTTPException(status_code=400, detail="Ja esta fechado")
+            raise HTTPException(status_code=400, detail="Já está fechado")
         now_iso = datetime.now(timezone.utc).isoformat()
         await db.payroll_runs.update_one({"id": run_id}, {"$set": {"status": "fechado", "closed_at": now_iso}})
         await db.payroll_items.update_many({"payroll_run_id": run_id}, {"$set": {"status": "fechado"}})
@@ -589,7 +589,7 @@ def create_payroll_router(db, get_current_user):
     async def reopen_run(run_id: str, user=Depends(get_current_user)):
         run = await db.payroll_runs.find_one({"id": run_id}, {"_id": 0})
         if not run:
-            raise HTTPException(status_code=404, detail="Processamento nao encontrado")
+            raise HTTPException(status_code=404, detail="Processamento não encontrado")
         await db.payroll_runs.update_one({"id": run_id}, {"$set": {"status": "rascunho", "closed_at": None}})
         await db.payroll_items.update_many({"payroll_run_id": run_id}, {"$set": {"status": "rascunho"}})
         return {"ok": True}
@@ -598,9 +598,9 @@ def create_payroll_router(db, get_current_user):
     async def delete_run(run_id: str, user=Depends(get_current_user)):
         run = await db.payroll_runs.find_one({"id": run_id}, {"_id": 0})
         if not run:
-            raise HTTPException(status_code=404, detail="Processamento nao encontrado")
+            raise HTTPException(status_code=404, detail="Processamento não encontrado")
         if run.get("status") == "fechado":
-            raise HTTPException(status_code=400, detail="Nao pode eliminar processamento fechado. Reabra primeiro.")
+            raise HTTPException(status_code=400, detail="Não pode eliminar processamento fechado. Reabra primeiro.")
         await db.payroll_items.delete_many({"payroll_run_id": run_id})
         await db.payroll_runs.delete_one({"id": run_id})
         return {"ok": True}

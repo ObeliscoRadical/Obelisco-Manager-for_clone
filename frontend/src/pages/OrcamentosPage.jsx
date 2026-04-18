@@ -15,13 +15,13 @@ const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', cu
 let itemIdCounter = 0;
 const createItem = () => ({ _key: `item-${++itemIdCounter}`, category: '', name: '', quantity: 1, unit_cost: 0, margin: 0.6, discount_type: 'percentage', discount_value: 0 });
 
-const PAYMENT_METHODS_OPTIONS = ['Transferencia Bancaria', 'MB Way', 'Multibanco', 'Cartao de Credito/Debito', 'Numerario', 'Cheque'];
+const PAYMENT_METHODS_OPTIONS = ['Transferência Bancaria', 'MB Way', 'Multibanco', 'Cartão de Crédito/Débito', 'Numerario', 'Cheque'];
 const PAYMENT_SPLIT_OPTIONS = [
-  '50% no inicio dos trabalhos, 50% na conclusao',
-  '30% no inicio, 40% a meio, 30% na conclusao',
+  '50% no início dos trabalhos, 50% na conclusao',
+  '30% no início, 40% a meio, 30% na conclusao',
   '100% adiantado',
   '100% na conclusao',
-  '40% no inicio, 60% na entrega',
+  '40% no início, 60% na entrega',
 ];
 
 const statusColors = {
@@ -62,7 +62,7 @@ export default function OrcamentosPage() {
       setBudgets(data);
     } catch (err) {
       console.error('Budgets fetch error:', err.message);
-      toast.error('Erro ao carregar orcamentos');
+      toast.error('Erro ao carregar orçamentos');
     }
     finally { setLoading(false); }
   }, []);
@@ -243,7 +243,7 @@ export default function OrcamentosPage() {
   const handleSave = async () => {
     if (!title || !clientName) { toast.error('Preencha o titulo e nome do cliente'); return; }
     if (!paymentMethods.length) { toast.error('Selecione pelo menos uma forma de pagamento'); return; }
-    if (!paymentSplit) { toast.error('Selecione as condicoes de pagamento'); return; }
+    if (!paymentSplit) { toast.error('Selecione as condições de pagamento'); return; }
     try {
       const payload = {
         title,
@@ -258,10 +258,10 @@ export default function OrcamentosPage() {
       };
       if (editingBudget) {
         await api.put(`/budgets/${editingBudget.id}`, payload);
-        toast.success('Orcamento atualizado');
+        toast.success('Orçamento atualizado');
       } else {
         await api.post('/budgets', payload);
-        toast.success('Orcamento criado');
+        toast.success('Orçamento criado');
       }
 
       // Auto-save custom items to categories for future use
@@ -282,7 +282,7 @@ export default function OrcamentosPage() {
       fetchCategories(); // Refresh categories to include new items
     } catch (err) {
       console.error('Save budget error:', err.message);
-      toast.error('Erro ao guardar orcamento');
+      toast.error('Erro ao guardar orçamento');
     }
   };
 
@@ -295,10 +295,10 @@ export default function OrcamentosPage() {
   };
 
   const handleDelete = async (budgetId) => {
-    if (!window.confirm('Eliminar este orcamento?')) return;
+    if (!window.confirm('Eliminar este orçamento?')) return;
     try {
       await api.delete(`/budgets/${budgetId}`);
-      toast.success('Orcamento eliminado');
+      toast.success('Orçamento eliminado');
       fetchBudgets();
     } catch { toast.error('Erro ao eliminar'); }
   };
@@ -310,7 +310,7 @@ export default function OrcamentosPage() {
   const handleDuplicate = async (budgetId) => {
     try {
       await api.post(`/budgets/${budgetId}/duplicate`);
-      toast.success('Orcamento duplicado');
+      toast.success('Orçamento duplicado');
       fetchBudgets();
     } catch { toast.error('Erro ao duplicar'); }
   };
@@ -329,7 +329,7 @@ export default function OrcamentosPage() {
     formData.append('file', file);
     try {
       await api.post('/budgets/import-excel', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success('Orcamento importado de Excel');
+      toast.success('Orçamento importado de Excel');
       fetchBudgets();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao importar');
@@ -338,11 +338,11 @@ export default function OrcamentosPage() {
   };
 
   return (
-    <div data-testid="orcamentos-page" className="space-y-6">
+    <div data-testid="orçamentos-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Orcamentos</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Gere e calcule os seus orcamentos</p>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Orçamentos</h1>
+          <p className="text-zinc-400 mt-1 font-medium">Gere e calcule os seus orçamentos</p>
         </div>
         <div className="flex gap-2">
           <label className="cursor-pointer">
@@ -352,7 +352,7 @@ export default function OrcamentosPage() {
             </span>
           </label>
           <Button data-testid="new-budget-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-            <Plus size={18} className="mr-2" /> Novo Orcamento
+            <Plus size={18} className="mr-2" /> Novo Orçamento
           </Button>
         </div>
       </div>
@@ -363,7 +363,7 @@ export default function OrcamentosPage() {
       {!loading && budgets.length === 0 && (
         <div className="text-center py-16 text-zinc-500">
           <FileText size={48} className="mx-auto mb-4 text-zinc-700" />
-          <p>Nenhum orcamento criado</p>
+          <p>Nenhum orçamento criado</p>
         </div>
       )}
       {!loading && budgets.length > 0 && (
@@ -375,7 +375,7 @@ export default function OrcamentosPage() {
                 <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Cliente</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Total</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Estado</TableHead>
-                <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Acoes</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -406,10 +406,10 @@ export default function OrcamentosPage() {
         <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-6xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
-              {editingBudget ? 'Editar Orcamento' : 'Novo Orcamento'}
+              {editingBudget ? 'Editar Orçamento' : 'Novo Orçamento'}
             </DialogTitle>
             <DialogDescription className="text-zinc-500 text-sm">
-              {editingBudget ? 'Atualize os detalhes do orcamento' : 'Preencha os detalhes do novo orcamento. Use as categorias pre-definidas e pesquise precos atualizados.'}
+              {editingBudget ? 'Atualize os detalhes do orçamento' : 'Preencha os detalhes do novo orçamento. Use as categorias pre-definidas e pesquise precos atualizados.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -417,7 +417,7 @@ export default function OrcamentosPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <Label className="text-zinc-300 text-sm">Titulo</Label>
-                <Input data-testid="budget-title-input" value={title} onChange={e => setTitle(e.target.value)} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Instalacao eletrica" />
+                <Input data-testid="budget-title-input" value={title} onChange={e => setTitle(e.target.value)} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Instalação eletrica" />
               </div>
               <div>
                 <Label className="text-zinc-300 text-sm">Nome do Cliente</Label>
@@ -432,7 +432,7 @@ export default function OrcamentosPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <Label className="text-zinc-300 text-base font-semibold">Itens do Orcamento</Label>
+                  <Label className="text-zinc-300 text-base font-semibold">Itens do Orçamento</Label>
                   <p className="text-xs text-zinc-500 mt-0.5">Selecione categoria e item, ou escreva livremente. Clique na lupa para pesquisar precos.</p>
                 </div>
                 <div className="flex gap-2">
@@ -621,13 +621,13 @@ export default function OrcamentosPage() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-zinc-300 text-sm font-semibold">Observacoes sobre Pagamento <span className="text-zinc-500 font-normal">(opcional)</span></Label>
+                  <Label className="text-zinc-300 text-sm font-semibold">Observações sobre Pagamento <span className="text-zinc-500 font-normal">(opcional)</span></Label>
                   <textarea
                     data-testid="payment-notes"
                     value={paymentNotes}
                     onChange={e => setPaymentNotes(e.target.value)}
                     rows={3}
-                    placeholder="Ex: Prazo de pagamento a 30 dias apos fatura; IVA nao incluido..."
+                    placeholder="Ex: Prazo de pagamento a 30 dias apos fatura; IVA não incluído..."
                     className="w-full mt-2 bg-zinc-900 border border-zinc-700 text-white rounded-lg p-3 text-sm resize-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 outline-none"
                   />
                 </div>
@@ -656,7 +656,7 @@ export default function OrcamentosPage() {
                   </div>
                 </div>
                 <div>
-                  <Label className="text-zinc-300 text-sm font-semibold">Condicoes de Pagamento <span className="text-red-400">*</span></Label>
+                  <Label className="text-zinc-300 text-sm font-semibold">Condições de Pagamento <span className="text-red-400">*</span></Label>
                   <div className="space-y-1.5 mt-2">
                     {PAYMENT_SPLIT_OPTIONS.map(opt => (
                       <button
@@ -672,7 +672,7 @@ export default function OrcamentosPage() {
                     <Input
                       value={PAYMENT_SPLIT_OPTIONS.includes(paymentSplit) ? '' : paymentSplit}
                       onChange={e => setPaymentSplit(e.target.value)}
-                      placeholder="Ou escreva condicoes personalizadas..."
+                      placeholder="Ou escreva condições personalizadas..."
                       className="bg-zinc-900 border-zinc-700 text-white rounded-lg h-9 text-xs"
                     />
                   </div>
@@ -704,7 +704,7 @@ export default function OrcamentosPage() {
                 </div>
               </div>
               <Button data-testid="save-budget-btn" onClick={handleSave} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-                Guardar Orcamento
+                Guardar Orçamento
               </Button>
             </div>
           </div>

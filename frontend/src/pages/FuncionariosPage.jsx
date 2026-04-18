@@ -31,7 +31,7 @@ export default function FuncionariosPage() {
     try {
       const { data } = await api.get('/payroll/employees');
       setList(data);
-    } catch { toast.error('Erro ao carregar funcionarios'); }
+    } catch { toast.error('Erro ao carregar funcionários'); }
     finally { setLoading(false); }
   }, []);
 
@@ -47,10 +47,10 @@ export default function FuncionariosPage() {
     try {
       if (editing) {
         await api.put(`/payroll/employees/${editing.id}`, form);
-        toast.success('Funcionario atualizado');
+        toast.success('Funcionário atualizado');
       } else {
         await api.post('/payroll/employees', form);
-        toast.success('Funcionario criado');
+        toast.success('Funcionário criado');
       }
       setDialogOpen(false);
       fetchList();
@@ -60,10 +60,10 @@ export default function FuncionariosPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Eliminar este funcionario?')) return;
+    if (!window.confirm('Eliminar este funcionário?')) return;
     try {
       await api.delete(`/payroll/employees/${id}`);
-      toast.success('Funcionario eliminado');
+      toast.success('Funcionário eliminado');
       fetchList();
     } catch { toast.error('Erro ao eliminar'); }
   };
@@ -71,14 +71,14 @@ export default function FuncionariosPage() {
   if (loading) return <div className="text-zinc-400 text-sm">A carregar...</div>;
 
   return (
-    <div data-testid="funcionarios-page" className="space-y-6">
+    <div data-testid="funcionários-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Funcionarios</h1>
+          <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Funcionários</h1>
           <p className="text-zinc-400 mt-1 font-medium">Ficha individual, contratos e dados salariais</p>
         </div>
         <Button data-testid="new-employee-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-          <Plus size={18} className="mr-2" /> Novo Funcionario
+          <Plus size={18} className="mr-2" /> Novo Funcionário
         </Button>
       </div>
 
@@ -90,15 +90,15 @@ export default function FuncionariosPage() {
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">NIF</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Cargo</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Contrato</TableHead>
-              <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Salario Base</TableHead>
+              <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Salário Base</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">S. Alimentacao</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Estado</TableHead>
-              <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Acoes</TableHead>
+              <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {list.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-zinc-500 py-8">Sem funcionarios. Clique em "Novo Funcionario".</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-zinc-500 py-8">Sem funcionários. Clique em "Novo Funcionário".</TableCell></TableRow>
             ) : list.map(e => (
               <TableRow key={e.id} className="border-zinc-800/50 hover:bg-zinc-800/30">
                 <TableCell className="text-white font-medium">{e.name}</TableCell>
@@ -125,7 +125,7 @@ export default function FuncionariosPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase text-white">{editing ? 'Editar' : 'Novo'} Funcionario</DialogTitle>
+            <DialogTitle className="text-2xl font-black uppercase text-white">{editing ? 'Editar' : 'Novo'} Funcionário</DialogTitle>
             <DialogDescription className="text-zinc-500">Ficha completa do trabalhador para processamento salarial</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
@@ -144,12 +144,12 @@ export default function FuncionariosPage() {
                 <option value="efetivo">Efetivo (sem termo)</option>
                 <option value="termo_certo">Termo certo</option>
                 <option value="termo_incerto">Termo incerto</option>
-                <option value="prestacao_servicos">Prestacao de servicos</option>
+                <option value="prestacao_serviços">Prestacao de serviços</option>
                 <option value="estagio">Estagio</option>
               </select>
             </div>
             <div><Label className="text-zinc-400 text-xs">Data admissao</Label><Input type="date" value={form.admission_date} onChange={e => updateField('admission_date', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
-            <div><Label className="text-zinc-400 text-xs">Salario base mensal (EUR) *</Label><Input data-testid="emp-salary" type="number" min="0" step="0.01" value={form.base_salary} onChange={e => updateField('base_salary', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+            <div><Label className="text-zinc-400 text-xs">Salário base mensal (EUR) *</Label><Input data-testid="emp-salary" type="number" min="0" step="0.01" value={form.base_salary} onChange={e => updateField('base_salary', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Valor/hora (opcional, calculado se 0)</Label><Input type="number" min="0" step="0.01" value={form.hourly_rate} onChange={e => updateField('hourly_rate', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Subsidio alimentacao/dia (EUR)</Label><Input type="number" min="0" step="0.01" value={form.meal_allowance} onChange={e => updateField('meal_allowance', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Horas semanais</Label><Input type="number" min="0" step="0.5" value={form.weekly_hours} onChange={e => updateField('weekly_hours', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
@@ -176,7 +176,7 @@ export default function FuncionariosPage() {
               </div>
             </div>
 
-            <div className="md:col-span-2"><Label className="text-zinc-400 text-xs">Observacoes</Label><textarea value={form.notes} onChange={e => updateField('notes', e.target.value)} rows={2} className="w-full mt-1 bg-zinc-900 border border-zinc-700 text-white rounded-md p-2 text-sm" /></div>
+            <div className="md:col-span-2"><Label className="text-zinc-400 text-xs">Observações</Label><textarea value={form.notes} onChange={e => updateField('notes', e.target.value)} rows={2} className="w-full mt-1 bg-zinc-900 border border-zinc-700 text-white rounded-md p-2 text-sm" /></div>
           </div>
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-zinc-700 text-zinc-300">Cancelar</Button>

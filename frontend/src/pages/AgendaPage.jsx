@@ -161,7 +161,7 @@ export default function AgendaPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="text-zinc-300 text-sm">Hora Inicio *</Label>
+                <Label className="text-zinc-300 text-sm">Hora Início *</Label>
                 <Input data-testid="appointment-start-time" type="time" value={form.time_start} onChange={e => setForm({ ...form, time_start: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
               </div>
               <div>
@@ -171,7 +171,7 @@ export default function AgendaPage() {
             </div>
             <div>
               <Label className="text-zinc-300 text-sm">Notas</Label>
-              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Observacoes..." />
+              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Observações..." />
             </div>
             <Button data-testid="save-appointment-btn" onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
               Criar Agendamento

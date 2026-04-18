@@ -43,7 +43,7 @@ export default function MateriaisPage() {
   const openEdit = (m) => { setEditing(m); setForm({ code: m.code || '', description: m.description, category: m.category || '', subcategory: m.subcategory || '', brand: m.brand || '', supplier: m.supplier || '', unit: m.unit || 'unidade', purchase_price: m.purchase_price || 0, market_price: m.market_price || 0, waste_pct: m.waste_pct || 5, notes: m.notes || '', active: m.active !== false }); setDialogOpen(true); };
 
   const handleSave = async () => {
-    if (!form.description) { toast.error('Preencha a descricao'); return; }
+    if (!form.description) { toast.error('Preencha a descrição'); return; }
     try {
       if (editing) { await api.put(`/materials/${editing.id}`, form); toast.success('Material atualizado'); }
       else { await api.post('/materials', form); toast.success('Material criado'); }
@@ -88,12 +88,12 @@ export default function MateriaisPage() {
             <TableHeader>
               <TableRow className="border-zinc-800 hover:bg-transparent">
                 <TableHead className="text-zinc-400 text-xs uppercase">Codigo</TableHead>
-                <TableHead className="text-zinc-400 text-xs uppercase">Descricao</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase">Descrição</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Categoria</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Unid.</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Preco Compra</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Desp. %</TableHead>
-                <TableHead className="text-zinc-400 text-xs uppercase text-right">Acoes</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -129,7 +129,7 @@ export default function MateriaisPage() {
               <div><Label className="text-zinc-300 text-sm">Codigo interno</Label><Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
               <div><Label className="text-zinc-300 text-sm">Unidade</Label><Input value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="un/m/pack" /></div>
             </div>
-            <div><Label className="text-zinc-300 text-sm">Descricao *</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
+            <div><Label className="text-zinc-300 text-sm">Descrição *</Label><Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label className="text-zinc-300 text-sm">Categoria</Label><Input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
               <div><Label className="text-zinc-300 text-sm">Subcategoria</Label><Input value={form.subcategory} onChange={e => setForm({ ...form, subcategory: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
@@ -143,7 +143,7 @@ export default function MateriaisPage() {
               <div><Label className="text-zinc-300 text-sm">Preco Mercado (EUR)</Label><Input type="number" step="0.01" value={form.market_price} onChange={e => setForm({ ...form, market_price: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
               <div><Label className="text-zinc-300 text-sm">Desperdicio (%)</Label><Input type="number" step="0.5" value={form.waste_pct} onChange={e => setForm({ ...form, waste_pct: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             </div>
-            <div><Label className="text-zinc-300 text-sm">Observacoes</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
+            <div><Label className="text-zinc-300 text-sm">Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             <Button onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">Guardar</Button>
           </div>
         </DialogContent>

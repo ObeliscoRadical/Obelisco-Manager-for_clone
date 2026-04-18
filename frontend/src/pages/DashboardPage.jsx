@@ -42,7 +42,7 @@ export default function DashboardPage() {
     { label: 'Total Obras', value: totals.obras || 0, icon: HardHat, color: 'text-yellow-400' },
     { label: 'Lucro Estimado', value: formatEuro(totals.estimated_profit), icon: TrendingUp, color: 'text-green-400' },
     { label: 'Em Andamento', value: stats?.obras_em_andamento || 0, icon: Clock, color: 'text-blue-400' },
-    { label: 'Orcamentos', value: totals.orcamentos || 0, icon: FileText, color: 'text-orange-400' },
+    { label: 'Orçamentos', value: totals.orçamentos || 0, icon: FileText, color: 'text-orange-400' },
     { label: 'Propostas', value: totals.propostas || 0, icon: ClipboardList, color: 'text-purple-400' },
     { label: 'Agenda Hoje', value: stats?.appointments_today || 0, icon: CalendarDays, color: 'text-cyan-400' },
   ];
@@ -111,7 +111,7 @@ export default function DashboardPage() {
             </div>
             <div className="grid grid-cols-2 gap-4 mt-4">
               <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
-                <p className="text-xs text-zinc-500 uppercase mb-1">Valor em Orcamentos</p>
+                <p className="text-xs text-zinc-500 uppercase mb-1">Valor em Orçamentos</p>
                 <p className="text-lg font-bold text-yellow-400">{formatEuro(totals.total_budget_value)}</p>
               </div>
               <div className="p-4 rounded-xl bg-zinc-800/50 border border-zinc-700">
@@ -126,7 +126,7 @@ export default function DashboardPage() {
         <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
           <CardContent className="p-6">
             <h3 className="text-xl font-black uppercase tracking-tight text-white mb-4 flex items-center gap-2">
-              <Shield size={20} className="text-yellow-400" /> Configuracao
+              <Shield size={20} className="text-yellow-400" /> Configuração
             </h3>
             <div className="space-y-3">
               <div className="flex justify-between p-3 rounded-xl bg-zinc-800/50">
@@ -147,7 +147,7 @@ export default function DashboardPage() {
               </div>
               <div className="pt-3 mt-3 border-t border-zinc-800 space-y-2">
                 <div className="flex items-center gap-2 text-sm text-zinc-400"><Package size={14} /><span>{db.materials || 0} materiais</span></div>
-                <div className="flex items-center gap-2 text-sm text-zinc-400"><Users size={14} /><span>{db.labor_types || 0} tipos mao de obra</span></div>
+                <div className="flex items-center gap-2 text-sm text-zinc-400"><Users size={14} /><span>{db.labor_types || 0} tipos mão de obra</span></div>
                 <div className="flex items-center gap-2 text-sm text-zinc-400"><Timer size={14} /><span>{db.productivities || 0} produtividades</span></div>
               </div>
             </div>
@@ -168,8 +168,8 @@ export default function DashboardPage() {
                       <p className="text-sm font-medium text-white">{w.title}</p>
                       <p className="text-xs text-zinc-500">{w.client_name}</p>
                     </div>
-                    <Badge className={w.status === 'finalizado' ? 'bg-green-500/20 text-green-400' : w.status === 'em_execucao' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-zinc-700 text-zinc-300'}>
-                      {w.status === 'em_execucao' ? 'Em Execucao' : w.status === 'finalizado' ? 'Finalizado' : 'Orcamento'}
+                    <Badge className={w.status === 'finalizado' ? 'bg-green-500/20 text-green-400' : w.status === 'em_execução' ? 'bg-yellow-400/20 text-yellow-400' : 'bg-zinc-700 text-zinc-300'}>
+                      {w.status === 'em_execução' ? 'Em Execução' : w.status === 'finalizado' ? 'Finalizado' : 'Orçamento'}
                     </Badge>
                   </div>
                 ))}
@@ -180,7 +180,7 @@ export default function DashboardPage() {
 
         <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
           <CardContent className="p-6">
-            <h3 className="text-xl font-black uppercase tracking-tight text-white mb-4">Orcamentos Recentes</h3>
+            <h3 className="text-xl font-black uppercase tracking-tight text-white mb-4">Orçamentos Recentes</h3>
             {stats?.recent_budgets?.length > 0 ? (
               <div className="space-y-3">
                 {stats.recent_budgets.map((b) => (
@@ -193,7 +193,7 @@ export default function DashboardPage() {
                   </div>
                 ))}
               </div>
-            ) : <p className="text-zinc-500 text-sm">Nenhum orcamento criado</p>}
+            ) : <p className="text-zinc-500 text-sm">Nenhum orçamento criado</p>}
           </CardContent>
         </Card>
       </div>

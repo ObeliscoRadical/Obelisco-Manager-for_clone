@@ -22,18 +22,18 @@ const tierColors = {
 };
 
 const PAYMENT_OPTIONS = [
-  'Transferencia Bancaria',
+  'Transferência Bancaria',
   'MB Way',
   'Multibanco',
-  'Cartao de Credito/Debito',
+  'Cartão de Crédito/Débito',
   'Numerario',
   'Cheque',
 ];
 
 const SPLIT_OPTIONS = [
-  '50% no inicio dos trabalhos, 50% na conclusao',
-  '30% no inicio, 40% a meio, 30% na conclusao',
-  '100% no inicio dos trabalhos',
+  '50% no início dos trabalhos, 50% na conclusao',
+  '30% no início, 40% a meio, 30% na conclusao',
+  '100% no início dos trabalhos',
   '100% na conclusao dos trabalhos',
   'Pagamento a 30 dias apos conclusao',
 ];
@@ -49,9 +49,23 @@ async function generatePDF(proposal, settings, logoBase64) {
   doc.setFillColor(250, 204, 21);
   doc.rect(0, 52, pageW, 2, 'F');
 
-  // Logo
+  // Logo with soft dark halo to disguise any edge between logo and dark background
   if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 15, 6, 50, 28); } catch (e) {
+    try {
+      // Soft dark vignette around the logo (fades from #09090B to slightly darker)
+      // Draw concentric rounded rectangles with decreasing opacity to blur the edge
+      const logoX = 15, logoY = 6, logoW = 50, logoH = 28;
+      const layers = 6;
+      for (let i = layers; i >= 1; i--) {
+        const pad = i * 1.2;
+        const alpha = 0.08 * i;
+        doc.setGState(new doc.GState({ opacity: alpha }));
+        doc.setFillColor(9, 9, 11);
+        doc.roundedRect(logoX - pad, logoY - pad, logoW + pad * 2, logoH + pad * 2, 4 + pad, 4 + pad, 'F');
+      }
+      doc.setGState(new doc.GState({ opacity: 1 }));
+      doc.addImage(logoBase64, 'PNG', logoX, logoY, logoW, logoH);
+    } catch (e) {
       console.error('Logo error:', e.message);
     }
   }
@@ -64,19 +78,16 @@ async function generatePDF(proposal, settings, logoBase64) {
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(161, 161, 170);
-  doc.text('ELETRICIDADE & TELECOMUNICACOES', 70, 24);
+  doc.text('ELETRICIDADE & TELECOMUNICAÇÕES', 70, 24);
   doc.setFontSize(6);
   doc.text('Tel: +351 911 132 401 | obeliscoradical@gmail.com', 70, 30);
   doc.text('Grande Lisboa | www.obeliscoradical.pt', 70, 35);
 
-  // PROPOSTA right
+  // PROPOSTA right (tier label removed from PDF - client does not see Básico/Profissional/Premium)
   doc.setTextColor(250, 204, 21);
-  doc.setFontSize(22);
+  doc.setFontSize(26);
   doc.setFont('helvetica', 'bold');
-  doc.text('PROPOSTA', pageW - 15, 22, { align: 'right' });
-  doc.setFontSize(11);
-  doc.setTextColor(255, 255, 255);
-  doc.text(proposal.label.toUpperCase(), pageW - 15, 30, { align: 'right' });
+  doc.text('PROPOSTA', pageW - 15, 30, { align: 'right' });
 
   // Date
   doc.setFillColor(39, 39, 42);
@@ -143,7 +154,7 @@ async function generatePDF(proposal, settings, logoBase64) {
 
   autoTable(doc, {
     startY: y,
-    head: [['Descricao do Servico', 'Qtd', 'Preco Unit.', 'Total']],
+    head: [['Descrição do Serviço', 'Qtd', 'Preço Unit.', 'Total']],
     body: tableData,
     theme: 'plain',
     headStyles: { fillColor: [250, 204, 21], textColor: [9, 9, 11], fontStyle: 'bold', fontSize: 8, cellPadding: 4 },
@@ -183,9 +194,9 @@ async function generatePDF(proposal, settings, logoBase64) {
   // ===== PAYMENT & CONDITIONS (prefer proposal-specific, fallback to global settings) =====
   const payMethodsArr = (proposal.payment_methods && proposal.payment_methods.length > 0)
     ? proposal.payment_methods
-    : (settings?.payment_methods || ['Transferencia Bancaria', 'MB Way']);
+    : (settings?.payment_methods || ['Transferência Bancária', 'MB Way']);
   const payMethods = payMethodsArr.join(', ');
-  const paySplit = proposal.payment_split || settings?.payment_split || '50% no inicio, 50% na conclusao';
+  const paySplit = proposal.payment_split || settings?.payment_split || '50% no início, 50% na conclusão';
   const payNotes = proposal.payment_notes || '';
   const validDays = settings?.validity_days || 30;
   const conditions = settings?.conditions || [];
@@ -203,8 +214,8 @@ async function generatePDF(proposal, settings, logoBase64) {
     doc.setTextColor(220, 220, 220);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Metodos aceites: ${payMethods}`, 22, finalY + 11);
-    doc.text(`Condicoes: ${paySplit}`, 22, finalY + 15);
+    doc.text(`Métodos aceites: ${payMethods}`, 22, finalY + 11);
+    doc.text(`Condições: ${paySplit}`, 22, finalY + 15);
     if (payNotes) {
       const nLines = doc.splitTextToSize(`Obs: ${payNotes}`, pageW - 44);
       doc.text(nLines.slice(0, 2), 22, finalY + 20);
@@ -214,10 +225,10 @@ async function generatePDF(proposal, settings, logoBase64) {
 
     // Conditions box - always enforce 2yr warranty & IVA not included
     doc.setFillColor(24, 24, 27);
-    const WARRANTY_LINE = 'Garantia de 2 anos sobre mao de obra e materiais fornecidos';
-    const IVA_LINE = 'Valores em EUR, IVA NAO incluido (a acrescer a taxa legal em vigor)';
+    const WARRANTY_LINE = 'Garantia de 2 anos sobre mão de obra e materiais fornecidos';
+    const IVA_LINE = 'Valores em EUR, IVA NÃO incluído (a acrescer à taxa legal em vigor)';
     const condLines = [
-      `Proposta valida por ${validDays} dias`,
+      `Proposta válida por ${validDays} dias`,
       WARRANTY_LINE,
       IVA_LINE,
       // Keep other user-configured conditions but exclude any IVA/warranty duplicates
@@ -232,12 +243,12 @@ async function generatePDF(proposal, settings, logoBase64) {
     doc.setTextColor(250, 204, 21);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'bold');
-    doc.text('CONDICOES GERAIS', 22, finalY + 6);
+    doc.text('CONDIÇÕES GERAIS', 22, finalY + 6);
     doc.setTextColor(180, 180, 180);
     doc.setFontSize(6.5);
     doc.setFont('helvetica', 'normal');
     condLines.forEach((line, i) => {
-      doc.text(`- ${line}`, 22, finalY + 10 + i * 4);
+      doc.text(`• ${line}`, 22, finalY + 10 + i * 4);
     });
   }
 
@@ -327,11 +338,11 @@ export default function PropostasPage() {
 
   const openSettings = () => {
     setEditSettings(settings ? { ...settings } : {
-      payment_methods: ['Transferencia Bancaria', 'MB Way', 'Multibanco'],
-      payment_split: '50% no inicio dos trabalhos, 50% na conclusao',
+      payment_methods: ['Transferência Bancaria', 'MB Way', 'Multibanco'],
+      payment_split: '50% no início dos trabalhos, 50% na conclusao',
       validity_days: 30,
-      warranty_text: 'Garantia de 2 anos sobre mao de obra e materiais fornecidos',
-      conditions: ['Valores em EUR, IVA NAO incluido (a acrescer a taxa legal em vigor)', 'Deslocacao incluida na zona da Grande Lisboa', 'Material e mao de obra incluidos'],
+      warranty_text: 'Garantia de 2 anos sobre mão de obra e materiais fornecidos',
+      conditions: ['Valores em EUR, IVA NAO incluído (a acrescer a taxa legal em vigor)', 'Deslocacao incluida na zona da Grande Lisboa', 'Material e mão de obra incluidos'],
       notes: '',
     });
     setSettingsOpen(true);
@@ -360,10 +371,10 @@ export default function PropostasPage() {
       const { data } = await api.put('/proposal-settings', editSettings);
       setSettings(data);
       setSettingsOpen(false);
-      toast.success('Definicoes de proposta guardadas');
+      toast.success('Definições de proposta guardadas');
     } catch (err) {
       console.error('Settings save error:', err.message);
-      toast.error('Erro ao guardar definicoes');
+      toast.error('Erro ao guardar definições');
     }
   };
 
@@ -382,17 +393,17 @@ export default function PropostasPage() {
 
   const filtered = activeTab === 'all' ? proposals : proposals.filter(p => p.tier === activeTab);
   const grouped = filtered.reduce((acc, p) => {
-    const key = p.budget_id || 'sem-orcamento';
+    const key = p.budget_id || 'sem-orçamento';
     if (!acc[key]) acc[key] = [];
     acc[key].push(p);
     return acc;
   }, {});
 
   const DEFAULT_CONDITIONS = [
-    'Valores em EUR com IVA incluido',
+    'Valores em EUR com IVA incluído',
     'Deslocacao incluida na zona da Grande Lisboa',
-    'Material e mao de obra incluidos',
-    'Alteracoes ao orcamento podem afetar o valor final',
+    'Material e mão de obra incluidos',
+    'Alteracoes ao orçamento podem afetar o valor final',
     'Trabalhos executados por tecnicos certificados',
     'Limpeza do local apos conclusao dos trabalhos',
   ];
@@ -405,14 +416,14 @@ export default function PropostasPage() {
           <p className="text-zinc-400 mt-1 font-medium">Visualize, exporte e envie propostas</p>
         </div>
         <Button data-testid="settings-btn" onClick={openSettings} className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-full font-medium">
-          <Settings size={16} className="mr-2" /> Pagamento e Condicoes
+          <Settings size={16} className="mr-2" /> Pagamento e Condições
         </Button>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-zinc-900 border border-zinc-800 rounded-full p-1">
           <TabsTrigger value="all" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm font-medium">Todas</TabsTrigger>
-          <TabsTrigger value="basico" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm font-medium">Basico</TabsTrigger>
+          <TabsTrigger value="basico" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm font-medium">Básico</TabsTrigger>
           <TabsTrigger value="profissional" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm font-medium">Profissional</TabsTrigger>
           <TabsTrigger value="premium" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm font-medium">Premium</TabsTrigger>
         </TabsList>
@@ -425,14 +436,14 @@ export default function PropostasPage() {
             <div className="text-center py-16 text-zinc-500">
               <ClipboardList size={48} className="mx-auto mb-4 text-zinc-700" />
               <p>Nenhuma proposta encontrada</p>
-              <p className="text-sm mt-1">Gere propostas a partir de um orcamento</p>
+              <p className="text-sm mt-1">Gere propostas a partir de um orçamento</p>
             </div>
           )}
           {!loading && Object.keys(grouped).length > 0 && (
             <div className="space-y-8">
               {Object.entries(grouped).map(([budgetId, props]) => (
                 <div key={budgetId}>
-                  <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3 font-medium">Orcamento: {budgetId.substring(0, 8)}...</p>
+                  <p className="text-xs uppercase tracking-wider text-zinc-500 mb-3 font-medium">Orçamento: {budgetId.substring(0, 8)}...</p>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {props.map(p => (
                       <Card key={p.id} className="bg-zinc-900 border-zinc-800 rounded-3xl hover:shadow-[0_0_15px_rgba(250,204,21,0.15)] transition-all duration-300">
@@ -476,8 +487,8 @@ export default function PropostasPage() {
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Pagamento e Condicoes</DialogTitle>
-            <DialogDescription className="text-zinc-500 text-sm">Configure formas de pagamento e condicoes que aparecem nas propostas PDF</DialogDescription>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Pagamento e Condições</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Configure formas de pagamento e condições que aparecem nas propostas PDF</DialogDescription>
           </DialogHeader>
           {editSettings && (
             <div className="space-y-6 mt-4">
@@ -508,7 +519,7 @@ export default function PropostasPage() {
 
               {/* Payment Split */}
               <div>
-                <Label className="text-zinc-300 text-sm font-semibold">Condicoes de Pagamento</Label>
+                <Label className="text-zinc-300 text-sm font-semibold">Condições de Pagamento</Label>
                 <div className="space-y-2 mt-2">
                   {SPLIT_OPTIONS.map(opt => (
                     <button
@@ -553,7 +564,7 @@ export default function PropostasPage() {
 
               {/* Conditions Checklist */}
               <div>
-                <Label className="text-zinc-300 text-sm font-semibold">Condicoes Gerais</Label>
+                <Label className="text-zinc-300 text-sm font-semibold">Condições Gerais</Label>
                 <div className="space-y-2 mt-2">
                   {DEFAULT_CONDITIONS.map(cond => {
                     const active = editSettings.conditions?.includes(cond);
@@ -583,12 +594,12 @@ export default function PropostasPage() {
                   value={editSettings.notes || ''}
                   onChange={e => setEditSettings({ ...editSettings, notes: e.target.value })}
                   className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl"
-                  placeholder="Ex: Orcamento sujeito a visita tecnica"
+                  placeholder="Ex: Orçamento sujeito a visita tecnica"
                 />
               </div>
 
               <Button data-testid="save-settings-btn" onClick={saveSettings} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
-                Guardar Definicoes
+                Guardar Definições
               </Button>
             </div>
           )}

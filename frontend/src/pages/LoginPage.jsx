@@ -104,10 +104,10 @@ export default function LoginPage() {
             <span className="text-sm font-medium uppercase tracking-widest">Obelisco Radical</span>
           </div>
           <h2 className="text-4xl font-black uppercase tracking-tight text-white leading-tight">
-            Gestao profissional dos seus servicos eletricos
+            Gestao profissional dos seus serviços eletricos
           </h2>
           <p className="text-zinc-400 mt-4 text-lg">
-            Orcamentos, propostas, obras e agenda num so lugar.
+            Orçamentos, propostas, obras e agenda num so lugar.
           </p>
         </div>
       </div>

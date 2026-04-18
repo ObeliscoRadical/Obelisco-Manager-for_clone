@@ -94,7 +94,7 @@ export default function ProcessamentoSalarialPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Processamento Salarial</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Calcule salarios mensais com base em assiduidade</p>
+          <p className="text-zinc-400 mt-1 font-medium">Calcule salários mensais com base em assiduidade</p>
         </div>
         <Button data-testid="new-run-btn" onClick={() => setNewDialogOpen(true)} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
           <Plus size={18} className="mr-2" /> Novo Processamento
@@ -116,7 +116,7 @@ export default function ProcessamentoSalarialPage() {
                 <div className="font-bold text-white text-sm">{monthName(r.month)}/{r.year}</div>
                 {r.status === 'fechado' ? <Badge className="bg-red-500/20 text-red-400 border-0 text-[10px]"><Lock size={9} className="mr-1" />Fechado</Badge> : <Badge className="bg-zinc-700 text-zinc-300 border-0 text-[10px]">Rascunho</Badge>}
               </div>
-              <div className="text-xs text-zinc-400 mt-1">{r.employees_count} func. | {formatEuro(r.total_liquido)} liq.</div>
+              <div className="text-xs text-zinc-400 mt-1">{r.employees_count} func. | {formatEuro(r.total_líquido)} liq.</div>
             </button>
           ))}
         </div>
@@ -132,11 +132,11 @@ export default function ProcessamentoSalarialPage() {
               <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
                 <div>
                   <h2 className="text-xl font-bold text-white">{monthName(selectedRun.run.month)}/{selectedRun.run.year}</h2>
-                  <p className="text-xs text-zinc-500">{selectedRun.run.employees_count} funcionarios processados</p>
+                  <p className="text-xs text-zinc-500">{selectedRun.run.employees_count} funcionários processados</p>
                 </div>
                 <div className="flex gap-3 text-sm">
-                  <div><span className="text-zinc-500 text-xs">Iliquido:</span> <span className="text-zinc-300 font-bold ml-1">{formatEuro(selectedRun.run.total_iliquido)}</span></div>
-                  <div><span className="text-zinc-500 text-xs">Liquido:</span> <span className="text-yellow-400 font-bold ml-1">{formatEuro(selectedRun.run.total_liquido)}</span></div>
+                  <div><span className="text-zinc-500 text-xs">Ilíquido:</span> <span className="text-zinc-300 font-bold ml-1">{formatEuro(selectedRun.run.total_ilíquido)}</span></div>
+                  <div><span className="text-zinc-500 text-xs">Líquido:</span> <span className="text-yellow-400 font-bold ml-1">{formatEuro(selectedRun.run.total_líquido)}</span></div>
                   <div><span className="text-zinc-500 text-xs">Custo empresa:</span> <span className="text-red-300 font-bold ml-1">{formatEuro(selectedRun.run.total_custo_empresa)}</span></div>
                 </div>
                 <div className="flex gap-2">
@@ -154,14 +154,14 @@ export default function ProcessamentoSalarialPage() {
                   <TableHeader>
                     <TableRow className="border-zinc-800 hover:bg-transparent">
                       <TableHead className="text-zinc-400 text-xs w-8"></TableHead>
-                      <TableHead className="text-zinc-400 text-xs">Funcionario</TableHead>
+                      <TableHead className="text-zinc-400 text-xs">Funcionário</TableHead>
                       <TableHead className="text-zinc-400 text-xs text-center">Dias</TableHead>
                       <TableHead className="text-zinc-400 text-xs text-right">Base</TableHead>
                       <TableHead className="text-zinc-400 text-xs text-right">H.Extra</TableHead>
                       <TableHead className="text-zinc-400 text-xs text-right">S.Alim.</TableHead>
-                      <TableHead className="text-zinc-400 text-xs text-right">Iliquido</TableHead>
+                      <TableHead className="text-zinc-400 text-xs text-right">Ilíquido</TableHead>
                       <TableHead className="text-zinc-400 text-xs text-right">Descontos</TableHead>
-                      <TableHead className="text-zinc-400 text-xs text-right">Liquido</TableHead>
+                      <TableHead className="text-zinc-400 text-xs text-right">Líquido</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -171,12 +171,12 @@ export default function ProcessamentoSalarialPage() {
                         <TableCell>{expandedItem === it.id ? <ChevronUp size={14} className="text-zinc-500" /> : <ChevronDown size={14} className="text-zinc-500" />}</TableCell>
                         <TableCell className="text-white font-medium text-sm">{it.employee_name}</TableCell>
                         <TableCell className="text-center text-zinc-300 text-sm">{it.dias_trabalhados}</TableCell>
-                        <TableCell className="text-right text-zinc-300 text-sm">{formatEuro(it.salario_base)}</TableCell>
+                        <TableCell className="text-right text-zinc-300 text-sm">{formatEuro(it.salário_base)}</TableCell>
                         <TableCell className="text-right text-zinc-300 text-sm">{formatEuro(it.total_horas_extra)}</TableCell>
                         <TableCell className="text-right text-zinc-300 text-sm">{formatEuro(it.subsidio_alimentacao)}</TableCell>
-                        <TableCell className="text-right text-zinc-200 text-sm font-semibold">{formatEuro(it.total_iliquido)}</TableCell>
+                        <TableCell className="text-right text-zinc-200 text-sm font-semibold">{formatEuro(it.total_ilíquido)}</TableCell>
                         <TableCell className="text-right text-red-300 text-sm">-{formatEuro(it.total_descontos)}</TableCell>
-                        <TableCell className="text-right text-yellow-400 font-bold">{formatEuro(it.total_liquido)}</TableCell>
+                        <TableCell className="text-right text-yellow-400 font-bold">{formatEuro(it.total_líquido)}</TableCell>
                       </TableRow>
                       {expandedItem === it.id && (
                         <TableRow className="border-zinc-800/50 bg-zinc-900/60">
@@ -236,7 +236,7 @@ export default function ProcessamentoSalarialPage() {
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl font-black uppercase text-white">Novo Processamento</DialogTitle>
-            <DialogDescription className="text-zinc-500 text-xs">Vai puxar dados de assiduidade e calcular salarios automaticamente</DialogDescription>
+            <DialogDescription className="text-zinc-500 text-xs">Vai puxar dados de assiduidade e calcular salários automaticamente</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 mt-2">
             <div>

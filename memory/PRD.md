@@ -34,6 +34,12 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (v5) — PDF polido para cliente
+- **Tiers ocultos ao cliente**: PDF da proposta NÃO mostra mais "Básico/Profissional/Premium" em lado nenhum. Título do PDF é agora o nome do orçamento original. Descrição é neutra e uniforme para os 3 tiers. Badge de tier mantém-se na UI interna da empresa.
+- **Ortografia PT completa**: todos os textos visíveis (PDF + sidebar + H1 + mensagens de erro backend) corrigidos com acentos corretos (Orçamentos, Negociação, Funcionários, Salários, Mão de Obra, Descrição, Condições, Métodos, Transferência, Cartão, Débito, Crédito, Manutenção, Execução, Instalação, Férias, Salário, Ilíquido, Líquido, IVA não incluído, Garantia, válida, início, etc.).
+- **Logo suavizado no PDF**: adicionada vignette dark radial em 6 camadas com opacidade progressiva em torno do logo para disfarçar bordas visíveis contra o fundo preto. Sidebar recebe `mixBlendMode: screen` + drop-shadow amarelo para branding.
+- **Migration DB**: 18 propostas antigas atualizadas para novo título (sem tier) e descrição uniforme.
+
 ### Feb 18, 2026 (v4) — Módulo Salarial Fase 1
 - **Novo módulo Salarios** (backend: `/app/backend/payroll.py`, 11 endpoints sob `/api/payroll`):
   - **Funcionarios**: ficha completa (nome, NIF, NISS, IBAN, cargo, categoria, contrato, salário base, €/hora, sub.alimentação, horas semanais, extras: duodécimos/comissões/adiantamentos/descontos fixos, estado ativo)

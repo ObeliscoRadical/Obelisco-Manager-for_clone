@@ -117,7 +117,7 @@ export default function BibliotecaPage() {
 
         <TabsContent value="favoritos" className="mt-6">
           {favorites.length === 0 ? (
-            <div className="text-center py-16 text-zinc-500"><Star size={48} className="mx-auto mb-4 text-zinc-700" /><p>Sem itens favoritos</p><p className="text-sm mt-1">Adicione itens ao criar orcamentos</p></div>
+            <div className="text-center py-16 text-zinc-500"><Star size={48} className="mx-auto mb-4 text-zinc-700" /><p>Sem itens favoritos</p><p className="text-sm mt-1">Adicione itens ao criar orçamentos</p></div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {favorites.map(f => (

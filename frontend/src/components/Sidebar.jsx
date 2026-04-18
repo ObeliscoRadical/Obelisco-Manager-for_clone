@@ -6,15 +6,15 @@ const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-46
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/orcamentos', label: 'Orcamentos', icon: FileText },
+  { path: '/orçamentos', label: 'Orçamentos', icon: FileText },
   { path: '/propostas', label: 'Propostas', icon: ClipboardList },
-  { path: '/negociacao', label: 'Negociacao', icon: HandCoins },
+  { path: '/negociação', label: 'Negociação', icon: HandCoins },
   { path: '/obras', label: 'Obras', icon: HardHat },
   { path: '/agenda', label: 'Agenda', icon: CalendarDays },
 ];
 
 const salariosItems = [
-  { path: '/funcionarios', label: 'Funcionarios', icon: Wallet },
+  { path: '/funcionários', label: 'Funcionários', icon: Wallet },
   { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2 },
   { path: '/processamento-salarial', label: 'Processamento', icon: Calculator },
   { path: '/config-salariais', label: 'Config. Salariais', icon: Coins },
@@ -22,11 +22,11 @@ const salariosItems = [
 
 const adminItems = [
   { path: '/materiais', label: 'Materiais', icon: Package },
-  { path: '/mao-de-obra', label: 'Mao de Obra', icon: Users },
+  { path: '/mao-de-obra', label: 'Mão de Obra', icon: Users },
   { path: '/produtividades', label: 'Produtividades', icon: Timer },
   { path: '/utilizadores', label: 'Utilizadores', icon: UserCog },
   { path: '/biblioteca', label: 'Biblioteca', icon: BookOpen },
-  { path: '/definicoes', label: 'Definicoes', icon: Settings },
+  { path: '/definições', label: 'Definições', icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -37,7 +37,19 @@ export default function Sidebar() {
     <aside data-testid="sidebar" className="fixed left-0 top-0 h-screen w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col z-50">
       <div className="p-6 border-b border-zinc-800">
         <div className="flex items-center gap-3">
-          <img src={LOGO_URL} alt="Obelisco Radical" className="h-12 w-auto object-contain" />
+          <div className="relative h-12 w-16 flex items-center justify-center overflow-hidden rounded-md">
+            {/* Soft radial fade behind logo to hide edge seam against dark background */}
+            <div className="absolute inset-0 bg-gradient-radial from-zinc-900/0 via-zinc-900/60 to-zinc-900 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(24,24,27,0) 40%, rgba(24,24,27,1) 100%)' }} />
+            <img
+              src={LOGO_URL}
+              alt="Obelisco Radical"
+              className="h-12 w-auto object-contain relative"
+              style={{
+                mixBlendMode: 'screen',
+                filter: 'drop-shadow(0 0 8px rgba(250,204,21,0.35)) drop-shadow(0 0 3px rgba(0,0,0,0.9))',
+              }}
+            />
+          </div>
           <div>
             <p className="text-lg font-black uppercase tracking-tight text-white">Obelisco</p>
             <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">Manager</p>
@@ -66,7 +78,7 @@ export default function Sidebar() {
         })}
 
         <div className="pt-3 mt-3 border-t border-zinc-800">
-          <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salarios</p>
+          <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salários</p>
         </div>
         {salariosItems.map(item => {
           const isActive = location.pathname === item.path;

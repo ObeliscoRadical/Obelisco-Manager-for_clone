@@ -13,7 +13,7 @@ const DAY_TYPES = [
   { value: 'domingo', label: 'Domingo', color: 'bg-purple-500/30' },
   { value: 'feriado', label: 'Feriado', color: 'bg-purple-500/30' },
   { value: 'meio_dia', label: 'Meio dia', color: 'bg-zinc-600' },
-  { value: 'ferias', label: 'Ferias', color: 'bg-green-500/30' },
+  { value: 'férias', label: 'Férias', color: 'bg-green-500/30' },
   { value: 'falta_j', label: 'Falta justif.', color: 'bg-yellow-500/30' },
   { value: 'falta_i', label: 'Falta injust.', color: 'bg-red-500/30' },
   { value: 'baixa', label: 'Baixa', color: 'bg-orange-500/30' },
@@ -43,7 +43,7 @@ export default function AssiduidadePage() {
       const { data } = await api.get('/payroll/employees');
       setEmployees(data);
       if (data.length && !selectedEmp) setSelectedEmp(data[0].id);
-    } catch { toast.error('Erro ao carregar funcionarios'); }
+    } catch { toast.error('Erro ao carregar funcionários'); }
   }, [selectedEmp]);
 
   const fetchRecords = useCallback(async () => {
@@ -68,7 +68,7 @@ export default function AssiduidadePage() {
   };
 
   const handleSave = async () => {
-    if (!form.employee_id || !form.date) { toast.error('Funcionario e data sao obrigatorios'); return; }
+    if (!form.employee_id || !form.date) { toast.error('Funcionário e data sao obrigatorios'); return; }
     try {
       await api.post('/payroll/attendance', form);
       toast.success('Registo criado');
@@ -115,7 +115,7 @@ export default function AssiduidadePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Assiduidade</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Registo diario de ponto por funcionario</p>
+          <p className="text-zinc-400 mt-1 font-medium">Registo diario de ponto por funcionário</p>
         </div>
         <Button data-testid="new-attendance-btn" onClick={() => openNew()} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold" disabled={!selectedEmp}>
           <Plus size={18} className="mr-2" /> Novo Registo
@@ -124,7 +124,7 @@ export default function AssiduidadePage() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800">
         <div>
-          <Label className="text-zinc-400 text-xs">Funcionario</Label>
+          <Label className="text-zinc-400 text-xs">Funcionário</Label>
           <select data-testid="att-employee-select" value={selectedEmp} onChange={e => setSelectedEmp(e.target.value)} className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm">
             <option value="">Selecione...</option>
             {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
@@ -191,7 +191,7 @@ export default function AssiduidadePage() {
       ) : (
         <div className="text-center py-16 rounded-2xl border border-zinc-800 bg-zinc-900/40">
           <CalendarCheck2 className="mx-auto text-zinc-600 mb-3" size={48} />
-          <p className="text-zinc-400">Selecione um funcionario para ver a assiduidade</p>
+          <p className="text-zinc-400">Selecione um funcionário para ver a assiduidade</p>
         </div>
       )}
 
@@ -203,7 +203,7 @@ export default function AssiduidadePage() {
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             <div>
-              <Label className="text-zinc-400 text-xs">Funcionario</Label>
+              <Label className="text-zinc-400 text-xs">Funcionário</Label>
               <select value={form.employee_id} onChange={e => setForm({ ...form, employee_id: e.target.value })} className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm">
                 <option value="">Selecione...</option>
                 {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
@@ -228,7 +228,7 @@ export default function AssiduidadePage() {
             <div><Label className="text-zinc-400 text-xs">Horas extra</Label><Input type="number" step="0.25" value={form.overtime_hours} onChange={e => setForm({ ...form, overtime_hours: parseFloat(e.target.value) || 0 })} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Horas noturnas</Label><Input type="number" step="0.25" value={form.night_hours} onChange={e => setForm({ ...form, night_hours: parseFloat(e.target.value) || 0 })} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div className="md:col-span-2"><Label className="text-zinc-400 text-xs">Obra / Local</Label><Input value={form.worksite} onChange={e => setForm({ ...form, worksite: e.target.value })} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
-            <div className="md:col-span-2"><Label className="text-zinc-400 text-xs">Observacoes</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+            <div className="md:col-span-2"><Label className="text-zinc-400 text-xs">Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
           </div>
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-zinc-700 text-zinc-300">Cancelar</Button>

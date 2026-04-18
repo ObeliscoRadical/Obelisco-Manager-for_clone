@@ -64,14 +64,14 @@ async def get_current_user(request: Request):
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
     if not token:
-        raise HTTPException(status_code=401, detail="Nao autenticado")
+        raise HTTPException(status_code=401, detail="Não autenticado")
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "access":
-            raise HTTPException(status_code=401, detail="Token invalido")
+            raise HTTPException(status_code=401, detail="Token inválido")
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
-            raise HTTPException(status_code=401, detail="Utilizador nao encontrado")
+            raise HTTPException(status_code=401, detail="Utilizador não encontrado")
         return {
             "id": str(user["_id"]),
             "email": user["email"],
@@ -81,9 +81,9 @@ async def get_current_user(request: Request):
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token invalido")
+        raise HTTPException(status_code=401, detail="Token inválido")
     except Exception:
-        raise HTTPException(status_code=401, detail="Erro de autenticacao")
+        raise HTTPException(status_code=401, detail="Erro de autenticação")
 
 
 # --- Models ---
@@ -197,16 +197,16 @@ async def refresh(request: Request, response: Response):
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Token invalido")
+            raise HTTPException(status_code=401, detail="Token inválido")
         user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
-            raise HTTPException(status_code=401, detail="Utilizador nao encontrado")
+            raise HTTPException(status_code=401, detail="Utilizador não encontrado")
         user_id = str(user["_id"])
         access_token = create_access_token(user_id, user["email"])
         response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
         return {"id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
     except Exception:
-        raise HTTPException(status_code=401, detail="Refresh token invalido")
+        raise HTTPException(status_code=401, detail="Refresh token inválido")
 
 
 # --- Budget Endpoints ---
@@ -267,7 +267,7 @@ async def create_budget(input: BudgetCreate, user=Depends(get_current_user)):
 async def get_budget(budget_id: str, user=Depends(get_current_user)):
     budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     if not budget:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return budget
 
 @api_router.put("/budgets/{budget_id}")
@@ -302,7 +302,7 @@ async def update_budget(budget_id: str, input: BudgetUpdate, user=Depends(get_cu
 
     result = await db.budgets.update_one({"id": budget_id}, {"$set": update_data})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     updated = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     return updated
 
@@ -310,7 +310,7 @@ async def update_budget(budget_id: str, input: BudgetUpdate, user=Depends(get_cu
 async def delete_budget(budget_id: str, user=Depends(get_current_user)):
     result = await db.budgets.delete_one({"id": budget_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
     return {"message": "Orcamento eliminado"}
 
 
@@ -320,16 +320,18 @@ async def delete_budget(budget_id: str, user=Depends(get_current_user)):
 async def generate_proposals(budget_id: str, user=Depends(get_current_user)):
     budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     if not budget:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
     await db.proposals.delete_many({"budget_id": budget_id})
 
     base_price = budget["total_price"]
+    # Tier name stays internal (for sorting). Client-facing title/description removed tier mention.
     tiers = [
-        {"tier": "basico", "label": "Basico", "multiplier": 1.0, "description": "Servico padrao com materiais standard. Garantia de 2 anos. IVA nao incluido."},
-        {"tier": "profissional", "label": "Profissional", "multiplier": 1.15, "description": "Materiais premium, garantia de 2 anos, suporte prioritario. IVA nao incluido."},
-        {"tier": "premium", "label": "Premium", "multiplier": 1.30, "description": "Materiais top de gama, garantia de 2 anos, execucao prioritaria, suporte 24/7. IVA nao incluido."},
+        {"tier": "basico", "label": "Básico", "multiplier": 1.0},
+        {"tier": "profissional", "label": "Profissional", "multiplier": 1.15},
+        {"tier": "premium", "label": "Premium", "multiplier": 1.30},
     ]
+    client_description = "Proposta de serviços elétricos e de telecomunicações. Garantia de 2 anos sobre mão de obra e materiais fornecidos. Valores em euros, IVA não incluído."
 
     proposals = []
     for t in tiers:
@@ -338,14 +340,14 @@ async def generate_proposals(budget_id: str, user=Depends(get_current_user)):
             "budget_id": budget_id,
             "tier": t["tier"],
             "label": t["label"],
-            "title": f"Proposta {t['label']} - {budget['title']}",
+            "title": budget['title'],
             "client_name": budget["client_name"],
             "client_phone": budget.get("client_phone", ""),
             "items": budget["items"],
             "base_value": round(base_price, 2),
             "multiplier": t["multiplier"],
             "final_value": round(base_price * t["multiplier"], 2),
-            "description": t["description"],
+            "description": client_description,
             "status": "pendente",
             "payment_methods": budget.get("payment_methods", []),
             "payment_split": budget.get("payment_split", ""),
@@ -370,14 +372,14 @@ async def get_proposals(user=Depends(get_current_user)):
 async def get_proposal(proposal_id: str, user=Depends(get_current_user)):
     proposal = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposta nao encontrada")
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
     return proposal
 
 @api_router.put("/proposals/{proposal_id}/status")
 async def update_proposal_status(proposal_id: str, input: StatusUpdate, user=Depends(get_current_user)):
     result = await db.proposals.update_one({"id": proposal_id}, {"$set": {"status": input.status}})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Proposta nao encontrada")
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
     updated = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
     return updated
 
@@ -385,7 +387,7 @@ async def update_proposal_status(proposal_id: str, input: StatusUpdate, user=Dep
 async def delete_proposal(proposal_id: str, user=Depends(get_current_user)):
     result = await db.proposals.delete_one({"id": proposal_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Proposta nao encontrada")
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
     return {"message": "Proposta eliminada"}
 
 
@@ -412,7 +414,7 @@ async def create_work(input: WorkCreate, user=Depends(get_current_user)):
 async def get_work(work_id: str, user=Depends(get_current_user)):
     work = await db.works.find_one({"id": work_id}, {"_id": 0})
     if not work:
-        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
     return work
 
 @api_router.put("/works/{work_id}")
@@ -420,7 +422,7 @@ async def update_work(work_id: str, input: WorkUpdate, user=Depends(get_current_
     update_data = {k: v for k, v in input.model_dump().items() if v is not None}
     result = await db.works.update_one({"id": work_id}, {"$set": update_data})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
     updated = await db.works.find_one({"id": work_id}, {"_id": 0})
     return updated
 
@@ -428,14 +430,14 @@ async def update_work(work_id: str, input: WorkUpdate, user=Depends(get_current_
 async def delete_work(work_id: str, user=Depends(get_current_user)):
     result = await db.works.delete_one({"id": work_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
     return {"message": "Obra eliminada"}
 
 @api_router.post("/works/from-proposal/{proposal_id}")
 async def create_work_from_proposal(proposal_id: str, user=Depends(get_current_user)):
     proposal = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
     if not proposal:
-        raise HTTPException(status_code=404, detail="Proposta nao encontrada")
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
     doc = {
         "id": str(uuid.uuid4()),
         "title": proposal["title"],
@@ -472,7 +474,7 @@ async def create_appointment(input: AppointmentCreate, user=Depends(get_current_
         "time_end": {"$gt": input.time_start}
     })
     if existing:
-        raise HTTPException(status_code=400, detail="Ja existe um agendamento nesse horario. Escolha outro horario.")
+        raise HTTPException(status_code=400, detail="Já existe um agendamento nesse horario. Escolha outro horario.")
     doc = {
         "id": str(uuid.uuid4()),
         **input.model_dump(),
@@ -494,7 +496,7 @@ async def update_appointment(appointment_id: str, input: AppointmentCreate, user
         raise HTTPException(status_code=400, detail="Conflito de horario com outro agendamento.")
     result = await db.appointments.update_one({"id": appointment_id}, {"$set": input.model_dump()})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Agendamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado")
     updated = await db.appointments.find_one({"id": appointment_id}, {"_id": 0})
     return updated
 
@@ -502,7 +504,7 @@ async def update_appointment(appointment_id: str, input: AppointmentCreate, user
 async def delete_appointment(appointment_id: str, user=Depends(get_current_user)):
     result = await db.appointments.delete_one({"id": appointment_id})
     if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Agendamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Agendamento não encontrado")
     return {"message": "Agendamento eliminado"}
 
 
@@ -827,7 +829,7 @@ class ProposalSettingsUpdate(BaseModel):
 async def get_logo():
     logo_path = Path(__file__).parent / "logo.png"
     if not logo_path.exists():
-        raise HTTPException(status_code=404, detail="Logo nao encontrado")
+        raise HTTPException(status_code=404, detail="Logo não encontrado")
     import base64
     with open(logo_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
@@ -961,7 +963,7 @@ async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)
                 '"margin": <margem recomendada como decimal, ex: 0.65 para 65%>, '
                 '"install_cost": <custo estimado de instalacao/mao de obra por unidade em EUR>, '
                 '"unit": "metro/unidade/pack", '
-                '"source": "<breve descricao>"} '
+                '"source": "<breve descrição>"} '
                 "REGRAS PARA A MARGEM: "
                 "- A margem deve cobrir: mao de obra do eletricista (media 15-25 EUR/hora em Lisboa), "
                 "deslocacao (taxa media 35 EUR na Grande Lisboa), "
@@ -1202,7 +1204,7 @@ async def update_labor(labor_id: str, input: LaborInput, user=Depends(get_curren
     data = input.model_dump()
     result = await db.labor_db.update_one({"id": labor_id}, {"$set": data})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Tipo de mao de obra nao encontrado")
+        raise HTTPException(status_code=404, detail="Tipo de mao de obra não encontrado")
     return await db.labor_db.find_one({"id": labor_id}, {"_id": 0})
 
 @api_router.delete("/labor/{labor_id}")
@@ -1265,7 +1267,7 @@ async def create_material(input: MaterialInput, user=Depends(get_current_user)):
 async def update_material(mat_id: str, input: MaterialInput, user=Depends(get_current_user)):
     old = await db.materials_db.find_one({"id": mat_id}, {"_id": 0})
     if not old:
-        raise HTTPException(status_code=404, detail="Material nao encontrado")
+        raise HTTPException(status_code=404, detail="Material não encontrado")
     data = input.model_dump()
     # Keep price history
     history = old.get("price_history", [])
@@ -1614,7 +1616,7 @@ class WorkHistoryEntry(BaseModel):
 async def add_work_history(work_id: str, entry: WorkHistoryEntry, user=Depends(get_current_user)):
     work = await db.works.find_one({"id": work_id})
     if not work:
-        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
     history_entry = {"id": str(uuid.uuid4()), **entry.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
     await db.works.update_one({"id": work_id}, {"$push": {"history": history_entry}})
     updated = await db.works.find_one({"id": work_id}, {"_id": 0})
@@ -1624,7 +1626,7 @@ async def add_work_history(work_id: str, entry: WorkHistoryEntry, user=Depends(g
 async def get_work_comparison(work_id: str, user=Depends(get_current_user)):
     work = await db.works.find_one({"id": work_id}, {"_id": 0})
     if not work:
-        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
     predicted = work.get("predicted_cost", 0)
     real = work.get("real_cost", 0)
     history = work.get("history", [])
@@ -1702,7 +1704,7 @@ async def create_user(input: UserCreate, user=Depends(get_current_user)):
         raise HTTPException(status_code=400, detail=f"Role invalido. Usar: {VALID_ROLES}")
     existing = await db.users.find_one({"email": input.email.lower().strip()})
     if existing:
-        raise HTTPException(status_code=400, detail="Email ja existe")
+        raise HTTPException(status_code=400, detail="Email já existe")
     doc = {
         "email": input.email.lower().strip(),
         "password_hash": hash_password(input.password),
@@ -1722,7 +1724,7 @@ async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_
         raise HTTPException(status_code=400, detail=f"Role invalido. Usar: {VALID_ROLES}")
     result = await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": data})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+        raise HTTPException(status_code=404, detail="Utilizador não encontrado")
     return {"message": "Atualizado"}
 
 @api_router.delete("/users/{user_id}")
@@ -1730,7 +1732,7 @@ async def delete_user(user_id: str, user=Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Sem permissao")
     if user_id == user.get("id"):
-        raise HTTPException(status_code=400, detail="Nao pode eliminar a si proprio")
+        raise HTTPException(status_code=400, detail="Não pode eliminar a si proprio")
     result = await db.users.delete_one({"_id": ObjectId(user_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Nao encontrado")
@@ -1755,7 +1757,7 @@ async def export_budget_excel(budget_id: str, user=Depends(get_current_user)):
 
     budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     if not budget:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
     wb = Workbook()
     ws = wb.active
@@ -1870,7 +1872,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
     header_keywords = {
         'code': ['codigo', 'cod.', 'cod', 'ref.', 'referencia', 'artigo', 'code'],
         'category': ['categoria', 'grupo', 'especialidade'],
-        'name': ['descricao', 'descrição', 'designacao', 'designação', 'descr', 'denominacao', 'descritivo'],
+        'name': ['descrição', 'descrição', 'designacao', 'designação', 'descr', 'denominacao', 'descritivo'],
         'unit': ['unidade', 'un.', 'und.', 'unid.'],
         'quantity': ['quantidade', 'qtd', 'qtd.', 'qty', 'quant.', 'quant'],
         'cost': ['preco', 'preço', 'custo', 'valor unit', 'p.unit', 'p.u.', 'pu', 'unitario', 'unitário', 'unit price'],
@@ -1904,7 +1906,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
                     temp_map[field] = col_idx
                     break
 
-        # Must explicitly find a "name/descricao" keyword and at least one other header
+        # Must explicitly find a "name/descrição" keyword and at least one other header
         if 'name' in temp_map and len(temp_map) >= 2:
             header_map = temp_map
             header_row_idx = ri
@@ -2072,7 +2074,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
         logger.info(f"  Item: '{name}' qty={qty} cost={cost}")
 
     if not items:
-        raise HTTPException(status_code=400, detail="Nenhum item encontrado. Verifique que o Excel tem colunas com descricao e quantidade.")
+        raise HTTPException(status_code=400, detail="Nenhum item encontrado. Verifique que o Excel tem colunas com descrição e quantidade.")
 
     total_cost, total_price = calc_budget_totals(items, "percentage", 0)
 
@@ -2105,7 +2107,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
 async def save_budget_version(budget_id: str, user=Depends(get_current_user)):
     budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     if not budget:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
     versions = await db.budget_versions.find({"budget_id": budget_id}).to_list(100)
     version_num = len(versions) + 1
@@ -2131,14 +2133,14 @@ async def get_budget_versions(budget_id: str, user=Depends(get_current_user)):
 async def get_budget_version(budget_id: str, version_id: str, user=Depends(get_current_user)):
     version = await db.budget_versions.find_one({"id": version_id, "budget_id": budget_id}, {"_id": 0})
     if not version:
-        raise HTTPException(status_code=404, detail="Versao nao encontrada")
+        raise HTTPException(status_code=404, detail="Versão não encontrada")
     return version
 
 @api_router.post("/budgets/{budget_id}/duplicate")
 async def duplicate_budget(budget_id: str, user=Depends(get_current_user)):
     budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0})
     if not budget:
-        raise HTTPException(status_code=404, detail="Orcamento nao encontrado")
+        raise HTTPException(status_code=404, detail="Orçamento não encontrado")
 
     new_doc = {**budget}
     new_doc["id"] = str(uuid.uuid4())
@@ -2189,7 +2191,7 @@ async def create_text_template(input: TextTemplateInput, user=Depends(get_curren
 async def update_text_template(template_id: str, input: TextTemplateInput, user=Depends(get_current_user)):
     result = await db.text_templates.update_one({"id": template_id}, {"$set": input.model_dump()})
     if result.matched_count == 0:
-        raise HTTPException(status_code=404, detail="Template nao encontrado")
+        raise HTTPException(status_code=404, detail="Template não encontrado")
     return await db.text_templates.find_one({"id": template_id}, {"_id": 0})
 
 @api_router.delete("/text-templates/{template_id}")

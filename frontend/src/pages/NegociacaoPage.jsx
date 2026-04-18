@@ -25,7 +25,7 @@ export default function NegociacaoPage() {
   useEffect(() => { fetchBudgets(); }, [fetchBudgets]);
 
   const simulate = async () => {
-    if (!selectedBudget) { toast.error('Selecione um orcamento'); return; }
+    if (!selectedBudget) { toast.error('Selecione um orçamento'); return; }
     setLoading(true);
     try {
       const items = (selectedBudget.items || []).map(i => ({
@@ -51,9 +51,9 @@ export default function NegociacaoPage() {
   };
 
   return (
-    <div data-testid="negociacao-page" className="space-y-6">
+    <div data-testid="negociação-page" className="space-y-6">
       <div>
-        <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Negociacao</h1>
+        <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Negociação</h1>
         <p className="text-zinc-400 mt-1 font-medium">Simule descontos e analise o impacto na margem</p>
       </div>
 
@@ -64,14 +64,14 @@ export default function NegociacaoPage() {
             <h3 className="text-lg font-bold text-white flex items-center gap-2"><Calculator size={18} className="text-yellow-400" /> Simulador</h3>
 
             <div>
-              <Label className="text-zinc-300 text-sm">Orcamento</Label>
+              <Label className="text-zinc-300 text-sm">Orçamento</Label>
               <select
                 data-testid="neg-budget-select"
                 value={selectedBudget?.id || ''}
                 onChange={e => setSelectedBudget(budgets.find(b => b.id === e.target.value) || null)}
                 className="mt-1 w-full h-10 bg-zinc-800 border border-zinc-700 text-white rounded-xl px-3 text-sm"
               >
-                <option value="">Selecionar orcamento...</option>
+                <option value="">Selecionar orçamento...</option>
                 {budgets.map(b => <option key={b.id} value={b.id}>{b.title} - {b.client_name} ({formatEuro(b.total_price)})</option>)}
               </select>
             </div>
@@ -107,7 +107,7 @@ export default function NegociacaoPage() {
             </div>
 
             <Button data-testid="neg-simulate-btn" onClick={simulate} disabled={loading || !selectedBudget} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
-              {loading ? 'A calcular...' : 'Simular Negociacao'}
+              {loading ? 'A calcular...' : 'Simular Negociação'}
             </Button>
           </CardContent>
         </Card>
@@ -197,7 +197,7 @@ export default function NegociacaoPage() {
           <div className="flex items-center justify-center text-zinc-600">
             <div className="text-center">
               <Calculator size={64} className="mx-auto mb-4 opacity-30" />
-              <p className="text-lg">Selecione um orcamento e simule o desconto</p>
+              <p className="text-lg">Selecione um orçamento e simule o desconto</p>
               <p className="text-sm text-zinc-700 mt-1">Responda: "quanto posso baixar sem perder margem?"</p>
             </div>
           </div>
