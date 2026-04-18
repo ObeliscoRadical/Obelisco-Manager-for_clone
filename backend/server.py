@@ -1399,6 +1399,231 @@ async def seed_professional_data():
                 count += 1
         logger.info(f"Materials DB seeded: {count} items from catalog")
 
+
+# ============================================================
+# FASE 2 - NEGOTIATION, HISTORY, USER MANAGEMENT
+# ============================================================
+
+# --- Negotiation / Discount Simulation ---
+
+class NegotiationInput(BaseModel):
+    budget_id: str = ""
+    original_price: float = 0
+    discount_type: str = "percentage"  # percentage or value
+    discount_value: float = 0
+    items: List[ProBudgetItem] = []
+    risk_level: str = "medio"
+    global_margin: float = 0
+
+@api_router.post("/simulate-negotiation")
+async def simulate_negotiation(input: NegotiationInput, user=Depends(get_current_user)):
+    settings = await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+    min_margin = settings.get("min_margin", 15)
+
+    # Calculate real cost from items
+    labor_list = await db.labor_db.find({}, {"_id": 0}).to_list(100)
+    labor_map = {lb["type"]: lb for lb in labor_list}
+
+    indirect_pcts = settings.get("indirect_costs", {})
+    total_indirect_pct = sum(indirect_pcts.values())
+    risk_pct = settings.get("risk_levels", {}).get(input.risk_level, 5)
+
+    total_cost = 0
+    for item in input.items:
+        mat_cost = item.unit_cost * item.quantity * (1 + item.waste_pct / 100)
+        labor_info = labor_map.get(item.labor_type, {})
+        cost_h = item.labor_cost_hour if item.labor_cost_hour > 0 else labor_info.get("cost_hour", 15)
+        prod_min = item.productivity_min if item.productivity_min > 0 else 20
+        time_hours = (item.quantity * prod_min) / 60
+        labor_cost = time_hours * cost_h
+        total_cost += mat_cost + labor_cost
+
+    total_indirect = total_cost * (total_indirect_pct / 100)
+    total_risk = (total_cost + total_indirect) * (risk_pct / 100)
+    break_even = total_cost + total_indirect + total_risk
+    min_price = break_even * (1 + min_margin / 100)
+
+    original = input.original_price if input.original_price > 0 else break_even * 1.3
+
+    if input.discount_type == "percentage":
+        discount_amount = original * (input.discount_value / 100)
+    else:
+        discount_amount = input.discount_value
+
+    final_price = original - discount_amount
+    final_margin_pct = ((final_price - break_even) / break_even * 100) if break_even > 0 else 0
+    profit = final_price - break_even
+    max_discount = original - min_price
+    max_discount_pct = (max_discount / original * 100) if original > 0 else 0
+
+    alerts = []
+    if final_price < break_even:
+        alerts.append({"type": "danger", "msg": "PRECO ABAIXO DO CUSTO! A obra tera prejuizo."})
+    elif final_margin_pct < min_margin:
+        alerts.append({"type": "warning", "msg": f"Margem ({final_margin_pct:.1f}%) abaixo do minimo ({min_margin}%)"})
+    if discount_amount > max_discount:
+        alerts.append({"type": "danger", "msg": f"Desconto excede o maximo seguro de {formatEuro_py(max_discount)}"})
+
+    return {
+        "original_price": round(original, 2),
+        "discount_amount": round(discount_amount, 2),
+        "discount_pct": round(input.discount_value if input.discount_type == "percentage" else (discount_amount / original * 100) if original > 0 else 0, 2),
+        "final_price": round(final_price, 2),
+        "break_even": round(break_even, 2),
+        "total_cost": round(total_cost, 2),
+        "total_indirect": round(total_indirect, 2),
+        "total_risk": round(total_risk, 2),
+        "profit": round(profit, 2),
+        "final_margin_pct": round(final_margin_pct, 1),
+        "min_margin": min_margin,
+        "min_price": round(min_price, 2),
+        "max_discount": round(max_discount, 2),
+        "max_discount_pct": round(max_discount_pct, 1),
+        "alerts": alerts,
+    }
+
+def formatEuro_py(v):
+    return f"{v:,.2f} EUR"
+
+
+# --- Work History & Comparison ---
+
+class WorkHistoryEntry(BaseModel):
+    date: str
+    description: str
+    hours: float = 0
+    cost: float = 0
+
+@api_router.post("/works/{work_id}/history")
+async def add_work_history(work_id: str, entry: WorkHistoryEntry, user=Depends(get_current_user)):
+    work = await db.works.find_one({"id": work_id})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+    history_entry = {"id": str(uuid.uuid4()), **entry.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.works.update_one({"id": work_id}, {"$push": {"history": history_entry}})
+    updated = await db.works.find_one({"id": work_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/works/{work_id}/comparison")
+async def get_work_comparison(work_id: str, user=Depends(get_current_user)):
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra nao encontrada")
+    predicted = work.get("predicted_cost", 0)
+    real = work.get("real_cost", 0)
+    history = work.get("history", [])
+    total_hours = sum(h.get("hours", 0) for h in history)
+    total_history_cost = sum(h.get("cost", 0) for h in history)
+    margin_predicted = predicted * 0.3 if predicted > 0 else 0
+    margin_real = predicted - real if predicted > 0 else 0
+    return {
+        "work": work,
+        "comparison": {
+            "predicted_cost": round(predicted, 2),
+            "real_cost": round(real, 2),
+            "cost_difference": round(predicted - real, 2),
+            "cost_deviation_pct": round(((real - predicted) / predicted * 100) if predicted > 0 else 0, 1),
+            "margin_predicted": round(margin_predicted, 2),
+            "margin_real": round(margin_real, 2),
+            "total_hours_logged": round(total_hours, 1),
+            "total_cost_logged": round(total_history_cost, 2),
+            "history_entries": len(history),
+        }
+    }
+
+@api_router.get("/works/comparison-all")
+async def get_all_works_comparison(user=Depends(get_current_user)):
+    works = await db.works.find({}, {"_id": 0}).to_list(500)
+    results = []
+    for w in works:
+        predicted = w.get("predicted_cost", 0)
+        real = w.get("real_cost", 0)
+        results.append({
+            "id": w["id"], "title": w.get("title", ""), "client_name": w.get("client_name", ""),
+            "status": w.get("status", ""), "predicted_cost": predicted, "real_cost": real,
+            "deviation": round(real - predicted, 2) if predicted > 0 else 0,
+            "deviation_pct": round(((real - predicted) / predicted * 100) if predicted > 0 else 0, 1),
+            "margin_real_pct": round(((predicted - real) / predicted * 100) if predicted > 0 else 0, 1),
+        })
+    return results
+
+
+# --- User Management ---
+
+class UserCreate(BaseModel):
+    email: str
+    password: str
+    name: str
+    role: str = "consulta"
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    email: Optional[str] = None
+
+VALID_ROLES = ["admin", "orcamentista", "comercial", "tecnico", "consulta"]
+
+ROLE_PERMISSIONS = {
+    "admin": {"view_costs": True, "view_margins": True, "view_prices": True, "edit_budgets": True, "edit_settings": True, "manage_users": True},
+    "orcamentista": {"view_costs": True, "view_margins": True, "view_prices": True, "edit_budgets": True, "edit_settings": False, "manage_users": False},
+    "comercial": {"view_costs": False, "view_margins": False, "view_prices": True, "edit_budgets": False, "edit_settings": False, "manage_users": False},
+    "tecnico": {"view_costs": False, "view_margins": False, "view_prices": False, "edit_budgets": False, "edit_settings": False, "manage_users": False},
+    "consulta": {"view_costs": False, "view_margins": False, "view_prices": True, "edit_budgets": False, "edit_settings": False, "manage_users": False},
+}
+
+@api_router.get("/users")
+async def get_users(user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    users = await db.users.find({}, {"password_hash": 0}).to_list(100)
+    return [{"id": str(u["_id"]), "email": u["email"], "name": u["name"], "role": u.get("role", "consulta"), "created_at": u.get("created_at", "")} for u in users]
+
+@api_router.post("/users")
+async def create_user(input: UserCreate, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    if input.role not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role invalido. Usar: {VALID_ROLES}")
+    existing = await db.users.find_one({"email": input.email.lower().strip()})
+    if existing:
+        raise HTTPException(status_code=400, detail="Email ja existe")
+    doc = {
+        "email": input.email.lower().strip(),
+        "password_hash": hash_password(input.password),
+        "name": input.name,
+        "role": input.role,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    result = await db.users.insert_one(doc)
+    return {"id": str(result.inserted_id), "email": doc["email"], "name": doc["name"], "role": doc["role"]}
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    data = {k: v for k, v in input.model_dump().items() if v is not None}
+    if "role" in data and data["role"] not in VALID_ROLES:
+        raise HTTPException(status_code=400, detail=f"Role invalido. Usar: {VALID_ROLES}")
+    result = await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Utilizador nao encontrado")
+    return {"message": "Atualizado"}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(user_id: str, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    if user_id == user.get("id"):
+        raise HTTPException(status_code=400, detail="Nao pode eliminar a si proprio")
+    result = await db.users.delete_one({"_id": ObjectId(user_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Eliminado"}
+
+@api_router.get("/roles")
+async def get_roles(user=Depends(get_current_user)):
+    return {"roles": VALID_ROLES, "permissions": ROLE_PERMISSIONS}
+
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@obelisco.pt")
     admin_password = os.environ.get("ADMIN_PASSWORD", "obelisco2024")
