@@ -34,6 +34,16 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (v6) — Assinatura Digital do Cliente
+- **Feature**: Cliente assina a proposta digitalmente via link público (sem login).
+  - Botão "Enviar para assinatura" em cada cartão → gera token único → mostra URL + botões "Copiar" e "Enviar WhatsApp" com mensagem pré-feita.
+  - Página pública `/p/:token` (sem auth) com design light/mobile-friendly: cabeçalho Obelisco, título da proposta, cliente, valor final, descrição, items expansíveis, formulário com nome+email+canvas de assinatura touch/mouse, confirmação.
+  - Backend: `POST /api/proposals/{id}/sign-link` (auth), `GET /api/public/proposal/{token}` (sem auth), `POST /api/public/proposal/{token}/sign` (sem auth, regista signature_data base64, signed_by_name, signed_by_email, signed_at, signed_by_ip, status=aceite).
+  - Proposta assinada rejeita re-assinatura (400).
+  - Card interno mostra badge verde "Assinada" + nome/data.
+  - **PDF atualizado**: se assinada, adiciona bloco amarelo "PROPOSTA ACEITE E ASSINADA PELO CLIENTE" com nome, data, email, IP e imagem da assinatura.
+- **Testado**: 79/79 (15 novos testes de assinatura).
+
 ### Feb 18, 2026 (v5) — PDF polido para cliente
 - **Tiers ocultos ao cliente**: PDF da proposta NÃO mostra mais "Básico/Profissional/Premium" em lado nenhum. Título do PDF é agora o nome do orçamento original. Descrição é neutra e uniforme para os 3 tiers. Badge de tier mantém-se na UI interna da empresa.
 - **Ortografia PT completa**: todos os textos visíveis (PDF + sidebar + H1 + mensagens de erro backend) corrigidos com acentos corretos (Orçamentos, Negociação, Funcionários, Salários, Mão de Obra, Descrição, Condições, Métodos, Transferência, Cartão, Débito, Crédito, Manutenção, Execução, Instalação, Férias, Salário, Ilíquido, Líquido, IVA não incluído, Garantia, válida, início, etc.).
