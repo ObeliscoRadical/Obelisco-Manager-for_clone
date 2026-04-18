@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
@@ -11,6 +11,13 @@ const navItems = [
   { path: '/negociacao', label: 'Negociacao', icon: HandCoins },
   { path: '/obras', label: 'Obras', icon: HardHat },
   { path: '/agenda', label: 'Agenda', icon: CalendarDays },
+];
+
+const salariosItems = [
+  { path: '/funcionarios', label: 'Funcionarios', icon: Wallet },
+  { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2 },
+  { path: '/processamento-salarial', label: 'Processamento', icon: Calculator },
+  { path: '/config-salariais', label: 'Config. Salariais', icon: Coins },
 ];
 
 const adminItems = [
@@ -54,6 +61,28 @@ export default function Sidebar() {
             >
               <item.icon size={20} />
               <span className="text-sm font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
+
+        <div className="pt-3 mt-3 border-t border-zinc-800">
+          <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salarios</p>
+        </div>
+        {salariosItems.map(item => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              data-testid={`nav-${item.path.replace('/', '')}`}
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
+                isActive
+                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                  : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
+              }`}
+            >
+              <item.icon size={18} />
+              <span className="text-xs font-medium">{item.label}</span>
             </Link>
           );
         })}

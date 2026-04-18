@@ -2250,6 +2250,10 @@ async def startup():
 
 app.include_router(api_router)
 
+# Payroll module
+from payroll import create_payroll_router
+app.include_router(create_payroll_router(db, get_current_user))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")],

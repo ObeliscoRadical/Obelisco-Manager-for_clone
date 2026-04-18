@@ -15,6 +15,10 @@ import DefinicoesPage from "./pages/DefinicoesPage";
 import NegociacaoPage from "./pages/NegociacaoPage";
 import UtilizadoresPage from "./pages/UtilizadoresPage";
 import BibliotecaPage from "./pages/BibliotecaPage";
+import FuncionariosPage from "./pages/FuncionariosPage";
+import AssiduidadePage from "./pages/AssiduidadePage";
+import ProcessamentoSalarialPage from "./pages/ProcessamentoSalarialPage";
+import ConfiguracoesSalariaisPage from "./pages/ConfiguracoesSalariaisPage";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -68,6 +72,10 @@ function App() {
           <Route path="/produtividades" element={<ProtectedRoute><ProdutividadesPage /></ProtectedRoute>} />
           <Route path="/utilizadores" element={<ProtectedRoute><UtilizadoresPage /></ProtectedRoute>} />
           <Route path="/biblioteca" element={<ProtectedRoute><BibliotecaPage /></ProtectedRoute>} />
+          <Route path="/funcionarios" element={<ProtectedRoute><FuncionariosPage /></ProtectedRoute>} />
+          <Route path="/assiduidade" element={<ProtectedRoute><AssiduidadePage /></ProtectedRoute>} />
+          <Route path="/processamento-salarial" element={<ProtectedRoute><ProcessamentoSalarialPage /></ProtectedRoute>} />
+          <Route path="/config-salariais" element={<ProtectedRoute><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
           <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
