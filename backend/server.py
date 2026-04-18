@@ -899,6 +899,506 @@ async def price_lookup(input: PriceLookupRequest, user=Depends(get_current_user)
         logger.error(f"Price lookup error for: {input.item_name}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro na pesquisa de preco: {str(e)}")
 
+
+# ============================================================
+# PROFESSIONAL BUDGETING ENGINE
+# ============================================================
+
+SPECIALTIES = [
+    {"id": "instalacoes_eletricas", "name": "Instalacoes Eletricas"},
+    {"id": "ited", "name": "ITED / Telecomunicacoes"},
+    {"id": "cctv", "name": "CCTV / Videovigilancia"},
+    {"id": "intrusao", "name": "Sistemas de Intrusao"},
+    {"id": "bastidores", "name": "Bastidores / Sala Tecnica"},
+    {"id": "engenharia", "name": "Engenharia / Certificacao"},
+    {"id": "trabalhos_prep", "name": "Trabalhos Preparatorios"},
+]
+
+DEFAULT_LABOR = [
+    {"id": "eletricista", "type": "eletricista", "description": "Eletricista certificado", "cost_hour": 15, "sell_hour": 35, "charges": "SS+seguro", "notes": ""},
+    {"id": "ajudante", "type": "ajudante", "description": "Ajudante de eletricista", "cost_hour": 10, "sell_hour": 22, "charges": "SS+seguro", "notes": ""},
+    {"id": "tecnico_ited", "type": "tecnico_ited", "description": "Tecnico ITED certificado", "cost_hour": 18, "sell_hour": 40, "charges": "SS+seguro+cert", "notes": ""},
+    {"id": "tecnico_cctv", "type": "tecnico_cctv", "description": "Tecnico CCTV", "cost_hour": 16, "sell_hour": 38, "charges": "SS+seguro", "notes": ""},
+    {"id": "tecnico_intrusao", "type": "tecnico_intrusao", "description": "Tecnico sistemas intrusao", "cost_hour": 16, "sell_hour": 38, "charges": "SS+seguro", "notes": ""},
+    {"id": "encarregado", "type": "encarregado", "description": "Encarregado de obra", "cost_hour": 20, "sell_hour": 45, "charges": "SS+seguro", "notes": ""},
+    {"id": "engenheiro", "type": "engenheiro", "description": "Engenheiro / Direcao tecnica", "cost_hour": 30, "sell_hour": 65, "charges": "SS+seguro", "notes": ""},
+]
+
+DEFAULT_PRODUCTIVITIES = [
+    {"item": "Tomada simples encastrar", "unit": "un", "time_min": 20, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Tomada dupla encastrar", "unit": "un", "time_min": 25, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Interruptor simples", "unit": "un", "time_min": 15, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Comutador de escada", "unit": "un", "time_min": 20, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Ponto de luz completo", "unit": "un", "time_min": 30, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 10},
+    {"item": "Downlight LED encastrar", "unit": "un", "time_min": 25, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Projetor LED exterior", "unit": "un", "time_min": 35, "difficulty": "media", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Passagem de cabo (metro)", "unit": "m", "time_min": 3, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 10},
+    {"item": "Passagem de tubo embebido", "unit": "m", "time_min": 8, "difficulty": "media", "technician": "eletricista", "loss_pct": 10},
+    {"item": "Abertura de roco", "unit": "m", "time_min": 15, "difficulty": "alta", "technician": "eletricista", "loss_pct": 15},
+    {"item": "Quadro eletrico residencial", "unit": "un", "time_min": 240, "difficulty": "alta", "technician": "eletricista", "loss_pct": 10},
+    {"item": "Quadro eletrico industrial", "unit": "un", "time_min": 480, "difficulty": "muito_alta", "technician": "eletricista", "loss_pct": 15},
+    {"item": "Disjuntor/Diferencial", "unit": "un", "time_min": 10, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 0},
+    {"item": "Wallbox carregamento EV", "unit": "un", "time_min": 180, "difficulty": "alta", "technician": "eletricista", "loss_pct": 10},
+    {"item": "Painel solar (por painel)", "unit": "un", "time_min": 60, "difficulty": "alta", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Inversor solar", "unit": "un", "time_min": 120, "difficulty": "alta", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Ponto rede Cat6", "unit": "un", "time_min": 30, "difficulty": "media", "technician": "tecnico_ited", "loss_pct": 10},
+    {"item": "Ponto rede Cat5e", "unit": "un", "time_min": 25, "difficulty": "media", "technician": "tecnico_ited", "loss_pct": 10},
+    {"item": "Passagem cabo UTP", "unit": "m", "time_min": 3, "difficulty": "baixa", "technician": "tecnico_ited", "loss_pct": 10},
+    {"item": "Passagem fibra optica", "unit": "m", "time_min": 5, "difficulty": "media", "technician": "tecnico_ited", "loss_pct": 5},
+    {"item": "Fusao fibra optica", "unit": "un", "time_min": 15, "difficulty": "alta", "technician": "tecnico_ited", "loss_pct": 5},
+    {"item": "Montagem bastidor/rack", "unit": "un", "time_min": 240, "difficulty": "alta", "technician": "tecnico_ited", "loss_pct": 5},
+    {"item": "Camera IP CCTV", "unit": "un", "time_min": 90, "difficulty": "media", "technician": "tecnico_cctv", "loss_pct": 5},
+    {"item": "NVR/DVR configuracao", "unit": "un", "time_min": 120, "difficulty": "media", "technician": "tecnico_cctv", "loss_pct": 5},
+    {"item": "Detetor de intrusao", "unit": "un", "time_min": 30, "difficulty": "media", "technician": "tecnico_intrusao", "loss_pct": 5},
+    {"item": "Central de alarme", "unit": "un", "time_min": 180, "difficulty": "alta", "technician": "tecnico_intrusao", "loss_pct": 5},
+    {"item": "Videoporteiro", "unit": "un", "time_min": 120, "difficulty": "media", "technician": "tecnico_ited", "loss_pct": 5},
+    {"item": "Certificacao instalacao", "unit": "un", "time_min": 120, "difficulty": "media", "technician": "engenheiro", "loss_pct": 0},
+    {"item": "Sensor movimento PIR", "unit": "un", "time_min": 20, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 5},
+    {"item": "Fita LED por metro", "unit": "m", "time_min": 10, "difficulty": "baixa", "technician": "eletricista", "loss_pct": 10},
+]
+
+DEFAULT_SYSTEM_SETTINGS = {
+    "iva_rate": 23,
+    "min_margin": 15,
+    "target_margin": 30,
+    "indirect_costs": {
+        "deslocacao": 3, "ferramentas": 2, "consumiveis": 1.5,
+        "gestao_obra": 4, "supervisao": 3, "logistica": 2,
+        "seguros": 1.5, "administrativos": 3,
+    },
+    "risk_levels": {"baixo": 3, "medio": 5, "alto": 8, "muito_alto": 12},
+    "proposal_modes": {
+        "basico": {"margin_factor": 0.85, "risk": "baixo", "label": "Basico - Margem reduzida para fechar obra"},
+        "profissional": {"margin_factor": 1.0, "risk": "medio", "label": "Profissional - Margem equilibrada"},
+        "premium": {"margin_factor": 1.20, "risk": "alto", "label": "Premium - Margem alta com protecao"},
+    },
+    "company_info": {
+        "name": "Obelisco Radical", "subtitle": "Eletricidade & Telecomunicacoes",
+        "phone": "+351 911 132 401", "email": "obeliscoradical@gmail.com",
+        "website": "www.obeliscoradical.pt", "address": "Grande Lisboa", "nif": "",
+    },
+}
+
+
+# --- Pro Models ---
+
+class LaborInput(BaseModel):
+    type: str
+    description: str = ""
+    cost_hour: float = 0
+    sell_hour: float = 0
+    charges: str = ""
+    notes: str = ""
+
+class ProductivityInput(BaseModel):
+    item: str
+    unit: str = "un"
+    time_min: float = 0
+    difficulty: str = "media"
+    technician: str = "eletricista"
+    loss_pct: float = 5
+    notes: str = ""
+
+class MaterialInput(BaseModel):
+    code: str = ""
+    description: str
+    category: str = ""
+    subcategory: str = ""
+    brand: str = ""
+    supplier: str = ""
+    unit: str = "un"
+    purchase_price: float = 0
+    market_price: float = 0
+    waste_pct: float = 5
+    notes: str = ""
+    active: bool = True
+
+class SystemSettingsInput(BaseModel):
+    iva_rate: Optional[float] = None
+    min_margin: Optional[float] = None
+    target_margin: Optional[float] = None
+    indirect_costs: Optional[dict] = None
+    risk_levels: Optional[dict] = None
+    proposal_modes: Optional[dict] = None
+    company_info: Optional[dict] = None
+
+class ProBudgetItem(BaseModel):
+    category: str = ""
+    name: str = ""
+    quantity: float = 1
+    unit_cost: float = 0
+    margin: float = 0
+    specialty: str = "instalacoes_eletricas"
+    labor_type: str = "eletricista"
+    labor_cost_hour: float = 0
+    productivity_min: float = 0
+    waste_pct: float = 5
+    supply_type: str = "included"
+
+class ProBudgetCreate(BaseModel):
+    title: str
+    client_name: str
+    client_phone: str = ""
+    items: List[ProBudgetItem] = []
+    risk_level: str = "medio"
+    global_margin: float = 0
+    notes: str = ""
+
+
+# --- System Settings Endpoints ---
+
+@api_router.get("/system-settings")
+async def get_system_settings(user=Depends(get_current_user)):
+    s = await db.system_settings.find_one({}, {"_id": 0})
+    return s or DEFAULT_SYSTEM_SETTINGS
+
+@api_router.put("/system-settings")
+async def update_system_settings(input: SystemSettingsInput, user=Depends(get_current_user)):
+    data = {k: v for k, v in input.model_dump().items() if v is not None}
+    existing = await db.system_settings.find_one({})
+    if existing:
+        await db.system_settings.update_one({"_id": existing["_id"]}, {"$set": data})
+    else:
+        await db.system_settings.insert_one({**DEFAULT_SYSTEM_SETTINGS, **data})
+    return await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+
+@api_router.get("/specialties")
+async def get_specialties(user=Depends(get_current_user)):
+    return SPECIALTIES
+
+
+# --- Labor Endpoints ---
+
+@api_router.get("/labor")
+async def get_labor(user=Depends(get_current_user)):
+    items = await db.labor_db.find({}, {"_id": 0}).to_list(100)
+    return items
+
+@api_router.post("/labor")
+async def create_labor(input: LaborInput, user=Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), **input.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.labor_db.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/labor/{labor_id}")
+async def update_labor(labor_id: str, input: LaborInput, user=Depends(get_current_user)):
+    data = input.model_dump()
+    result = await db.labor_db.update_one({"id": labor_id}, {"$set": data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Tipo de mao de obra nao encontrado")
+    return await db.labor_db.find_one({"id": labor_id}, {"_id": 0})
+
+@api_router.delete("/labor/{labor_id}")
+async def delete_labor(labor_id: str, user=Depends(get_current_user)):
+    r = await db.labor_db.delete_one({"id": labor_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Eliminado"}
+
+
+# --- Productivity Endpoints ---
+
+@api_router.get("/productivity")
+async def get_productivity(user=Depends(get_current_user)):
+    items = await db.productivity_db.find({}, {"_id": 0}).to_list(500)
+    return items
+
+@api_router.post("/productivity")
+async def create_productivity(input: ProductivityInput, user=Depends(get_current_user)):
+    doc = {"id": str(uuid.uuid4()), **input.model_dump(), "created_at": datetime.now(timezone.utc).isoformat()}
+    await db.productivity_db.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/productivity/{prod_id}")
+async def update_productivity(prod_id: str, input: ProductivityInput, user=Depends(get_current_user)):
+    result = await db.productivity_db.update_one({"id": prod_id}, {"$set": input.model_dump()})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return await db.productivity_db.find_one({"id": prod_id}, {"_id": 0})
+
+@api_router.delete("/productivity/{prod_id}")
+async def delete_productivity(prod_id: str, user=Depends(get_current_user)):
+    r = await db.productivity_db.delete_one({"id": prod_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Eliminado"}
+
+
+# --- Materials DB Endpoints ---
+
+@api_router.get("/materials")
+async def get_materials(user=Depends(get_current_user)):
+    items = await db.materials_db.find({}, {"_id": 0}).sort("category", 1).to_list(2000)
+    return items
+
+@api_router.post("/materials")
+async def create_material(input: MaterialInput, user=Depends(get_current_user)):
+    doc = {
+        "id": str(uuid.uuid4()), **input.model_dump(),
+        "price_history": [{"price": input.purchase_price, "date": datetime.now(timezone.utc).isoformat()}],
+        "price_updated_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.materials_db.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.put("/materials/{mat_id}")
+async def update_material(mat_id: str, input: MaterialInput, user=Depends(get_current_user)):
+    old = await db.materials_db.find_one({"id": mat_id}, {"_id": 0})
+    if not old:
+        raise HTTPException(status_code=404, detail="Material nao encontrado")
+    data = input.model_dump()
+    # Keep price history
+    history = old.get("price_history", [])
+    if data["purchase_price"] != old.get("purchase_price", 0):
+        history.append({"price": data["purchase_price"], "date": datetime.now(timezone.utc).isoformat()})
+        data["price_updated_at"] = datetime.now(timezone.utc).isoformat()
+    data["price_history"] = history
+    await db.materials_db.update_one({"id": mat_id}, {"$set": data})
+    return await db.materials_db.find_one({"id": mat_id}, {"_id": 0})
+
+@api_router.delete("/materials/{mat_id}")
+async def delete_material(mat_id: str, user=Depends(get_current_user)):
+    r = await db.materials_db.delete_one({"id": mat_id})
+    if r.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Nao encontrado")
+    return {"message": "Eliminado"}
+
+
+# --- Budget Calculation Engine ---
+
+@api_router.post("/calculate-budget")
+async def calculate_budget(input: ProBudgetCreate, user=Depends(get_current_user)):
+    settings = await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+    labor_list = await db.labor_db.find({}, {"_id": 0}).to_list(100)
+    labor_map = {lb["type"]: lb for lb in labor_list}
+
+    iva_rate = settings.get("iva_rate", 23)
+    indirect_pcts = settings.get("indirect_costs", {})
+    total_indirect_pct = sum(indirect_pcts.values())
+    risk_pct = settings.get("risk_levels", {}).get(input.risk_level, 5)
+    global_margin = input.global_margin if input.global_margin > 0 else settings.get("target_margin", 30)
+
+    items_calc = []
+    specialty_totals = {}
+    total_material = 0
+    total_labor = 0
+    total_hours = 0
+    alerts = []
+
+    for item in input.items:
+        # Material cost
+        mat_cost = item.unit_cost * item.quantity * (1 + item.waste_pct / 100)
+
+        # Labor cost
+        labor_info = labor_map.get(item.labor_type, {})
+        cost_h = item.labor_cost_hour if item.labor_cost_hour > 0 else labor_info.get("cost_hour", 15)
+        sell_h = labor_info.get("sell_hour", 35)
+        prod_min = item.productivity_min if item.productivity_min > 0 else 20
+        time_hours = (item.quantity * prod_min) / 60
+        labor_cost = time_hours * cost_h
+        labor_sell = time_hours * sell_h
+
+        # Direct cost
+        direct = mat_cost + labor_cost
+
+        # Item margin (use item margin if set, otherwise global)
+        item_margin = item.margin if item.margin > 0 else global_margin
+
+        # Indirect costs for this item
+        indirect_val = direct * (total_indirect_pct / 100)
+        risk_val = (direct + indirect_val) * (risk_pct / 100)
+        subtotal = direct + indirect_val + risk_val
+        margin_val = subtotal * (item_margin / 100)
+        sale_price = subtotal + margin_val
+
+        total_material += mat_cost
+        total_labor += labor_cost
+        total_hours += time_hours
+
+        # Specialty aggregation
+        sp = item.specialty or "instalacoes_eletricas"
+        if sp not in specialty_totals:
+            specialty_totals[sp] = {"material": 0, "labor": 0, "direct": 0, "sale": 0, "hours": 0}
+        specialty_totals[sp]["material"] += mat_cost
+        specialty_totals[sp]["labor"] += labor_cost
+        specialty_totals[sp]["direct"] += direct
+        specialty_totals[sp]["sale"] += sale_price
+        specialty_totals[sp]["hours"] += time_hours
+
+        # Alerts per item
+        if item.unit_cost == 0:
+            alerts.append({"type": "warning", "msg": f"Item '{item.name}' sem preco de material"})
+        if item.productivity_min == 0:
+            alerts.append({"type": "info", "msg": f"Item '{item.name}' sem produtividade definida"})
+        if sale_price < direct:
+            alerts.append({"type": "danger", "msg": f"Item '{item.name}' com preco venda abaixo do custo!"})
+
+        items_calc.append({
+            "name": item.name, "category": item.category, "specialty": sp,
+            "quantity": item.quantity, "unit_cost": item.unit_cost,
+            "waste_pct": item.waste_pct, "material_cost": round(mat_cost, 2),
+            "labor_type": item.labor_type, "time_hours": round(time_hours, 2),
+            "labor_cost": round(labor_cost, 2), "labor_sell": round(labor_sell, 2),
+            "direct_cost": round(direct, 2), "indirect_cost": round(indirect_val, 2),
+            "risk_cost": round(risk_val, 2), "margin_pct": item_margin,
+            "margin_value": round(margin_val, 2), "sale_price": round(sale_price, 2),
+            "supply_type": item.supply_type,
+        })
+
+    total_direct = total_material + total_labor
+    total_indirect_val = total_direct * (total_indirect_pct / 100)
+    total_risk_val = (total_direct + total_indirect_val) * (risk_pct / 100)
+    subtotal_before_margin = total_direct + total_indirect_val + total_risk_val
+    total_margin_val = subtotal_before_margin * (global_margin / 100)
+    total_sale = subtotal_before_margin + total_margin_val
+    iva_val = total_sale * (iva_rate / 100)
+
+    if global_margin < settings.get("min_margin", 15):
+        alerts.append({"type": "danger", "msg": f"Margem global ({global_margin}%) abaixo do minimo ({settings.get('min_margin', 15)}%)"})
+    if total_sale < total_direct:
+        alerts.append({"type": "danger", "msg": "Preco de venda total abaixo do custo direto!"})
+    if risk_pct >= 8 and total_risk_val < total_direct * 0.05:
+        alerts.append({"type": "warning", "msg": "Risco alto mas provisao insuficiente"})
+
+    # Specialty name mapping
+    sp_names = {s["id"]: s["name"] for s in SPECIALTIES}
+    specialty_summary = []
+    for sp_id, totals in specialty_totals.items():
+        specialty_summary.append({"id": sp_id, "name": sp_names.get(sp_id, sp_id), **{k: round(v, 2) for k, v in totals.items()}})
+
+    return {
+        "items": items_calc,
+        "summary": {
+            "total_material": round(total_material, 2),
+            "total_labor": round(total_labor, 2),
+            "total_direct": round(total_direct, 2),
+            "total_indirect_pct": round(total_indirect_pct, 2),
+            "total_indirect": round(total_indirect_val, 2),
+            "indirect_breakdown": {k: round(total_direct * v / 100, 2) for k, v in indirect_pcts.items()},
+            "risk_level": input.risk_level,
+            "risk_pct": risk_pct,
+            "total_risk": round(total_risk_val, 2),
+            "subtotal_before_margin": round(subtotal_before_margin, 2),
+            "margin_pct": global_margin,
+            "total_margin": round(total_margin_val, 2),
+            "total_sale": round(total_sale, 2),
+            "iva_rate": iva_rate,
+            "iva_value": round(iva_val, 2),
+            "total_with_iva": round(total_sale + iva_val, 2),
+            "total_hours": round(total_hours, 2),
+            "by_specialty": specialty_summary,
+        },
+        "alerts": alerts,
+    }
+
+
+# --- Alerts Endpoint ---
+
+@api_router.get("/alerts")
+async def get_alerts(user=Depends(get_current_user)):
+    alerts = []
+    # Check budgets without proposals
+    drafts = await db.budgets.count_documents({"status": "rascunho"})
+    if drafts > 0:
+        alerts.append({"type": "info", "msg": f"{drafts} orcamento(s) em rascunho sem proposta gerada"})
+    # Check works over budget
+    works = await db.works.find({}, {"_id": 0, "title": 1, "predicted_cost": 1, "real_cost": 1, "status": 1}).to_list(100)
+    for w in works:
+        if w.get("real_cost", 0) > w.get("predicted_cost", 0) and w.get("predicted_cost", 0) > 0:
+            alerts.append({"type": "danger", "msg": f"Obra '{w.get('title', '')}' com custo real acima do previsto"})
+    # Check materials without price
+    no_price = await db.materials_db.count_documents({"purchase_price": 0, "active": True})
+    if no_price > 0:
+        alerts.append({"type": "warning", "msg": f"{no_price} material(is) sem preco definido"})
+    # Check productivities
+    no_prod = await db.productivity_db.count_documents({"time_min": 0})
+    if no_prod > 0:
+        alerts.append({"type": "warning", "msg": f"{no_prod} item(ns) sem produtividade definida"})
+    return alerts
+
+
+# --- Enhanced Dashboard ---
+
+@api_router.get("/dashboard/financial")
+async def get_financial_dashboard(user=Depends(get_current_user)):
+    sys_settings = await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+    works = await db.works.find({}, {"_id": 0}).to_list(500)
+    budgets = await db.budgets.find({}, {"_id": 0}).to_list(500)
+    proposals = await db.proposals.find({}, {"_id": 0}).to_list(500)
+
+    total_predicted = sum(w.get("predicted_cost", 0) for w in works)
+    total_real = sum(w.get("real_cost", 0) for w in works)
+    total_budget_value = sum(b.get("total_price", 0) for b in budgets)
+    total_proposals_value = sum(p.get("final_value", 0) for p in proposals)
+
+    materials_count = await db.materials_db.count_documents({"active": True})
+    labor_count = await db.labor_db.count_documents({})
+    productivity_count = await db.productivity_db.count_documents({})
+
+    return {
+        "settings": sys_settings,
+        "totals": {
+            "obras": len(works),
+            "orcamentos": len(budgets),
+            "propostas": len(proposals),
+            "predicted_revenue": round(total_predicted, 2),
+            "real_cost": round(total_real, 2),
+            "estimated_profit": round(total_predicted - total_real, 2),
+            "margin_pct": round(((total_predicted - total_real) / total_predicted * 100) if total_predicted > 0 else 0, 1),
+            "total_budget_value": round(total_budget_value, 2),
+            "total_proposals_value": round(total_proposals_value, 2),
+        },
+        "database": {
+            "materials": materials_count,
+            "labor_types": labor_count,
+            "productivities": productivity_count,
+        },
+    }
+
+
+# --- Seed Professional Data ---
+
+async def seed_professional_data():
+    # Seed labor
+    if await db.labor_db.count_documents({}) == 0:
+        for labor_item in DEFAULT_LABOR:
+            labor_doc = {**labor_item, "created_at": datetime.now(timezone.utc).isoformat()}
+            await db.labor_db.insert_one(labor_doc)
+        logger.info(f"Labor DB seeded: {len(DEFAULT_LABOR)} types")
+
+    # Seed productivity
+    if await db.productivity_db.count_documents({}) == 0:
+        for prod in DEFAULT_PRODUCTIVITIES:
+            p_doc = {"id": str(uuid.uuid4()), **prod, "notes": "", "created_at": datetime.now(timezone.utc).isoformat()}
+            await db.productivity_db.insert_one(p_doc)
+        logger.info(f"Productivity DB seeded: {len(DEFAULT_PRODUCTIVITIES)} items")
+
+    # Seed system settings
+    if await db.system_settings.count_documents({}) == 0:
+        await db.system_settings.insert_one(DEFAULT_SYSTEM_SETTINGS)
+        logger.info("System settings seeded")
+
+    # Seed materials from catalog
+    if await db.materials_db.count_documents({}) == 0:
+        count = 0
+        for cat in CATEGORIES_CATALOG:
+            for item in cat["items"]:
+                doc = {
+                    "id": str(uuid.uuid4()), "code": "", "description": item["name"],
+                    "category": cat["name"], "subcategory": "", "brand": "", "supplier": "",
+                    "unit": item.get("unit", "unidade"), "purchase_price": 0, "market_price": 0,
+                    "waste_pct": 5, "notes": "", "active": True,
+                    "price_history": [], "price_updated_at": "",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await db.materials_db.insert_one(doc)
+                count += 1
+        logger.info(f"Materials DB seeded: {count} items from catalog")
+
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@obelisco.pt")
     admin_password = os.environ.get("ADMIN_PASSWORD", "obelisco2024")
@@ -923,6 +1423,7 @@ async def seed_admin():
 @app.on_event("startup")
 async def startup():
     await seed_admin()
+    await seed_professional_data()
     logger.info("Obelisco Manager API iniciada")
 
 app.include_router(api_router)

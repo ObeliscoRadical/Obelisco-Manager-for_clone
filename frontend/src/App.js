@@ -8,6 +8,10 @@ import OrcamentosPage from "./pages/OrcamentosPage";
 import PropostasPage from "./pages/PropostasPage";
 import ObrasPage from "./pages/ObrasPage";
 import AgendaPage from "./pages/AgendaPage";
+import MateriaisPage from "./pages/MateriaisPage";
+import MaoDeObraPage from "./pages/MaoDeObraPage";
+import ProdutividadesPage from "./pages/ProdutividadesPage";
+import DefinicoesPage from "./pages/DefinicoesPage";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -55,6 +59,10 @@ function App() {
           <Route path="/propostas" element={<ProtectedRoute><PropostasPage /></ProtectedRoute>} />
           <Route path="/obras" element={<ProtectedRoute><ObrasPage /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute><AgendaPage /></ProtectedRoute>} />
+          <Route path="/materiais" element={<ProtectedRoute><MateriaisPage /></ProtectedRoute>} />
+          <Route path="/mao-de-obra" element={<ProtectedRoute><MaoDeObraPage /></ProtectedRoute>} />
+          <Route path="/produtividades" element={<ProtectedRoute><ProdutividadesPage /></ProtectedRoute>} />
+          <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
