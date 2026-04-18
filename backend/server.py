@@ -1786,118 +1786,241 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
         except (ValueError, TypeError):
             return default
 
-    # Try to detect header row and column mapping
-    header_map = {}
+    def is_numeric(val):
+        if val is None:
+            return False
+        if isinstance(val, (int, float)):
+            return True
+        try:
+            float(str(val).strip().replace(',', '.'))
+            return True
+        except (ValueError, TypeError):
+            return False
+
+    # Read all rows into memory for analysis
+    all_rows = []
+    for row in ws.iter_rows(values_only=True):
+        all_rows.append(list(row))
+
+    if not all_rows:
+        raise HTTPException(status_code=400, detail="Ficheiro vazio")
+
+    logger.info(f"Excel import: {len(all_rows)} rows, {len(all_rows[0])} cols in '{file.filename}'")
+    # Log first 3 rows for debug
+    for ri, row in enumerate(all_rows[:3]):
+        logger.info(f"  Row {ri}: {row}")
+
+    # STEP 1: Detect header row (must contain clear header keywords, not data)
+    UNIT_TOKENS = {'un', 'un.', 'und', 'und.', 'unid', 'uni', 'pc', 'pcs', 'mt', 'm', 'ml',
+                   'm2', 'm²', 'm3', 'm³', 'kg', 'g', 'h', 'hr', 'vg', 'gl', 'cj', 'kit',
+                   'lt', 'l', 'cx', 'par', 'rolo', 'saco'}
+
     header_keywords = {
-        'code': ['codigo', 'cod', 'ref', 'artigo', 'code', 'referencia'],
-        'category': ['categoria', 'cat.', 'tipo', 'group', 'grupo'],
-        'name': ['descricao', 'designacao', 'material', 'servico', 'item', 'nome'],
-        'unit': ['unidade', 'und.', 'unid'],
-        'quantity': ['quantidade', 'qtd', 'qty', 'quant', 'qt.', 'qt', 'qte'],
-        'cost': ['preco', 'custo', 'valor', 'unitario', 'price', 'cost', 'p.unit', 'eur'],
-        'margin': ['margem', 'margin', 'markup', 'lucro'],
+        'code': ['codigo', 'cod.', 'cod', 'ref.', 'referencia', 'artigo', 'code'],
+        'category': ['categoria', 'grupo', 'especialidade'],
+        'name': ['descricao', 'descrição', 'designacao', 'designação', 'descr', 'denominacao', 'descritivo'],
+        'unit': ['unidade', 'un.', 'und.', 'unid.'],
+        'quantity': ['quantidade', 'qtd', 'qtd.', 'qty', 'quant.', 'quant'],
+        'cost': ['preco', 'preço', 'custo', 'valor unit', 'p.unit', 'p.u.', 'pu', 'unitario', 'unitário', 'unit price'],
+        'total': ['total', 'subtotal', 'parcial', 'valor total'],
+        'margin': ['margem', 'margin', 'markup'],
     }
 
-    # Check first 3 rows for headers (some files have merged header rows)
-    header_row_num = 0
-    for check_row in range(1, min(4, ws.max_row + 1)):
-        row_cells = [str(c.value or '').lower().strip() for c in ws[check_row]]
+    header_map = {}
+    header_row_idx = -1
+
+    def cell_str(v):
+        return str(v or '').lower().strip()
+
+    for ri, row in enumerate(all_rows[:10]):
+        if not row or not any(row):
+            continue
+        row_str = [cell_str(c) for c in row]
+        # Header row MUST have multiple short non-numeric textual cells
+        text_cells = [c for c in row_str if c and not is_numeric(c) and len(c) < 40]
+        if len(text_cells) < 2:
+            continue
+
         temp_map = {}
-        for col_idx, cell_val in enumerate(row_cells):
-            if not cell_val:
+        for col_idx, cell_val in enumerate(row_str):
+            if not cell_val or len(cell_val) > 40 or is_numeric(cell_val):
                 continue
             for field, keywords in header_keywords.items():
                 if field in temp_map:
                     continue
-                # Exact match first
-                if cell_val in keywords:
+                if any(cell_val == kw or cell_val.startswith(kw) for kw in keywords):
                     temp_map[field] = col_idx
-                    continue
-                # Partial match
-                if any(kw in cell_val for kw in keywords):
-                    temp_map[field] = col_idx
-        # Use this row if it has at least 2 matches including name or quantity
-        if len(temp_map) >= 2 and ('name' in temp_map or 'quantity' in temp_map):
+                    break
+
+        # Must explicitly find a "name/descricao" keyword and at least one other header
+        if 'name' in temp_map and len(temp_map) >= 2:
             header_map = temp_map
-            header_row_num = check_row
+            header_row_idx = ri
             break
 
-    start_row = header_row_num + 1 if header_map else 1
-    logger.info(f"Excel import: header detected at row {header_row_num}, mapping: {header_map}")
+    logger.info(f"Excel import: header at row {header_row_idx}, map: {header_map}")
 
-    # If no headers detected, use smart defaults
+    # STEP 2: If no header, auto-detect by analyzing ALL data rows (column statistics)
+    data_start = header_row_idx + 1 if header_row_idx >= 0 else 0
+
     if not header_map:
-        # Try to figure out which columns have text vs numbers
-        sample_rows = list(ws.iter_rows(min_row=1, max_row=min(5, ws.max_row), values_only=True))
-        for row in sample_rows:
-            if not row or not any(row):
-                continue
-            cells = list(row)
-            # Find first numeric column (likely quantity or cost)
-            text_cols = []
-            num_cols = []
-            for ci, cv in enumerate(cells):
-                if cv is None:
+        max_cols = max((len(r) for r in all_rows), default=0)
+        col_stats = []  # per column: {numeric, text, unit_match, avg_len, total}
+        for ci in range(max_cols):
+            stats = {'numeric': 0, 'text': 0, 'unit': 0, 'avg_len': 0, 'total': 0, 'int_small': 0}
+            lens = []
+            for row in all_rows[data_start:]:
+                if ci >= len(row):
                     continue
-                if isinstance(cv, (int, float)):
-                    num_cols.append(ci)
-                else:
-                    text_cols.append(ci)
-            if text_cols and num_cols:
-                header_map['name'] = text_cols[0]
-                if len(text_cols) > 1:
-                    header_map['category'] = text_cols[0]
-                    header_map['name'] = text_cols[1]
-                if len(num_cols) >= 1:
-                    header_map['quantity'] = num_cols[0]
-                if len(num_cols) >= 2:
-                    header_map['cost'] = num_cols[1]
-                break
+                v = row[ci]
+                if v is None or (isinstance(v, str) and not v.strip()):
+                    continue
+                stats['total'] += 1
+                if isinstance(v, (int, float)):
+                    stats['numeric'] += 1
+                    if float(v) == int(v) and 0 < float(v) <= 9999:
+                        stats['int_small'] += 1
+                elif isinstance(v, str):
+                    s = v.strip()
+                    if is_numeric(s):
+                        stats['numeric'] += 1
+                    else:
+                        stats['text'] += 1
+                        lens.append(len(s))
+                        if s.lower() in UNIT_TOKENS:
+                            stats['unit'] += 1
+            if lens:
+                stats['avg_len'] = sum(lens) / len(lens)
+            col_stats.append(stats)
 
+        logger.info(f"Excel import: col_stats={col_stats}")
+
+        # Unit column = column where most text values are unit tokens
+        unit_col = None
+        best_unit_ratio = 0
+        for ci, s in enumerate(col_stats):
+            if s['text'] > 0 and s['unit'] / s['text'] >= 0.5:
+                ratio = s['unit'] / max(s['total'], 1)
+                if ratio > best_unit_ratio:
+                    best_unit_ratio = ratio
+                    unit_col = ci
+
+        # Name column = non-numeric column with largest avg text length (exclude unit col)
+        name_col = None
+        best_len = 0
+        for ci, s in enumerate(col_stats):
+            if ci == unit_col:
+                continue
+            if s['avg_len'] > best_len and s['text'] >= s['numeric'] and s['avg_len'] > 10:
+                best_len = s['avg_len']
+                name_col = ci
+
+        # Quantity column = first numeric column after the name col (or after unit col)
+        anchor = unit_col if unit_col is not None else name_col
+        qty_col = None
+        if anchor is not None:
+            for ci in range(anchor + 1, len(col_stats)):
+                s = col_stats[ci]
+                if s['numeric'] > 0 and s['numeric'] >= s['text']:
+                    qty_col = ci
+                    break
+        if qty_col is None:
+            # Fallback: any numeric column
+            for ci, s in enumerate(col_stats):
+                if ci in (name_col,) or ci == unit_col:
+                    continue
+                if s['numeric'] > 0:
+                    qty_col = ci
+                    break
+
+        # Cost column = next numeric column after quantity
+        cost_col = None
+        if qty_col is not None:
+            for ci in range(qty_col + 1, len(col_stats)):
+                s = col_stats[ci]
+                if s['numeric'] > 0:
+                    cost_col = ci
+                    break
+
+        if name_col is not None:
+            header_map['name'] = name_col
+        if unit_col is not None:
+            header_map['unit'] = unit_col
+        if qty_col is not None:
+            header_map['quantity'] = qty_col
+        if cost_col is not None:
+            header_map['cost'] = cost_col
+
+        logger.info(f"Excel import: auto-detected map: {header_map} (unit_col={unit_col}, name_col={name_col}, qty_col={qty_col}, cost_col={cost_col})")
+
+    # STEP 3: Extract items
     items = []
-    for row in ws.iter_rows(min_row=start_row, values_only=True):
+    name_idx = header_map.get('name')
+    code_idx = header_map.get('code')
+    cat_idx = header_map.get('category')
+    unit_idx = header_map.get('unit')
+    qty_idx = header_map.get('quantity')
+    cost_idx = header_map.get('cost')
+    margin_idx = header_map.get('margin')
+
+    for row in all_rows[data_start:]:
         if not row or not any(row):
             continue
         cells = list(row)
-        if len(cells) == 0:
-            continue
 
-        # Extract fields using header map
-        name_idx = header_map.get('name', None)
-        code_idx = header_map.get('code', None)
-        cat_idx = header_map.get('category', None)
-        qty_idx = header_map.get('quantity', None)
-        cost_idx = header_map.get('cost', None)
-        margin_idx = header_map.get('margin', None)
-
-        # Get name - prefer description over code
+        # Get name
         name = ''
-        if name_idx is not None and name_idx < len(cells):
-            name = str(cells[name_idx] or '').strip()
-        if not name and code_idx is not None and code_idx < len(cells):
-            name = str(cells[code_idx] or '').strip()
+        if name_idx is not None and name_idx < len(cells) and cells[name_idx]:
+            name = str(cells[name_idx]).strip()
+        if not name and code_idx is not None and code_idx < len(cells) and cells[code_idx]:
+            name = str(cells[code_idx]).strip()
         if not name:
-            # Try to find any text in the row
+            # Fallback: longest text cell in row, excluding unit tokens
+            longest = ''
             for cv in cells:
-                if cv and isinstance(cv, str) and len(cv.strip()) > 2:
-                    name = cv.strip()
-                    break
-        if not name:
+                if cv and isinstance(cv, str):
+                    s = cv.strip()
+                    if len(s) > len(longest) and s.lower() not in UNIT_TOKENS and not is_numeric(s):
+                        longest = s
+            name = longest
+        if not name or len(name) < 2:
             continue
 
-        category = str(cells[cat_idx] if cat_idx is not None and cat_idx < len(cells) else '').strip()
-        qty = try_float(cells[qty_idx] if qty_idx is not None and qty_idx < len(cells) else None, 1)
-        cost = try_float(cells[cost_idx] if cost_idx is not None and cost_idx < len(cells) else None, 0)
-        margin_val = try_float(cells[margin_idx] if margin_idx is not None and margin_idx < len(cells) else None, 0)
-        margin = margin_val / 100 if margin_val > 1 else (margin_val if margin_val > 0 else 0.6)
+        # Get unit
+        unit = ''
+        if unit_idx is not None and unit_idx < len(cells) and cells[unit_idx]:
+            unit = str(cells[unit_idx]).strip()
 
+        # Get quantity
+        qty = 1
+        if qty_idx is not None and qty_idx < len(cells):
+            qty = try_float(cells[qty_idx], 1)
         if qty <= 0:
             qty = 1
 
-        items.append({"category": category, "name": name, "quantity": qty, "unit_cost": cost, "margin": margin})
+        # Get cost
+        cost = 0
+        if cost_idx is not None and cost_idx < len(cells):
+            cost = try_float(cells[cost_idx], 0)
+
+        # Get category
+        category = ''
+        if cat_idx is not None and cat_idx < len(cells) and cells[cat_idx]:
+            val = cells[cat_idx]
+            if isinstance(val, str) and not is_numeric(val):
+                category = val.strip()
+
+        # Get margin
+        margin = 0.6
+        if margin_idx is not None and margin_idx < len(cells):
+            m = try_float(cells[margin_idx], 0)
+            margin = m / 100 if m > 1 else (m if m > 0 else 0.6)
+
+        items.append({"category": category, "name": name, "unit": unit, "quantity": qty, "unit_cost": cost, "margin": margin})
+        logger.info(f"  Item: '{name}' qty={qty} cost={cost}")
 
     if not items:
-        raise HTTPException(status_code=400, detail="Nenhum item encontrado no ficheiro. Verifique que o Excel tem colunas com descricao e quantidade.")
+        raise HTTPException(status_code=400, detail="Nenhum item encontrado. Verifique que o Excel tem colunas com descricao e quantidade.")
 
     total_cost = sum(i["unit_cost"] * i["quantity"] for i in items)
     total_price = sum(i["unit_cost"] * (1 + i["margin"]) * i["quantity"] for i in items)
@@ -1916,7 +2039,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
     }
     await db.budgets.insert_one(doc)
     doc.pop("_id", None)
-    logger.info(f"Excel imported: {len(items)} items from {file.filename}, columns detected: {header_map}")
+    logger.info(f"Excel imported: {len(items)} items, header_map={header_map}")
     return doc
 
 
