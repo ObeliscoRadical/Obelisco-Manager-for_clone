@@ -1702,31 +1702,115 @@ async def export_budget_excel(budget_id: str, user=Depends(get_current_user)):
 async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_current_user)):
     from openpyxl import load_workbook
     import io
+    import re
 
     if not file.filename.endswith(('.xlsx', '.xls')):
         raise HTTPException(status_code=400, detail="Ficheiro deve ser .xlsx ou .xls")
 
     content = await file.read()
-    wb = load_workbook(io.BytesIO(content))
+    wb = load_workbook(io.BytesIO(content), data_only=True)
     ws = wb.active
 
+    def try_float(val, default=0):
+        if val is None:
+            return default
+        if isinstance(val, (int, float)):
+            return float(val)
+        s = str(val).strip().replace(',', '.').replace('€', '').replace('EUR', '').replace('%', '').strip()
+        s = re.sub(r'[^\d.]', '', s)
+        try:
+            return float(s) if s else default
+        except (ValueError, TypeError):
+            return default
+
+    # Try to detect header row and column mapping
+    header_map = {}
+    header_keywords = {
+        'category': ['categoria', 'cat', 'tipo', 'group'],
+        'name': ['descricao', 'item', 'nome', 'designacao', 'material', 'artigo', 'servico'],
+        'unit': ['unidade', 'un', 'und', 'unit'],
+        'quantity': ['quantidade', 'qtd', 'qty', 'quant'],
+        'cost': ['preco', 'custo', 'valor', 'unitario', 'unit.', 'eur', 'price', 'cost'],
+        'margin': ['margem', 'margin', 'markup'],
+    }
+
+    # Check first row for headers
+    first_row = [str(c.value or '').lower().strip() for c in ws[1]]
+    for col_idx, cell_val in enumerate(first_row):
+        for field, keywords in header_keywords.items():
+            if any(kw in cell_val for kw in keywords):
+                if field not in header_map:
+                    header_map[field] = col_idx
+
+    start_row = 2 if header_map else 1
+
+    # If no headers detected, use smart defaults
+    if not header_map:
+        # Try to figure out which columns have text vs numbers
+        sample_rows = list(ws.iter_rows(min_row=1, max_row=min(5, ws.max_row), values_only=True))
+        for row in sample_rows:
+            if not row or not any(row):
+                continue
+            cells = list(row)
+            # Find first numeric column (likely quantity or cost)
+            text_cols = []
+            num_cols = []
+            for ci, cv in enumerate(cells):
+                if cv is None:
+                    continue
+                if isinstance(cv, (int, float)):
+                    num_cols.append(ci)
+                else:
+                    text_cols.append(ci)
+            if text_cols and num_cols:
+                header_map['name'] = text_cols[0]
+                if len(text_cols) > 1:
+                    header_map['category'] = text_cols[0]
+                    header_map['name'] = text_cols[1]
+                if len(num_cols) >= 1:
+                    header_map['quantity'] = num_cols[0]
+                if len(num_cols) >= 2:
+                    header_map['cost'] = num_cols[1]
+                break
+
     items = []
-    for row in ws.iter_rows(min_row=2, values_only=True):
+    for row in ws.iter_rows(min_row=start_row, values_only=True):
         if not row or not any(row):
             continue
         cells = list(row)
-        name = str(cells[0] or cells[1] or "").strip() if len(cells) > 1 else str(cells[0] or "").strip()
+        if len(cells) == 0:
+            continue
+
+        # Extract fields using header map
+        name_idx = header_map.get('name', 0)
+        cat_idx = header_map.get('category', None)
+        qty_idx = header_map.get('quantity', None)
+        cost_idx = header_map.get('cost', None)
+        margin_idx = header_map.get('margin', None)
+
+        name = str(cells[name_idx] if name_idx < len(cells) else '').strip() if name_idx is not None else ''
+        if not name:
+            # Try to find any text in the row
+            for cv in cells:
+                if cv and isinstance(cv, str) and len(cv.strip()) > 2:
+                    name = cv.strip()
+                    break
         if not name:
             continue
-        qty = float(cells[2]) if len(cells) > 2 and cells[2] else 1
-        cost = float(cells[3]) if len(cells) > 3 and cells[3] else 0
-        margin = float(cells[4]) / 100 if len(cells) > 4 and cells[4] and isinstance(cells[4], (int, float)) else 0.6
-        category = str(cells[0] or "") if len(cells) > 1 else ""
 
-        items.append({"category": category, "name": str(cells[1] or name), "quantity": qty, "unit_cost": cost, "margin": margin})
+        category = str(cells[cat_idx] if cat_idx is not None and cat_idx < len(cells) else '').strip()
+        qty = try_float(cells[qty_idx] if qty_idx is not None and qty_idx < len(cells) else None, 1)
+        cost = try_float(cells[cost_idx] if cost_idx is not None and cost_idx < len(cells) else None, 0)
+        margin_val = try_float(cells[margin_idx] if margin_idx is not None and margin_idx < len(cells) else None, 0)
+        margin = margin_val / 100 if margin_val > 1 else (margin_val if margin_val > 0 else 0.6)
+
+        if qty <= 0:
+            qty = 1
+
+        items.append({"category": category, "name": name, "quantity": qty, "unit_cost": cost, "margin": margin})
 
     if not items:
-        raise HTTPException(status_code=400, detail="Nenhum item encontrado no ficheiro")
+        raise HTTPException(status_code=400, detail="Nenhum item encontrado no ficheiro. Verifique que o Excel tem colunas com descricao e quantidade.")
 
     total_cost = sum(i["unit_cost"] * i["quantity"] for i in items)
     total_price = sum(i["unit_cost"] * (1 + i["margin"]) * i["quantity"] for i in items)
@@ -1745,6 +1829,7 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
     }
     await db.budgets.insert_one(doc)
     doc.pop("_id", None)
+    logger.info(f"Excel imported: {len(items)} items from {file.filename}, columns detected: {header_map}")
     return doc
 
 
