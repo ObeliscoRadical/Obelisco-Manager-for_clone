@@ -34,6 +34,16 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (v4) — Módulo Salarial Fase 1
+- **Novo módulo Salarios** (backend: `/app/backend/payroll.py`, 11 endpoints sob `/api/payroll`):
+  - **Funcionarios**: ficha completa (nome, NIF, NISS, IBAN, cargo, categoria, contrato, salário base, €/hora, sub.alimentação, horas semanais, extras: duodécimos/comissões/adiantamentos/descontos fixos, estado ativo)
+  - **Assiduidade**: registo diário por data + funcionário (tipos: normal, sábado, domingo, feriado, meio_dia, férias, falta justif., falta injust., baixa, formação, folga), com horas normais/extra/noturnas, obra associada. Calendário mensal visual.
+  - **Processamento Salarial**: cria run mensal → puxa assiduidade → calcula automaticamente salário base, horas extra (125%/137.5%/150%/200%), sub.alimentação, desc. SS 11%, desc. IRS progressivo, SS patronal 23.75%, custo total empresa. "Fechar mês" congela, "Reabrir" liberta edição.
+  - **Configurações Salariais**: todas as tabelas legais editáveis (SS%, IRS por escalões, SA/dia, multiplicadores OT, horários padrão).
+- **Sidebar**: nova secção "Salarios" com 4 links (Funcionarios, Assiduidade, Processamento, Config. Salariais).
+- **Defaults PT 2026**: SS 11%/23.75%, SA 6€/dia (cartão), OT 125/137.5/150/200, IRS em 7 escalões.
+- **Testado**: 64/64 (19 novos payroll tests). Caso real: 1200€ base + 22 dias → 1140€ líquido / 1617€ custo empresa.
+
 ### Feb 18, 2026 (v3)
 - **Feature**: Todas as propostas (Básico/Profissional/Premium) agora têm **garantia de 2 anos** uniforme (antes eram 1/2/5 anos).
 - **Feature**: "IVA NÃO incluído (a acrescer a taxa legal em vigor)" aparece obrigatoriamente no PDF em duas localizações: (a) descrição do tier da proposta, (b) condições gerais forçadas (mesmo que o utilizador remova das settings, o PDF injeta-as).
@@ -61,9 +71,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 ### P0 (Critical) - Done
 
 ### P1 (Important)
+- **Módulo Salarial Fase 2**: descontos manuais avançados, adiantamentos com saldo, **recibos PDF** por funcionário, envio email/WhatsApp, relatórios por funcionário
+- **Módulo Salarial Fase 3**: custo por obra (centro de custo), integração com Agenda, aprovação hierárquica, exportação Excel para contabilista, alertas (funcionário sem IBAN, excesso OT, etc)
 - Email integration (SendGrid/Resend) for sending proposals
-- WhatsApp via Twilio for sending proposals (currently only wa.me link)
-- ~~Google Maps for travel cost calculation~~ (DEFERRED by user)
+- WhatsApp via Twilio for sending proposals
 - Dashboard charts (Recharts)
 
 ### P2 (Nice to have)
