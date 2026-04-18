@@ -150,6 +150,48 @@ export default function OrcamentosPage() {
     return cat ? cat.items : [];
   };
 
+  const [searchingAll, setSearchingAll] = useState(false);
+
+  const searchAllPrices = async () => {
+    const itemsToSearch = items.filter(i => i.name && i.unit_cost === 0);
+    if (itemsToSearch.length === 0) {
+      toast.info('Todos os itens ja tem preco definido');
+      return;
+    }
+    setSearchingAll(true);
+    toast.info(`A pesquisar precos para ${itemsToSearch.length} itens...`, { duration: 3000 });
+
+    let found = 0;
+    let failed = 0;
+    for (let idx = 0; idx < items.length; idx++) {
+      const item = items[idx];
+      if (!item.name || item.unit_cost > 0) continue;
+
+      setSearchingPrice(prev => ({ ...prev, [item._key]: true }));
+      try {
+        const { data } = await api.post('/price-lookup', { item_name: item.name });
+        if (data.price > 0) {
+          setItems(prev => {
+            const next = [...prev];
+            next[idx] = { ...next[idx], unit_cost: data.price, margin: data.margin || 0.6 };
+            return next;
+          });
+          found++;
+        } else {
+          failed++;
+        }
+      } catch {
+        failed++;
+      } finally {
+        setSearchingPrice(prev => ({ ...prev, [item._key]: false }));
+      }
+    }
+
+    setSearchingAll(false);
+    if (found > 0) toast.success(`${found} preco(s) encontrado(s)${failed > 0 ? `, ${failed} sem resultado` : ''}`);
+    else toast.error('Nenhum preco encontrado');
+  };
+
   const totalCost = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * item.quantity, 0), [items]);
   const totalPrice = useMemo(() => items.reduce((sum, item) => sum + item.unit_cost * (1 + item.margin) * item.quantity, 0), [items]);
 
@@ -336,9 +378,22 @@ export default function OrcamentosPage() {
                   <Label className="text-zinc-300 text-base font-semibold">Itens do Orcamento</Label>
                   <p className="text-xs text-zinc-500 mt-0.5">Selecione categoria e item, ou escreva livremente. Clique na lupa para pesquisar precos.</p>
                 </div>
-                <Button data-testid="add-item-btn" onClick={addItem} variant="outline" size="sm" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-full text-xs">
-                  <Plus size={14} className="mr-1" /> Item
-                </Button>
+                <div className="flex gap-2">
+                  <Button
+                    data-testid="search-all-prices-btn"
+                    onClick={searchAllPrices}
+                    disabled={searchingAll}
+                    variant="outline"
+                    size="sm"
+                    className="border-yellow-400/50 text-yellow-400 hover:bg-yellow-400/10 rounded-full text-xs"
+                  >
+                    {searchingAll ? <Loader2 size={14} className="mr-1 animate-spin" /> : <Search size={14} className="mr-1" />}
+                    {searchingAll ? 'A pesquisar...' : 'Pesquisar Todos'}
+                  </Button>
+                  <Button data-testid="add-item-btn" onClick={addItem} variant="outline" size="sm" className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-full text-xs">
+                    <Plus size={14} className="mr-1" /> Item
+                  </Button>
+                </div>
               </div>
               <div className="space-y-3">
                 {items.map((item, idx) => {

@@ -1789,23 +1789,41 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
     # Try to detect header row and column mapping
     header_map = {}
     header_keywords = {
-        'category': ['categoria', 'cat', 'tipo', 'group'],
-        'name': ['descricao', 'item', 'nome', 'designacao', 'material', 'artigo', 'servico'],
-        'unit': ['unidade', 'un', 'und', 'unit'],
-        'quantity': ['quantidade', 'qtd', 'qty', 'quant'],
-        'cost': ['preco', 'custo', 'valor', 'unitario', 'unit.', 'eur', 'price', 'cost'],
-        'margin': ['margem', 'margin', 'markup'],
+        'code': ['codigo', 'cod', 'ref', 'artigo', 'code', 'referencia'],
+        'category': ['categoria', 'cat.', 'tipo', 'group', 'grupo'],
+        'name': ['descricao', 'designacao', 'material', 'servico', 'item', 'nome'],
+        'unit': ['unidade', 'und.', 'unid'],
+        'quantity': ['quantidade', 'qtd', 'qty', 'quant', 'qt.', 'qt', 'qte'],
+        'cost': ['preco', 'custo', 'valor', 'unitario', 'price', 'cost', 'p.unit', 'eur'],
+        'margin': ['margem', 'margin', 'markup', 'lucro'],
     }
 
-    # Check first row for headers
-    first_row = [str(c.value or '').lower().strip() for c in ws[1]]
-    for col_idx, cell_val in enumerate(first_row):
-        for field, keywords in header_keywords.items():
-            if any(kw in cell_val for kw in keywords):
-                if field not in header_map:
-                    header_map[field] = col_idx
+    # Check first 3 rows for headers (some files have merged header rows)
+    header_row_num = 0
+    for check_row in range(1, min(4, ws.max_row + 1)):
+        row_cells = [str(c.value or '').lower().strip() for c in ws[check_row]]
+        temp_map = {}
+        for col_idx, cell_val in enumerate(row_cells):
+            if not cell_val:
+                continue
+            for field, keywords in header_keywords.items():
+                if field in temp_map:
+                    continue
+                # Exact match first
+                if cell_val in keywords:
+                    temp_map[field] = col_idx
+                    continue
+                # Partial match
+                if any(kw in cell_val for kw in keywords):
+                    temp_map[field] = col_idx
+        # Use this row if it has at least 2 matches including name or quantity
+        if len(temp_map) >= 2 and ('name' in temp_map or 'quantity' in temp_map):
+            header_map = temp_map
+            header_row_num = check_row
+            break
 
-    start_row = 2 if header_map else 1
+    start_row = header_row_num + 1 if header_map else 1
+    logger.info(f"Excel import: header detected at row {header_row_num}, mapping: {header_map}")
 
     # If no headers detected, use smart defaults
     if not header_map:
@@ -1845,13 +1863,19 @@ async def import_budget_excel(file: UploadFile = File(...), user=Depends(get_cur
             continue
 
         # Extract fields using header map
-        name_idx = header_map.get('name', 0)
+        name_idx = header_map.get('name', None)
+        code_idx = header_map.get('code', None)
         cat_idx = header_map.get('category', None)
         qty_idx = header_map.get('quantity', None)
         cost_idx = header_map.get('cost', None)
         margin_idx = header_map.get('margin', None)
 
-        name = str(cells[name_idx] if name_idx < len(cells) else '').strip() if name_idx is not None else ''
+        # Get name - prefer description over code
+        name = ''
+        if name_idx is not None and name_idx < len(cells):
+            name = str(cells[name_idx] or '').strip()
+        if not name and code_idx is not None and code_idx < len(cells):
+            name = str(cells[code_idx] or '').strip()
         if not name:
             # Try to find any text in the row
             for cv in cells:
