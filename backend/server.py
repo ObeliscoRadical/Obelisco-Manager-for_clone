@@ -391,6 +391,77 @@ async def delete_proposal(proposal_id: str, user=Depends(get_current_user)):
     return {"message": "Proposta eliminada"}
 
 
+# --- Signature Endpoints ---
+
+@api_router.post("/proposals/{proposal_id}/sign-link")
+async def create_sign_link(proposal_id: str, user=Depends(get_current_user)):
+    proposal = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
+    # Generate or reuse existing token
+    token = proposal.get("sign_token")
+    if not token:
+        token = uuid.uuid4().hex
+        await db.proposals.update_one(
+            {"id": proposal_id},
+            {"$set": {
+                "sign_token": token,
+                "sign_status": proposal.get("sign_status") or "pending",
+                "sign_link_created_at": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+    return {"token": token, "sign_status": proposal.get("sign_status") or "pending"}
+
+
+# Public router (no auth) - mounted separately
+public_router = APIRouter(prefix="/api/public", tags=["public"])
+
+
+@public_router.get("/proposal/{token}")
+async def public_get_proposal(token: str):
+    proposal = await db.proposals.find_one({"sign_token": token}, {"_id": 0, "sign_token": 0})
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Link de proposta inválido ou expirado")
+    # Load settings for display (payment terms, etc)
+    settings_doc = await db.proposal_settings.find_one({}, {"_id": 0}) or {}
+    return {"proposal": proposal, "settings": settings_doc}
+
+
+class SignatureInput(BaseModel):
+    signature_data: str  # base64 PNG data URL
+    signed_by_name: str
+    signed_by_email: str = ""
+
+
+@public_router.post("/proposal/{token}/sign")
+async def public_sign_proposal(token: str, input: SignatureInput, request: Request):
+    proposal = await db.proposals.find_one({"sign_token": token}, {"_id": 0})
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Link de proposta inválido ou expirado")
+    if proposal.get("sign_status") == "signed":
+        raise HTTPException(status_code=400, detail="Proposta já foi assinada")
+    if not input.signature_data or not input.signature_data.startswith("data:image"):
+        raise HTTPException(status_code=400, detail="Assinatura inválida")
+    if not input.signed_by_name or len(input.signed_by_name.strip()) < 3:
+        raise HTTPException(status_code=400, detail="Nome de quem assina é obrigatório")
+
+    ip = request.client.host if request.client else ""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.proposals.update_one(
+        {"sign_token": token},
+        {"$set": {
+            "sign_status": "signed",
+            "signature_data": input.signature_data,
+            "signed_by_name": input.signed_by_name.strip(),
+            "signed_by_email": input.signed_by_email.strip(),
+            "signed_by_ip": ip,
+            "signed_at": now_iso,
+            "status": "aceite",
+        }}
+    )
+    return {"ok": True, "signed_at": now_iso}
+
+
 # --- Works Endpoints ---
 
 @api_router.get("/works")
@@ -2251,6 +2322,7 @@ async def startup():
     logger.info("Obelisco Manager API iniciada")
 
 app.include_router(api_router)
+app.include_router(public_router)
 
 # Payroll module
 from payroll import create_payroll_router

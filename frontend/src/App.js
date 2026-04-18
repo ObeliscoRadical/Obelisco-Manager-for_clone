@@ -19,6 +19,7 @@ import FuncionariosPage from "./pages/FuncionariosPage";
 import AssiduidadePage from "./pages/AssiduidadePage";
 import ProcessamentoSalarialPage from "./pages/ProcessamentoSalarialPage";
 import ConfiguracoesSalariaisPage from "./pages/ConfiguracoesSalariaisPage";
+import PublicSignPage from "./pages/PublicSignPage";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -61,6 +62,7 @@ function App() {
         <Toaster position="top-right" theme="dark" richColors />
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
+          <Route path="/p/:token" element={<PublicSignPage />} />
           <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
           <Route path="/orcamentos" element={<ProtectedRoute><OrcamentosPage /></ProtectedRoute>} />
           <Route path="/propostas" element={<ProtectedRoute><PropostasPage /></ProtectedRoute>} />

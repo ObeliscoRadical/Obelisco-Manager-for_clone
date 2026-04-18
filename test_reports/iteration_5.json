@@ -1,0 +1,92 @@
+{
+  "summary": "Completed comprehensive testing of Digital Signature feature. Backend: 79/79 tests passed (100%) including 15 new signature tests. Frontend: All signature flows working correctly - sign link generation, public signing page, signature canvas, confirmation display.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "PublicSignPage",
+        "issues": ["Console shows 401 errors from AuthContext trying to check auth on public page - cosmetic only, page works correctly"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_signature_feature.py",
+    "/app/backend/tests/test_obelisco_api.py",
+    "/app/backend/tests/test_payroll_module.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: PublicSignPage triggers AuthContext auth check which logs 401 errors to console - consider adding a flag to skip auth check on public routes"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_signature_feature.py"
+  ],
+  "success_rate": {
+    "backend": "100% (79/79 tests passed - 15 new signature + 64 existing)",
+    "frontend": "100% (all signature flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "Test proposals created during testing with TEST_ prefix. Some signed proposals exist for verification.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Digital Signature feature fully tested and working. Key verified flows: (1) POST /api/proposals/{id}/sign-link generates token (idempotent), (2) GET /api/public/proposal/{token} returns proposal without sign_token, (3) POST /api/public/proposal/{token}/sign validates signature_data and name, rejects re-sign, (4) Frontend PropostasPage shows 'Enviar para assinatura' button, sign link dialog with copy/WhatsApp, signed badge with name/date, (5) Frontend PublicSignPage loads without auth, shows proposal details, signature canvas, submit flow, confirmation.",
+  "features_tested": {
+    "backend_sign_link_auth_required": "PASS - Returns 401 without auth",
+    "backend_sign_link_generates_token": "PASS - Returns 32-char token",
+    "backend_sign_link_idempotent": "PASS - Same token on repeated calls",
+    "backend_public_get_no_auth": "PASS - Works without cookies/JWT",
+    "backend_public_get_excludes_sign_token": "PASS - sign_token not in response",
+    "backend_public_get_invalid_token": "PASS - Returns 404",
+    "backend_sign_invalid_signature_data": "PASS - Returns 400 for non-data:image",
+    "backend_sign_short_name": "PASS - Returns 400 for name < 3 chars",
+    "backend_sign_success": "PASS - Sets sign_status=signed, status=aceite, records IP/timestamp",
+    "backend_sign_re_sign_rejected": "PASS - Returns 400 if already signed",
+    "backend_signed_data_persisted": "PASS - All fields saved correctly",
+    "frontend_propostas_sign_link_button": "PASS - 'Enviar para assinatura' visible",
+    "frontend_sign_link_dialog": "PASS - Shows URL, copy button, WhatsApp button",
+    "frontend_signed_badge": "PASS - Green 'Assinada' badge with name/date",
+    "frontend_public_page_loads": "PASS - No auth required",
+    "frontend_public_page_content": "PASS - Shows title, client, value, description, items",
+    "frontend_signature_canvas": "PASS - Can draw with mouse",
+    "frontend_signature_clear": "PASS - 'Limpar assinatura' clears canvas",
+    "frontend_submit_disabled_until_drawn": "PASS - Button disabled until signature",
+    "frontend_sign_success_confirmation": "PASS - Shows 'Proposta Assinada!' with signature image",
+    "frontend_invalid_token_error": "PASS - Shows 'Link inválido' message",
+    "regression_proposals_list": "PASS",
+    "regression_budgets_list": "PASS",
+    "regression_works_list": "PASS",
+    "regression_payroll_summary": "PASS"
+  },
+  "data_testids_verified": {
+    "sign-link-[proposal_id]": "FOUND (21 buttons)",
+    "signed-badge-[proposal_id]": "FOUND (3 badges)",
+    "sign-link-url": "FOUND",
+    "copy-sign-link-btn": "FOUND",
+    "whatsapp-sign-btn": "FOUND",
+    "signature-canvas": "FOUND",
+    "signature-clear": "FOUND",
+    "sign-name": "FOUND",
+    "sign-email": "FOUND",
+    "sign-submit-btn": "FOUND",
+    "signed-confirmation": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "POST /api/proposals/{id}/sign-link (auth required)",
+    "GET /api/public/proposal/{token} (no auth)",
+    "POST /api/public/proposal/{token}/sign (no auth)",
+    "GET /api/proposals/{id} (auth - verify signed data)",
+    "GET /api/proposals (regression)",
+    "GET /api/budgets (regression)",
+    "GET /api/works (regression)",
+    "GET /api/payroll/summary (regression)"
+  ]
+}

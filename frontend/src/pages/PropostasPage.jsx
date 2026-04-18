@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Check, X } from 'lucide-react';
+import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Check, X, PenLine, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -252,6 +252,27 @@ async function generatePDF(proposal, settings, logoBase64) {
     });
   }
 
+  // ===== SIGNATURE BLOCK (if signed) =====
+  if (proposal.signature_data && proposal.sign_status === 'signed') {
+    const sigY = pageH - 58;
+    doc.setFillColor(250, 204, 21);
+    doc.roundedRect(15, sigY, pageW - 30, 26, 3, 3, 'F');
+    doc.setTextColor(9, 9, 11);
+    doc.setFontSize(7);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PROPOSTA ACEITE E ASSINADA PELO CLIENTE', 22, sigY + 5);
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Por: ${proposal.signed_by_name || ''}`, 22, sigY + 10);
+    const signedDate = proposal.signed_at ? new Date(proposal.signed_at).toLocaleString('pt-PT') : '';
+    doc.text(`Data: ${signedDate}`, 22, sigY + 14);
+    if (proposal.signed_by_email) doc.text(`Email: ${proposal.signed_by_email}`, 22, sigY + 18);
+    if (proposal.signed_by_ip) doc.text(`IP: ${proposal.signed_by_ip}`, 22, sigY + 22);
+    try {
+      doc.addImage(proposal.signature_data, 'PNG', pageW - 90, sigY + 2, 72, 22);
+    } catch (e) { console.error('Signature image error:', e.message); }
+  }
+
   // ===== FOOTER WITH QR CODE =====
   doc.setFillColor(9, 9, 11);
   doc.rect(0, pageH - 25, pageW, 25, 'F');
@@ -391,6 +412,33 @@ export default function PropostasPage() {
     } catch { toast.error('Erro ao criar obra'); }
   };
 
+  const [signLinkDialog, setSignLinkDialog] = useState({ open: false, proposal: null, token: '' });
+
+  const handleSignLink = async (proposal) => {
+    try {
+      const { data } = await api.post(`/proposals/${proposal.id}/sign-link`);
+      setSignLinkDialog({ open: true, proposal, token: data.token });
+    } catch {
+      toast.error('Erro ao criar link de assinatura');
+    }
+  };
+
+  const buildSignUrl = (token) => `${window.location.origin}/p/${token}`;
+
+  const copySignLink = (token) => {
+    navigator.clipboard.writeText(buildSignUrl(token));
+    toast.success('Link copiado!');
+  };
+
+  const shareWhatsAppSign = (proposal, token) => {
+    const phone = proposal.client_phone ? proposal.client_phone.replace(/\D/g, '') : '';
+    const link = buildSignUrl(token);
+    const msg = `Olá ${proposal.client_name}, segue a proposta "${proposal.title}" no valor de ${formatEuro(proposal.final_value)}. Para aceitar e assinar digitalmente aceda a: ${link}`;
+    const fullPhone = phone.startsWith('351') ? phone : (phone ? `351${phone}` : '');
+    const url = fullPhone ? `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}` : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  };
+
   const filtered = activeTab === 'all' ? proposals : proposals.filter(p => p.tier === activeTab);
   const grouped = filtered.reduce((acc, p) => {
     const key = p.budget_id || 'sem-orçamento';
@@ -449,7 +497,14 @@ export default function PropostasPage() {
                       <Card key={p.id} className="bg-zinc-900 border-zinc-800 rounded-3xl hover:shadow-[0_0_15px_rgba(250,204,21,0.15)] transition-all duration-300">
                         <CardContent className="p-6">
                           <div className="flex items-center justify-between mb-4">
-                            <Badge className={tierColors[p.tier]}>{p.label}</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge className={tierColors[p.tier]}>{p.label}</Badge>
+                              {p.sign_status === 'signed' && (
+                                <Badge className="bg-green-500/20 text-green-400 border-green-500/30 text-[10px]" data-testid={`signed-badge-${p.id}`}>
+                                  <Check size={10} className="mr-1" /> Assinada
+                                </Badge>
+                              )}
+                            </div>
                             <button data-testid={`delete-proposal-${p.id}`} onClick={() => handleDelete(p.id)} className="text-zinc-600 hover:text-red-400 transition"><Trash2 size={16} /></button>
                           </div>
                           <h3 className="text-lg font-bold text-white mb-1 truncate">{p.title}</h3>
@@ -461,6 +516,12 @@ export default function PropostasPage() {
                               <span className="text-2xl font-black text-yellow-400">{formatEuro(p.final_value)}</span>
                             </div>
                           </div>
+                          {p.sign_status === 'signed' && p.signed_by_name && (
+                            <div className="mt-3 p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-xs">
+                              <p className="text-green-400 font-semibold">Assinada por {p.signed_by_name}</p>
+                              <p className="text-zinc-500">{p.signed_at ? new Date(p.signed_at).toLocaleString('pt-PT') : ''}</p>
+                            </div>
+                          )}
                           <div className="mt-5 flex gap-2">
                             <Button data-testid={`export-pdf-${p.id}`} onClick={() => generatePDF(p, settings, logoBase64)} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">
                               <Download size={14} className="mr-1" /> PDF
@@ -469,6 +530,9 @@ export default function PropostasPage() {
                               <MessageCircle size={14} className="mr-1" /> WhatsApp
                             </Button>
                           </div>
+                          <Button data-testid={`sign-link-${p.id}`} onClick={() => handleSignLink(p)} variant="outline" size="sm" className="w-full mt-2 border-yellow-400/40 text-yellow-400 hover:bg-yellow-400/10 rounded-full text-xs">
+                            <PenLine size={14} className="mr-1" /> {p.sign_status === 'signed' ? 'Ver link de assinatura' : 'Enviar para assinatura'}
+                          </Button>
                           <Button data-testid={`create-work-${p.id}`} onClick={() => handleCreateWork(p.id)} variant="outline" size="sm" className="w-full mt-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-full text-xs">
                             <HardHat size={14} className="mr-1" /> Criar Obra
                           </Button>
@@ -601,6 +665,39 @@ export default function PropostasPage() {
               <Button data-testid="save-settings-btn" onClick={saveSettings} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
                 Guardar Definições
               </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Signature Link Dialog */}
+      <Dialog open={signLinkDialog.open} onOpenChange={(open) => setSignLinkDialog({ ...signLinkDialog, open })}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Link de Assinatura</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">Partilhe este link com o cliente. Ele poderá ver e assinar digitalmente a proposta no telemóvel ou computador.</DialogDescription>
+          </DialogHeader>
+          {signLinkDialog.token && (
+            <div className="space-y-4 mt-2">
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 break-all font-mono text-xs text-yellow-400" data-testid="sign-link-url">
+                {buildSignUrl(signLinkDialog.token)}
+              </div>
+              <div className="flex gap-2">
+                <Button data-testid="copy-sign-link-btn" onClick={() => copySignLink(signLinkDialog.token)} className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white rounded-full">
+                  <Copy size={14} className="mr-2" /> Copiar Link
+                </Button>
+                <Button data-testid="whatsapp-sign-btn" onClick={() => shareWhatsAppSign(signLinkDialog.proposal, signLinkDialog.token)} className="flex-1 bg-green-500 hover:bg-green-600 text-white rounded-full">
+                  <MessageCircle size={14} className="mr-2" /> Enviar WhatsApp
+                </Button>
+              </div>
+              {signLinkDialog.proposal?.sign_status === 'signed' ? (
+                <div className="p-3 rounded-xl bg-green-500/10 border border-green-500/30 text-green-400 text-sm">
+                  <strong>Já assinada</strong> por {signLinkDialog.proposal.signed_by_name}
+                  {signLinkDialog.proposal.signed_at && <span className="text-zinc-500"> em {new Date(signLinkDialog.proposal.signed_at).toLocaleString('pt-PT')}</span>}
+                </div>
+              ) : (
+                <p className="text-xs text-zinc-500 text-center">O link é único desta proposta e permanece válido até ser assinada.</p>
+              )}
             </div>
           )}
         </DialogContent>
