@@ -34,6 +34,11 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (later)
+- **Feature**: Budget-level discount system (both per-item AND global). Each item has its own `discount_type` (percentage/value) and `discount_value`. Global discount applies on top of subtotal. Discount does NOT appear as separate line in PDF - silently reduces final total (user choice).
+- **Feature**: Per-budget payment methods, conditions and observation notes (replaces global-only settings). Payment methods = multi-select chips; conditions = preset options + custom text; notes = free-form textarea. Validation enforces required payment fields before save. Proposals inherit budget's payment config, PDF uses per-proposal data (fallback to global settings).
+- **Testing**: 45/45 backend + frontend tests passed.
+
 ### Feb 18, 2026
 - **P0 FIX**: Excel import (`/api/budgets/import-excel`) now works with header-less Excel files (user's "Mapa Quantidades IEE+ITED+CCTV"). Rewrote auto-detection to use per-column statistics: detects unit column by matching values against known unit tokens (un/mt/ml/vg/m/m²/h/kg/etc), picks name as non-numeric column with longest avg text length (excluding unit col), picks quantity as first numeric column after anchor. Items now include `unit` field. 164 items correctly parsed with full descriptions, units, and quantities.
 - **P1 FIX**: `searchAllPrices` crash (`insertBefore` DOM error) resolved with batched state update (collect all prices first, then single setItems call).
@@ -53,7 +58,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 ### P1 (Important)
 - Email integration (SendGrid/Resend) for sending proposals
 - WhatsApp via Twilio for sending proposals (currently only wa.me link)
-- Google Maps for travel cost calculation
+- ~~Google Maps for travel cost calculation~~ (DEFERRED by user)
 - Dashboard charts (Recharts)
 
 ### P2 (Nice to have)
