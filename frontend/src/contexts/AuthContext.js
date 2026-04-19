@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import api from '../lib/api';
+import api, { tokenStore } from '../lib/api';
 
 const AuthContext = createContext(null);
 
@@ -25,6 +25,10 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
+    // Save tokens for header-based auth (works in iframes where cookies are blocked)
+    if (data.access_token || data.refresh_token) {
+      tokenStore.set(data.access_token, data.refresh_token);
+    }
     setUser(data);
     return data;
   }, []);
@@ -35,6 +39,7 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.error('Logout error:', err.message);
     }
+    tokenStore.clear();
     setUser(false);
   }, []);
 

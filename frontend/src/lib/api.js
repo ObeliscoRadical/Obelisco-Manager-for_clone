@@ -1,13 +1,46 @@
 import axios from 'axios';
 
+const ACCESS_KEY = 'obelisco_access_token';
+const REFRESH_KEY = 'obelisco_refresh_token';
+
+export const tokenStore = {
+  getAccess: () => {
+    try { return localStorage.getItem(ACCESS_KEY); } catch { return null; }
+  },
+  getRefresh: () => {
+    try { return localStorage.getItem(REFRESH_KEY); } catch { return null; }
+  },
+  set: (access, refresh) => {
+    try {
+      if (access) localStorage.setItem(ACCESS_KEY, access);
+      if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+    } catch { /* ignore */ }
+  },
+  clear: () => {
+    try {
+      localStorage.removeItem(ACCESS_KEY);
+      localStorage.removeItem(REFRESH_KEY);
+    } catch { /* ignore */ }
+  },
+};
+
 const api = axios.create({
   baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
   withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
+// Attach Bearer token from localStorage (works in iframes where cookies are blocked)
+api.interceptors.request.use((config) => {
+  const token = tokenStore.getAccess();
+  if (token) {
+    config.headers = config.headers || {};
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Auto-refresh access token on 401 and retry the original request once.
-// If refresh also fails, redirect to /login.
 let isRefreshing = false;
 let pendingQueue = [];
 
@@ -25,12 +58,10 @@ api.interceptors.response.use(
     const original = error.config;
     const status = error.response?.status;
 
-    // Do not try to refresh on the refresh/login endpoints themselves
     const isAuthEndpoint = original?.url?.includes('/auth/refresh') || original?.url?.includes('/auth/login') || original?.url?.includes('/auth/logout');
 
     if (status === 401 && !original._retry && !isAuthEndpoint) {
       if (isRefreshing) {
-        // Wait for the in-flight refresh, then retry
         return new Promise((resolve, reject) => {
           pendingQueue.push({ resolve: () => resolve(api(original)), reject });
         });
@@ -39,12 +70,15 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
       try {
-        await api.post('/auth/refresh');
+        const refreshToken = tokenStore.getRefresh();
+        const body = refreshToken ? { refresh_token: refreshToken } : {};
+        const { data } = await api.post('/auth/refresh', body);
+        if (data.access_token) tokenStore.set(data.access_token, null);
         processQueue(null);
         return api(original);
       } catch (refreshErr) {
+        tokenStore.clear();
         processQueue(refreshErr);
-        // Refresh failed - hard redirect to login
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/p/')) {
           window.location.href = '/login';
         }

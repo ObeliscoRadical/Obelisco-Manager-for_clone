@@ -177,7 +177,14 @@ async def login(input: LoginInput, response: Response):
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
 
-    return {"id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
+    return {
+        "id": user_id,
+        "email": user["email"],
+        "name": user["name"],
+        "role": user.get("role", "user"),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+    }
 
 @api_router.get("/auth/me")
 async def get_me(user=Depends(get_current_user)):
@@ -191,7 +198,14 @@ async def logout(response: Response):
 
 @api_router.post("/auth/refresh")
 async def refresh(request: Request, response: Response):
+    # Accept refresh token from cookie OR body (for iframe contexts where cookies are blocked)
     token = request.cookies.get("refresh_token")
+    if not token:
+        try:
+            body = await request.json()
+            token = body.get("refresh_token") if isinstance(body, dict) else None
+        except Exception:
+            token = None
     if not token:
         raise HTTPException(status_code=401, detail="Sem refresh token")
     try:
@@ -204,7 +218,13 @@ async def refresh(request: Request, response: Response):
         user_id = str(user["_id"])
         access_token = create_access_token(user_id, user["email"])
         response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
-        return {"id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
+        return {
+            "id": user_id,
+            "email": user["email"],
+            "name": user["name"],
+            "role": user.get("role", "user"),
+            "access_token": access_token,
+        }
     except Exception:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
