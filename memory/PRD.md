@@ -34,6 +34,15 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (v7) — Módulo Despesas / Mini-ERP com IA
+- **Novo módulo Custos** (`/app/backend/expenses.py`): CRUD de despesas, classificação por 13 categorias PT, tipo (fixo/variável/obra), associação a obra (centro de custo), cálculo automático IVA (6/13/23%).
+- **Upload de Faturas com IA** (Gemini 2.5 Pro): aceita PDF/JPG/PNG/WEBP. Extrai automaticamente: fornecedor, NIF, nº fatura, data, valor líquido/IVA/total, categoria. Zero digitação manual quando a IA acerta.
+- **Dashboard Custos**: KPIs (total ano, mês atual, IVA pago, total despesas), gráfico de barras 12 meses, top 5 categorias, filtros (mês/ano/categoria/tipo).
+- **Sidebar**: novo item "Despesas" 💰.
+- **BUG FIX**: Sidebar tinha paths com acentos (`/orçamentos`, `/negociação`) causando navegação → fallback Dashboard. Corrigido (paths sem acentos, labels com acentos).
+- **BUG FIX**: Cookies bloqueados em iframes (Safari/Chrome ITP). Implementado Bearer token + localStorage + refresh automático.
+- **Testado**: 111/111 (32 novos testes de despesas).
+
 ### Feb 18, 2026 (v6) — Assinatura Digital do Cliente
 - **Feature**: Cliente assina a proposta digitalmente via link público (sem login).
   - Botão "Enviar para assinatura" em cada cartão → gera token único → mostra URL + botões "Copiar" e "Enviar WhatsApp" com mensagem pré-feita.
