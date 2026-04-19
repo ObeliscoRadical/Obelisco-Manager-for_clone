@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
@@ -14,6 +14,10 @@ const navItems = [
   { path: '/despesas', label: 'Despesas', icon: Receipt },
   { path: '/faturas', label: 'Faturas', icon: FileCheck },
   { path: '/financeiro', label: 'Financeiro', icon: LineChart },
+];
+
+const externalItems = [
+  { href: 'https://tech-app-obelisco.emergent.host/widget', label: 'Inserir Pedidos', icon: Inbox },
 ];
 
 const salariosItems = [
@@ -79,6 +83,21 @@ export default function Sidebar() {
             </Link>
           );
         })}
+
+        {externalItems.map(item => (
+          <a
+            key={item.href}
+            href={item.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-testid={`nav-external-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-all duration-300 group"
+          >
+            <item.icon size={20} />
+            <span className="text-sm font-medium flex-1">{item.label}</span>
+            <ExternalLink size={14} className="text-zinc-600 group-hover:text-zinc-400" />
+          </a>
+        ))}
 
         <div className="pt-3 mt-3 border-t border-zinc-800">
           <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salários</p>
