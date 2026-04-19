@@ -174,8 +174,8 @@ async def login(input: LoginInput, response: Response):
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
 
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
 
     return {"id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
 
@@ -203,7 +203,7 @@ async def refresh(request: Request, response: Response):
             raise HTTPException(status_code=401, detail="Utilizador não encontrado")
         user_id = str(user["_id"])
         access_token = create_access_token(user_id, user["email"])
-        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=3600, path="/")
+        response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
         return {"id": user_id, "email": user["email"], "name": user["name"], "role": user.get("role", "user")}
     except Exception:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
