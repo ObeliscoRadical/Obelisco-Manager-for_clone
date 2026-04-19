@@ -175,7 +175,7 @@ export default function AssiduidadePage() {
                       <div className="text-[10px] text-white font-medium truncate">{meta.label}</div>
                       {rec.normal_hours > 0 && <div className="text-[10px] text-white/80">{rec.normal_hours}h</div>}
                       {rec.overtime_hours > 0 && <div className="text-[10px] text-yellow-300 font-semibold">+{rec.overtime_hours}h</div>}
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(rec.id); }} className="absolute top-1 right-1 text-white/60 hover:text-red-300"><Trash2 size={10} /></button>
+                      <span onClick={(e) => { e.stopPropagation(); handleDelete(rec.id); }} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') handleDelete(rec.id); }} className="absolute top-1 right-1 text-white/60 hover:text-red-300 cursor-pointer"><Trash2 size={10} /></span>
                     </div>
                   )}
                 </button>
