@@ -67,6 +67,8 @@ export default function OrcamentosPage() {
     finally { setLoading(false); }
   }, []);
 
+  const [materials, setMaterials] = useState([]);
+
   const fetchCategories = useCallback(async () => {
     try {
       const { data } = await api.get('/categories');
@@ -76,7 +78,28 @@ export default function OrcamentosPage() {
     }
   }, []);
 
-  useEffect(() => { fetchBudgets(); fetchCategories(); }, [fetchBudgets, fetchCategories]);
+  const fetchMaterials = useCallback(async () => {
+    try {
+      const { data } = await api.get('/materials');
+      setMaterials(data);
+    } catch (err) {
+      console.error('Materials fetch error:', err.message);
+    }
+  }, []);
+
+  useEffect(() => { fetchBudgets(); fetchCategories(); fetchMaterials(); }, [fetchBudgets, fetchCategories, fetchMaterials]);
+
+  // Helper: find stock for an item name (match by description or name)
+  const getStockForItem = (itemName) => {
+    if (!itemName) return null;
+    const match = materials.find(m => (m.description || '').toLowerCase().trim() === itemName.toLowerCase().trim());
+    if (!match) return null;
+    return {
+      current: match.stock_current || 0,
+      min: match.stock_min || 0,
+      unit: match.unit || 'un',
+    };
+  };
 
   const openNew = () => {
     setEditingBudget(null);
@@ -485,7 +508,22 @@ export default function OrcamentosPage() {
                           </div>
                         </div>
                         <div>
-                          <label className="text-xs text-zinc-500 mb-1 block">Item</label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs text-zinc-500 block">Item</label>
+                            {(() => {
+                              const stock = getStockForItem(item.name);
+                              if (!stock) return null;
+                              const insufficient = item.quantity > stock.current;
+                              const low = stock.min > 0 && stock.current <= stock.min;
+                              return (
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  insufficient ? 'bg-red-500/20 text-red-400' : low ? 'bg-yellow-500/20 text-yellow-400' : 'bg-green-500/20 text-green-400'
+                                }`} title={insufficient ? `Stock insuficiente (${stock.current} ${stock.unit})` : `Stock: ${stock.current} ${stock.unit}`}>
+                                  📦 {stock.current} {stock.unit}{insufficient ? ' ⚠' : ''}
+                                </span>
+                              );
+                            })()}
+                          </div>
                           {catItems.length > 0 && !item._customName ? (
                             <div className="relative">
                               <select

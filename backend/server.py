@@ -1219,8 +1219,18 @@ class MaterialInput(BaseModel):
     purchase_price: float = 0
     market_price: float = 0
     waste_pct: float = 5
+    stock_current: float = 0
+    stock_min: float = 0
     notes: str = ""
     active: bool = True
+
+class StockMovementInput(BaseModel):
+    material_id: str
+    movement_type: str    # "entrada" or "saida"
+    quantity: float
+    reason: str = ""         # compra, consumo obra, ajuste, devolucao
+    obra_id: Optional[str] = None
+    notes: str = ""
 
 class SystemSettingsInput(BaseModel):
     iva_rate: Optional[float] = None
@@ -1375,6 +1385,58 @@ async def delete_material(mat_id: str, user=Depends(get_current_user)):
     if r.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Nao encontrado")
     return {"message": "Eliminado"}
+
+
+# --- Stock Movements ---
+
+@api_router.post("/stock/movement")
+async def create_stock_movement(input: StockMovementInput, user=Depends(get_current_user)):
+    material = await db.materials_db.find_one({"id": input.material_id}, {"_id": 0})
+    if not material:
+        raise HTTPException(status_code=404, detail="Material não encontrado")
+    if input.quantity <= 0:
+        raise HTTPException(status_code=400, detail="Quantidade deve ser maior que zero")
+    if input.movement_type not in ("entrada", "saida"):
+        raise HTTPException(status_code=400, detail="Tipo de movimento inválido (entrada/saida)")
+
+    current = material.get("stock_current", 0) or 0
+    delta = input.quantity if input.movement_type == "entrada" else -input.quantity
+    new_stock = current + delta
+    if new_stock < 0:
+        raise HTTPException(status_code=400, detail=f"Stock insuficiente. Disponível: {current} {material.get('unit','un')}")
+
+    mov = {
+        "id": str(uuid.uuid4()),
+        "material_id": input.material_id,
+        "material_name": material.get("description", ""),
+        "movement_type": input.movement_type,
+        "quantity": input.quantity,
+        "stock_before": current,
+        "stock_after": new_stock,
+        "reason": input.reason,
+        "obra_id": input.obra_id,
+        "notes": input.notes,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user["id"],
+        "created_by_name": user.get("name", ""),
+    }
+    await db.stock_movements.insert_one(mov)
+    await db.materials_db.update_one({"id": input.material_id}, {"$set": {"stock_current": new_stock}})
+    mov.pop("_id", None)
+    return mov
+
+@api_router.get("/stock/movements")
+async def list_stock_movements(material_id: Optional[str] = None, user=Depends(get_current_user)):
+    q = {"material_id": material_id} if material_id else {}
+    movs = await db.stock_movements.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return movs
+
+@api_router.get("/stock/low")
+async def list_low_stock(user=Depends(get_current_user)):
+    """Materials where current stock <= min stock (and min > 0)"""
+    mats = await db.materials_db.find({"stock_min": {"$gt": 0}}, {"_id": 0}).to_list(2000)
+    low = [m for m in mats if (m.get("stock_current", 0) or 0) <= (m.get("stock_min", 0) or 0)]
+    return low
 
 
 # --- Budget Calculation Engine ---
@@ -2351,6 +2413,10 @@ app.include_router(create_payroll_router(db, get_current_user))
 # Expenses / Custos module
 from expenses import create_expenses_router
 app.include_router(create_expenses_router(db, get_current_user))
+
+# Invoices / Faturacao module
+from invoices import create_invoices_router
+app.include_router(create_invoices_router(db, get_current_user))
 
 app.add_middleware(
     CORSMiddleware,

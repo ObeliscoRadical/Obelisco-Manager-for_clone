@@ -6,10 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Search, Package } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Package, ArrowDown, ArrowUp, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
+
+const emptyForm = { code: '', description: '', category: '', subcategory: '', brand: '', supplier: '', unit: 'unidade', purchase_price: 0, market_price: 0, waste_pct: 5, stock_current: 0, stock_min: 0, notes: '', active: true };
 
 export default function MateriaisPage() {
   const [materials, setMaterials] = useState([]);
@@ -18,7 +20,10 @@ export default function MateriaisPage() {
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [filterCat, setFilterCat] = useState('');
-  const [form, setForm] = useState({ code: '', description: '', category: '', subcategory: '', brand: '', supplier: '', unit: 'unidade', purchase_price: 0, market_price: 0, waste_pct: 5, notes: '', active: true });
+  const [form, setForm] = useState(emptyForm);
+  const [stockDialog, setStockDialog] = useState({ open: false, material: null, type: 'entrada' });
+  const [stockQty, setStockQty] = useState(0);
+  const [stockReason, setStockReason] = useState('');
 
   const fetchMaterials = useCallback(async () => {
     try { const { data } = await api.get('/materials'); setMaterials(data); }
@@ -39,8 +44,29 @@ export default function MateriaisPage() {
     return true;
   });
 
-  const openNew = () => { setEditing(null); setForm({ code: '', description: '', category: '', subcategory: '', brand: '', supplier: '', unit: 'unidade', purchase_price: 0, market_price: 0, waste_pct: 5, notes: '', active: true }); setDialogOpen(true); };
-  const openEdit = (m) => { setEditing(m); setForm({ code: m.code || '', description: m.description, category: m.category || '', subcategory: m.subcategory || '', brand: m.brand || '', supplier: m.supplier || '', unit: m.unit || 'unidade', purchase_price: m.purchase_price || 0, market_price: m.market_price || 0, waste_pct: m.waste_pct || 5, notes: m.notes || '', active: m.active !== false }); setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
+  const openEdit = (m) => { setEditing(m); setForm({ ...emptyForm, ...m }); setDialogOpen(true); };
+
+  const openStock = (material, type) => {
+    setStockDialog({ open: true, material, type });
+    setStockQty(0);
+    setStockReason(type === 'entrada' ? 'Compra' : 'Consumo obra');
+  };
+
+  const handleStockMovement = async () => {
+    if (!stockQty || stockQty <= 0) { toast.error('Quantidade inválida'); return; }
+    try {
+      await api.post('/stock/movement', {
+        material_id: stockDialog.material.id,
+        movement_type: stockDialog.type,
+        quantity: stockQty,
+        reason: stockReason,
+      });
+      toast.success(`${stockDialog.type === 'entrada' ? 'Entrada' : 'Saída'} registada`);
+      setStockDialog({ open: false, material: null, type: 'entrada' });
+      fetchMaterials();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erro no movimento'); }
+  };
 
   const handleSave = async () => {
     if (!form.description) { toast.error('Preencha a descrição'); return; }
@@ -92,25 +118,39 @@ export default function MateriaisPage() {
                 <TableHead className="text-zinc-400 text-xs uppercase">Categoria</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Unid.</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Preco Compra</TableHead>
+                <TableHead className="text-zinc-400 text-xs uppercase text-center">Stock</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase">Desp. %</TableHead>
                 <TableHead className="text-zinc-400 text-xs uppercase text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.slice(0, 100).map(m => (
+              {filtered.slice(0, 100).map(m => {
+                const stock = m.stock_current || 0;
+                const min = m.stock_min || 0;
+                const low = min > 0 && stock <= min;
+                return (
                 <TableRow key={m.id} className="border-zinc-800/50 hover:bg-zinc-800/30">
                   <TableCell className="text-zinc-500 text-xs font-mono">{m.code || '-'}</TableCell>
                   <TableCell className="text-white text-sm font-medium">{m.description}</TableCell>
                   <TableCell><Badge className="bg-zinc-800 text-zinc-300 text-xs">{m.category || '-'}</Badge></TableCell>
                   <TableCell className="text-zinc-400 text-sm">{m.unit}</TableCell>
                   <TableCell className={`text-sm font-medium ${m.purchase_price > 0 ? 'text-yellow-400' : 'text-red-400'}`}>{m.purchase_price > 0 ? formatEuro(m.purchase_price) : 'Sem preco'}</TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      {low && <AlertTriangle size={12} className="text-red-400" />}
+                      <span className={`text-sm font-bold ${low ? 'text-red-400' : stock > 0 ? 'text-green-400' : 'text-zinc-500'}`}>{stock} {m.unit}</span>
+                    </div>
+                    {min > 0 && <p className="text-[10px] text-zinc-600">min: {min}</p>}
+                  </TableCell>
                   <TableCell className="text-zinc-400 text-sm">{m.waste_pct}%</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right whitespace-nowrap">
+                    <button onClick={() => openStock(m, 'entrada')} className="text-green-400 hover:text-green-300 p-1" title="Entrada de stock"><ArrowDown size={14} /></button>
+                    <button onClick={() => openStock(m, 'saida')} className="text-orange-400 hover:text-orange-300 p-1" title="Saída de stock"><ArrowUp size={14} /></button>
                     <button onClick={() => openEdit(m)} className="text-zinc-500 hover:text-white p-1"><Pencil size={14} /></button>
                     <button onClick={() => handleDelete(m.id)} className="text-zinc-500 hover:text-red-400 p-1 ml-1"><Trash2 size={14} /></button>
                   </TableCell>
                 </TableRow>
-              ))}
+              );})}
             </TableBody>
           </Table>
           {filtered.length > 100 && <p className="text-zinc-500 text-xs text-center py-2">A mostrar 100 de {filtered.length} materiais</p>}
@@ -143,8 +183,57 @@ export default function MateriaisPage() {
               <div><Label className="text-zinc-300 text-sm">Preco Mercado (EUR)</Label><Input type="number" step="0.01" value={form.market_price} onChange={e => setForm({ ...form, market_price: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
               <div><Label className="text-zinc-300 text-sm">Desperdicio (%)</Label><Input type="number" step="0.5" value={form.waste_pct} onChange={e => setForm({ ...form, waste_pct: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             </div>
+            <div className="grid grid-cols-2 gap-4 p-3 rounded-xl bg-zinc-900/50 border border-zinc-800">
+              <div><Label className="text-zinc-300 text-sm">📦 Stock atual</Label><Input type="number" step="0.5" value={form.stock_current} onChange={e => setForm({ ...form, stock_current: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-700 text-white rounded-xl" /></div>
+              <div><Label className="text-zinc-300 text-sm">Stock mínimo (alerta)</Label><Input type="number" step="0.5" value={form.stock_min} onChange={e => setForm({ ...form, stock_min: parseFloat(e.target.value) || 0 })} className="mt-1 bg-zinc-900 border-zinc-700 text-white rounded-xl" placeholder="0 = sem alerta" /></div>
+            </div>
             <div><Label className="text-zinc-300 text-sm">Observações</Label><Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" /></div>
             <Button onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">Guardar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stock Movement Dialog */}
+      <Dialog open={stockDialog.open} onOpenChange={(o) => setStockDialog({ ...stockDialog, open: o })}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black uppercase text-white">
+              {stockDialog.type === 'entrada' ? '⬇️ Entrada' : '⬆️ Saída'} de Stock
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-xs">
+              {stockDialog.material?.description} | Stock atual: <span className="text-yellow-400 font-bold">{stockDialog.material?.stock_current || 0} {stockDialog.material?.unit}</span>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-3 mt-2">
+            <div>
+              <Label className="text-zinc-400 text-xs">Quantidade</Label>
+              <Input data-testid="stock-qty" type="number" step="0.5" value={stockQty} onChange={e => setStockQty(parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1 font-bold" autoFocus />
+            </div>
+            <div>
+              <Label className="text-zinc-400 text-xs">Motivo</Label>
+              <select value={stockReason} onChange={e => setStockReason(e.target.value)} className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm">
+                {stockDialog.type === 'entrada' ? (
+                  <>
+                    <option>Compra</option>
+                    <option>Devolução cliente</option>
+                    <option>Ajuste inventário</option>
+                    <option>Outros</option>
+                  </>
+                ) : (
+                  <>
+                    <option>Consumo obra</option>
+                    <option>Devolução fornecedor</option>
+                    <option>Perda/Quebra</option>
+                    <option>Ajuste inventário</option>
+                    <option>Outros</option>
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setStockDialog({ ...stockDialog, open: false })} className="border-zinc-700 text-zinc-300">Cancelar</Button>
+            <Button data-testid="confirm-stock-btn" onClick={handleStockMovement} className={`${stockDialog.type === 'entrada' ? 'bg-green-500 hover:bg-green-600' : 'bg-orange-500 hover:bg-orange-600'} text-white font-semibold`}>Confirmar</Button>
           </div>
         </DialogContent>
       </Dialog>
