@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
-import { TrendingUp, TrendingDown, Euro, AlertTriangle, Calendar, PieChart as PieIcon, ArrowDownRight, ArrowUpRight, Wallet, Receipt } from 'lucide-react';
+import { TrendingUp, TrendingDown, Euro, AlertTriangle, Calendar, PieChart as PieIcon, ArrowDownRight, ArrowUpRight, Wallet, Receipt, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -10,18 +10,31 @@ const PIE_COLORS = ['#facc15', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#10b
 
 export default function DashboardFinanceiroPage() {
   const [data, setData] = useState(null);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(''); // '' = all year
+  const [client, setClient] = useState('');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/dashboard/cashflow', { params: { year } });
-      setData(data);
+      const [dataRes, clientsRes] = await Promise.all([
+        api.get('/dashboard/cashflow', {
+          params: {
+            year,
+            month: month || undefined,
+            client: client || undefined,
+          },
+        }),
+        api.get('/invoices/clients'),
+      ]);
+      setData(dataRes.data);
+      setClients(clientsRes.data);
     } catch {
       toast.error('Erro ao carregar dashboard financeiro');
     } finally { setLoading(false); }
-  }, [year]);
+  }, [year, month, client]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -33,6 +46,8 @@ export default function DashboardFinanceiroPage() {
   const cm = data.current_month;
   const f = data.forecast_30d;
   const col = data.collection;
+  const clientActive = data.client_filter_active;
+  const monthActive = !!data.month;
 
   const chartData = data.monthly.map(m => ({
     name: MONTHS[m.month - 1],
@@ -47,6 +62,9 @@ export default function DashboardFinanceiroPage() {
   const cmColor = cm.net >= 0 ? 'text-green-400' : 'text-red-400';
   const forecastColor = f.projected_net >= 0 ? 'text-green-400' : 'text-red-400';
 
+  const clearFilters = () => { setMonth(''); setClient(''); };
+  const hasFilter = monthActive || clientActive;
+
   return (
     <div data-testid="dashboard-financeiro" className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -54,35 +72,78 @@ export default function DashboardFinanceiroPage() {
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Dashboard Financeiro</h1>
           <p className="text-zinc-400 mt-1 font-medium">Entradas vs Saídas · Margem mensal · Previsão 30 dias</p>
         </div>
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-zinc-500 uppercase tracking-wider">Ano</label>
+      </div>
+
+      {/* Filters bar */}
+      <div className="flex items-end gap-3 flex-wrap p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Ano</label>
           <select
             data-testid="year-select"
             value={year}
             onChange={e => setYear(parseInt(e.target.value))}
-            className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm"
+            className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[100px]"
           >
             {[year + 1, year, year - 1, year - 2].map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Mês</label>
+          <select
+            data-testid="month-select"
+            value={month}
+            onChange={e => setMonth(e.target.value)}
+            className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[140px]"
+          >
+            <option value="">Todos (ano)</option>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[220px]">
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Cliente</label>
+          <select
+            data-testid="client-select"
+            value={client}
+            onChange={e => setClient(e.target.value)}
+            className="h-10 w-full bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm"
+          >
+            <option value="">Todos os clientes</option>
+            {clients.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        {hasFilter && (
+          <button
+            data-testid="clear-filters"
+            onClick={clearFilters}
+            className="h-10 px-4 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-xs font-semibold flex items-center gap-1"
+          >
+            <X size={14} /> Limpar filtros
+          </button>
+        )}
       </div>
+
+      {clientActive && (
+        <div data-testid="client-filter-banner" className="px-4 py-2 rounded-lg bg-purple-500/10 border border-purple-500/30 text-xs text-purple-300">
+          <b>Filtro por cliente ativo:</b> as despesas e salários não são específicos de cliente — só estão visíveis métricas de faturação deste cliente.
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div data-testid="kpi-entries" className="p-4 rounded-2xl bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30">
-          <p className="text-xs uppercase tracking-wider text-green-400/80 font-medium flex items-center gap-1"><ArrowUpRight size={12} /> Entradas (ano)</p>
+          <p className="text-xs uppercase tracking-wider text-green-400/80 font-medium flex items-center gap-1"><ArrowUpRight size={12} /> Entradas ({data.scope_label})</p>
           <p className="text-2xl font-black text-green-400 mt-1">{formatEuro(t.entries)}</p>
           <p className="text-xs text-zinc-500 mt-0.5">Recebido de faturas</p>
         </div>
         <div data-testid="kpi-exits" className="p-4 rounded-2xl bg-gradient-to-br from-red-500/10 to-red-500/5 border border-red-500/30">
-          <p className="text-xs uppercase tracking-wider text-red-400/80 font-medium flex items-center gap-1"><ArrowDownRight size={12} /> Saídas (ano)</p>
-          <p className="text-2xl font-black text-red-400 mt-1">{formatEuro(t.exits)}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">Despesas {formatEuro(t.exits_expenses)} · Salários {formatEuro(t.exits_payroll)}</p>
+          <p className="text-xs uppercase tracking-wider text-red-400/80 font-medium flex items-center gap-1"><ArrowDownRight size={12} /> Saídas ({data.scope_label})</p>
+          <p className="text-2xl font-black text-red-400 mt-1">{clientActive ? '—' : formatEuro(t.exits)}</p>
+          <p className="text-xs text-zinc-500 mt-0.5">{clientActive ? 'N/A com filtro de cliente' : `Despesas ${formatEuro(t.exits_expenses)} · Salários ${formatEuro(t.exits_payroll)}`}</p>
         </div>
         <div data-testid="kpi-net" className={`p-4 rounded-2xl bg-gradient-to-br ${t.net >= 0 ? 'from-yellow-400/10 to-yellow-400/5 border-yellow-400/30' : 'from-red-500/10 to-red-500/5 border-red-500/30'} border`}>
-          <p className="text-xs uppercase tracking-wider text-zinc-400 font-medium flex items-center gap-1"><Wallet size={12} /> Resultado líquido</p>
+          <p className="text-xs uppercase tracking-wider text-zinc-400 font-medium flex items-center gap-1"><Wallet size={12} /> {clientActive ? 'Recebido deste cliente' : 'Resultado líquido'}</p>
           <p className={`text-2xl font-black mt-1 ${marginColor}`}>{formatEuro(t.net)}</p>
-          <p className="text-xs text-zinc-500 mt-0.5">Margem: <span className={marginColor}>{t.margin_pct}%</span></p>
+          <p className="text-xs text-zinc-500 mt-0.5">{clientActive ? `Emitido: ${formatEuro(t.emitted_year)}` : <>Margem: <span className={marginColor}>{t.margin_pct}%</span></>}</p>
         </div>
         <div data-testid="kpi-collection" className="p-4 rounded-2xl bg-gradient-to-br from-orange-500/10 to-orange-500/5 border border-orange-500/30">
           <p className="text-xs uppercase tracking-wider text-orange-400/80 font-medium flex items-center gap-1"><AlertTriangle size={12} /> A receber</p>
@@ -152,7 +213,9 @@ export default function DashboardFinanceiroPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div data-testid="categories-card" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
           <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3 flex items-center gap-1"><PieIcon size={12} /> Top categorias de despesa</p>
-          {pieData.length === 0 ? (
+          {clientActive ? (
+            <p className="text-sm text-zinc-500 py-8 text-center">Não aplicável com filtro de cliente.</p>
+          ) : pieData.length === 0 ? (
             <p className="text-sm text-zinc-500 py-8 text-center">Sem despesas registadas.</p>
           ) : (
             <div style={{ width: '100%', height: 260 }}>

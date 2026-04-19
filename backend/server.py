@@ -1632,10 +1632,17 @@ async def get_financial_dashboard(user=Depends(get_current_user)):
 
 
 @api_router.get("/dashboard/cashflow")
-async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_current_user)):
+async def get_cashflow_dashboard(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    client: Optional[str] = None,
+    user=Depends(get_current_user),
+):
     """Unified financial dashboard: entries (invoice payments) vs exits (expenses + payroll),
-    monthly breakdown, top expense categories, pending collections, 30-day forecast."""
+    monthly breakdown, top expense categories, pending collections, 30-day forecast.
+    Filters: year (default current), month (optional, narrows KPIs), client (optional, narrows invoice-side metrics)."""
     from datetime import date as _date_cls, timedelta as _timedelta
+    import re as _re
 
     now = datetime.now(timezone.utc)
     y = year or now.year
@@ -1644,14 +1651,26 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
     today_dt = _date_cls.fromisoformat(today)
     horizon = (today_dt + _timedelta(days=30)).isoformat()
 
-    invoices = await db.invoices.find({}, {"_id": 0}).to_list(5000)
-    expenses = await db.expenses.find({"date": {"$regex": f"^{prefix}"}}, {"_id": 0}).to_list(5000)
-    payroll_runs = await db.payroll_runs.find({"year": y}, {"_id": 0}).to_list(500)
+    client_filter = (client or "").strip()
+    client_active = bool(client_filter)
+
+    # Load invoices (optionally filtered by client)
+    inv_q = {}
+    if client_active:
+        inv_q["client_name"] = {"$regex": _re.escape(client_filter), "$options": "i"}
+    invoices = await db.invoices.find(inv_q, {"_id": 0}).to_list(5000)
+
+    # Expenses & payroll only make sense when NOT filtering by client (they are company-wide)
+    if client_active:
+        expenses = []
+        payroll_runs = []
+    else:
+        expenses = await db.expenses.find({"date": {"$regex": f"^{prefix}"}}, {"_id": 0}).to_list(5000)
+        payroll_runs = await db.payroll_runs.find({"year": y}, {"_id": 0}).to_list(500)
 
     by_month = {m: {"entries": 0.0, "expenses": 0.0, "payroll": 0.0} for m in range(1, 13)}
     by_category = {}
 
-    # Entries = sum of invoice payments by payment.date (within year)
     pending_collection = 0.0
     overdue_collection = 0.0
     upcoming_due = []
@@ -1666,12 +1685,10 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
         total = float(inv.get("value_total", 0) or 0)
         balance = round(total - paid, 2)
         due = (inv.get("due_date") or "")[:10]
-        # Pending / overdue (snapshot, regardless of year)
         if balance > 0.01:
             pending_collection += balance
             if due and due < today:
                 overdue_collection += balance
-            # Upcoming due window (next 30 days, not yet overdue)
             if due and today <= due <= horizon:
                 upcoming_due.append({
                     "id": inv.get("id"),
@@ -1681,7 +1698,6 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
                     "balance": balance,
                 })
                 upcoming_due_total += balance
-        # Entries by payment date within the year
         for p in inv.get("payments", []):
             pdate = (p.get("date") or "")[:10]
             if pdate.startswith(prefix):
@@ -1691,7 +1707,6 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
                 except Exception:
                     pass
 
-    # Exits (expenses)
     for e in expenses:
         try:
             m = int((e.get("date") or "")[5:7])
@@ -1703,18 +1718,16 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
         cat = e.get("category") or "Outros"
         by_category[cat] = round(by_category.get(cat, 0) + gross, 2)
 
-    # Exits (payroll) - use custo_total_empresa per run month
     for r in payroll_runs:
         m = int(r.get("month", 0) or 0)
         cost = float(r.get("total_custo_empresa", 0) or 0)
         if m:
             by_month[m]["payroll"] = round(by_month[m]["payroll"] + cost, 2)
 
-    # Build monthly list
     monthly = []
-    total_entries = 0.0
-    total_exits_expenses = 0.0
-    total_exits_payroll = 0.0
+    total_entries_year = 0.0
+    total_exits_expenses_year = 0.0
+    total_exits_payroll_year = 0.0
     for m in range(1, 13):
         d = by_month[m]
         exits = round(d["expenses"] + d["payroll"], 2)
@@ -1727,22 +1740,35 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
             "exits": exits,
             "net": net,
         })
-        total_entries += d["entries"]
-        total_exits_expenses += d["expenses"]
-        total_exits_payroll += d["payroll"]
+        total_entries_year += d["entries"]
+        total_exits_expenses_year += d["expenses"]
+        total_exits_payroll_year += d["payroll"]
 
-    total_exits = total_exits_expenses + total_exits_payroll
-    net_year = total_entries - total_exits
-    margin_pct = round((net_year / total_entries * 100) if total_entries > 0 else 0, 1)
+    # KPI scope: if month filter set, scope totals to that month; else full year
+    if month and 1 <= month <= 12:
+        scoped = by_month[month]
+        scope_entries = scoped["entries"]
+        scope_exp = scoped["expenses"]
+        scope_pay = scoped["payroll"]
+        scope_label = f"{y:04d}-{month:02d}"
+    else:
+        scope_entries = total_entries_year
+        scope_exp = total_exits_expenses_year
+        scope_pay = total_exits_payroll_year
+        scope_label = f"{y:04d}"
 
-    current_month = now.month if now.year == y else 12
-    cm = by_month.get(current_month, {"entries": 0, "expenses": 0, "payroll": 0})
+    scope_exits = scope_exp + scope_pay
+    scope_net = scope_entries - scope_exits
+    scope_margin_pct = round((scope_net / scope_entries * 100) if scope_entries > 0 else 0, 1)
+
+    current_month_num = month if (month and 1 <= month <= 12) else (now.month if now.year == y else 12)
+    cm = by_month.get(current_month_num, {"entries": 0, "expenses": 0, "payroll": 0})
     cm_exits = round(cm["expenses"] + cm["payroll"], 2)
     cm_net = round(cm["entries"] - cm_exits, 2)
 
-    # Forecast 30d: average of last up-to-3 complete months (months with any activity)
+    # Forecast: last up-to-3 months with activity before current_month_num
     def _last_n_avg(key, n=3):
-        months_with_data = [by_month[mm][key] for mm in range(1, current_month)
+        months_with_data = [by_month[mm][key] for mm in range(1, current_month_num)
                             if (by_month[mm]["entries"] + by_month[mm]["expenses"] + by_month[mm]["payroll"]) > 0]
         tail = months_with_data[-n:] if months_with_data else []
         return round(sum(tail) / len(tail), 2) if tail else 0.0
@@ -1754,7 +1780,6 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
     projected_exits = round(avg_expenses + avg_payroll, 2)
     projected_net = round(projected_entries - projected_exits, 2)
 
-    # Top categories (sorted)
     top_categories = sorted(
         [{"category": k, "value": v} for k, v in by_category.items()],
         key=lambda x: x["value"], reverse=True
@@ -1764,17 +1789,21 @@ async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_cu
 
     return {
         "year": y,
+        "month": month if (month and 1 <= month <= 12) else None,
+        "client": client_filter or None,
+        "client_filter_active": client_active,
+        "scope_label": scope_label,
         "totals": {
-            "entries": round(total_entries, 2),
-            "exits_expenses": round(total_exits_expenses, 2),
-            "exits_payroll": round(total_exits_payroll, 2),
-            "exits": round(total_exits, 2),
-            "net": round(net_year, 2),
-            "margin_pct": margin_pct,
+            "entries": round(scope_entries, 2),
+            "exits_expenses": round(scope_exp, 2),
+            "exits_payroll": round(scope_pay, 2),
+            "exits": round(scope_exits, 2),
+            "net": round(scope_net, 2),
+            "margin_pct": scope_margin_pct,
             "emitted_year": round(total_emitted_year, 2),
         },
         "current_month": {
-            "month": current_month,
+            "month": current_month_num,
             "entries": round(cm["entries"], 2),
             "expenses": round(cm["expenses"], 2),
             "payroll": round(cm["payroll"], 2),

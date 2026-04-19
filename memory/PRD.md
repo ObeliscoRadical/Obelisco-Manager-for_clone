@@ -34,6 +34,13 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 19, 2026 (v11) — Filtros Mês + Cliente (Financeiro e Faturas)
+- **Backend `invoices.py`**: param `client` (regex case-insensitive) adicionado a `GET /api/invoices` e `GET /api/invoices/summary`; `summary` aceita também `year`/`month`. Novo endpoint `GET /api/invoices/clients` devolve lista ordenada de nomes distintos para dropdown.
+- **Backend `/api/dashboard/cashflow`**: novos params `month` e `client`. Quando `month` definido, KPIs/mês actual escopados ao mês; gráfico mantém 12 meses para contexto. Quando `client` definido, despesas e salários zerados (não são client-specific) e só são calculadas métricas de faturação desse cliente; devolve flag `client_filter_active` + `scope_label`.
+- **Frontend `DashboardFinanceiroPage.jsx`**: barra de filtros (Ano/Mês/Cliente + "Limpar filtros"), banner avisa quando filtro de cliente está activo, KPIs adaptam-se ao scope; card de categorias oculto quando cliente activo.
+- **Frontend `FaturasPage.jsx`**: barra de filtros (Ano/Mês/Cliente + "Limpar filtros"). Summary e lista actualizam em tempo real.
+- Validado via curl (cliente case-insensitive, month scoping correcto, summary filtrado OK) e screenshots de ambas as páginas com filtros aplicados.
+
 ### Feb 19, 2026 (v10) — Dashboard Financeiro Unificado
 - **Novo endpoint** `GET /api/dashboard/cashflow?year=YYYY` (`server.py`): agrega invoices (pagamentos por data = entradas), expenses (saídas variáveis/fixas/obra), payroll_runs (salários custo total empresa). Devolve:
   - `totals`: entradas/saídas/resultado/margem % do ano

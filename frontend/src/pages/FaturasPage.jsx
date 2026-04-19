@@ -34,11 +34,17 @@ const addDays = (dateStr, days) => {
   return d.toISOString().slice(0, 10);
 };
 
+const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
 export default function FaturasPage() {
   const [invoices, setInvoices] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState('');
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear());
+  const [filterMonth, setFilterMonth] = useState('');
+  const [filterClient, setFilterClient] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
@@ -51,16 +57,24 @@ export default function FaturasPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [invRes, sumRes] = await Promise.all([
-        api.get('/invoices', { params: { status: filterStatus || undefined } }),
-        api.get('/invoices/summary'),
+      const params = {
+        status: filterStatus || undefined,
+        year: filterYear || undefined,
+        month: filterMonth || undefined,
+        client: filterClient || undefined,
+      };
+      const [invRes, sumRes, cliRes] = await Promise.all([
+        api.get('/invoices', { params }),
+        api.get('/invoices/summary', { params: { year: params.year, month: params.month, client: params.client } }),
+        api.get('/invoices/clients'),
       ]);
       setInvoices(invRes.data);
       setSummary(sumRes.data);
+      setClients(cliRes.data);
     } catch {
       toast.error('Erro ao carregar faturas');
     } finally { setLoading(false); }
-  }, [filterStatus]);
+  }, [filterStatus, filterYear, filterMonth, filterClient]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -246,6 +260,53 @@ export default function FaturasPage() {
           </div>
         </div>
       )}
+
+      <div className="flex flex-wrap items-end gap-3 p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800">
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Ano</label>
+          <select
+            data-testid="filter-year"
+            value={filterYear}
+            onChange={e => setFilterYear(parseInt(e.target.value))}
+            className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[100px]"
+          >
+            {[filterYear + 1, filterYear, filterYear - 1, filterYear - 2].map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Mês</label>
+          <select
+            data-testid="filter-month"
+            value={filterMonth}
+            onChange={e => setFilterMonth(e.target.value)}
+            className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[140px]"
+          >
+            <option value="">Todos</option>
+            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+          </select>
+        </div>
+        <div className="flex-1 min-w-[220px]">
+          <label className="text-[10px] text-zinc-500 uppercase tracking-wider block mb-1">Cliente</label>
+          <select
+            data-testid="filter-client"
+            value={filterClient}
+            onChange={e => setFilterClient(e.target.value)}
+            className="h-10 w-full bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm"
+          >
+            <option value="">Todos os clientes</option>
+            {clients.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        {(filterMonth || filterClient) && (
+          <button
+            data-testid="clear-filters"
+            onClick={() => { setFilterMonth(''); setFilterClient(''); }}
+            className="h-10 px-4 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-xs font-semibold"
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
 
       <div className="flex gap-2 flex-wrap">
         {[

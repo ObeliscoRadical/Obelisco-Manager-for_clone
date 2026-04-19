@@ -224,6 +224,7 @@ def create_invoices_router(db, get_current_user):
         status: Optional[str] = None,
         year: Optional[int] = None,
         month: Optional[int] = None,
+        client: Optional[str] = None,
         user=Depends(get_current_user),
     ):
         q = {}
@@ -231,15 +232,35 @@ def create_invoices_router(db, get_current_user):
             q["issue_date"] = {"$regex": f"^{year:04d}-{month:02d}"}
         elif year:
             q["issue_date"] = {"$regex": f"^{year:04d}"}
+        if client:
+            q["client_name"] = {"$regex": client.strip(), "$options": "i"}
         items = await db.invoices.find(q, {"_id": 0}).sort("due_date", 1).to_list(2000)
         items = [compute_status(i) for i in items]
         if status:
             items = [i for i in items if i["status"].startswith(status) or (status == "vencida" and i["status"].startswith("vencida"))]
         return items
 
+    @invoices_router.get("/clients")
+    async def list_clients(user=Depends(get_current_user)):
+        """Distinct list of client names used in invoices, for filter dropdowns."""
+        names = await db.invoices.distinct("client_name")
+        return sorted([n for n in names if n], key=lambda s: s.lower())
+
     @invoices_router.get("/summary")
-    async def summary(user=Depends(get_current_user)):
-        items = await db.invoices.find({}, {"_id": 0}).to_list(5000)
+    async def summary(
+        year: Optional[int] = None,
+        month: Optional[int] = None,
+        client: Optional[str] = None,
+        user=Depends(get_current_user),
+    ):
+        q = {}
+        if year and month:
+            q["issue_date"] = {"$regex": f"^{year:04d}-{month:02d}"}
+        elif year:
+            q["issue_date"] = {"$regex": f"^{year:04d}"}
+        if client:
+            q["client_name"] = {"$regex": client.strip(), "$options": "i"}
+        items = await db.invoices.find(q, {"_id": 0}).to_list(5000)
         items = [compute_status(i) for i in items]
         total_emitido = sum(i.get("value_total", 0) or 0 for i in items)
         total_recebido = sum(i.get("amount_paid", 0) or 0 for i in items)
