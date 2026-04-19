@@ -6,15 +6,15 @@ const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-46
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/orçamentos', label: 'Orçamentos', icon: FileText },
+  { path: '/orcamentos', label: 'Orçamentos', icon: FileText },
   { path: '/propostas', label: 'Propostas', icon: ClipboardList },
-  { path: '/negociação', label: 'Negociação', icon: HandCoins },
+  { path: '/negociacao', label: 'Negociação', icon: HandCoins },
   { path: '/obras', label: 'Obras', icon: HardHat },
   { path: '/agenda', label: 'Agenda', icon: CalendarDays },
 ];
 
 const salariosItems = [
-  { path: '/funcionários', label: 'Funcionários', icon: Wallet },
+  { path: '/funcionarios', label: 'Funcionários', icon: Wallet },
   { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2 },
   { path: '/processamento-salarial', label: 'Processamento', icon: Calculator },
   { path: '/config-salariais', label: 'Config. Salariais', icon: Coins },
@@ -26,7 +26,7 @@ const adminItems = [
   { path: '/produtividades', label: 'Produtividades', icon: Timer },
   { path: '/utilizadores', label: 'Utilizadores', icon: UserCog },
   { path: '/biblioteca', label: 'Biblioteca', icon: BookOpen },
-  { path: '/definições', label: 'Definições', icon: Settings },
+  { path: '/definicoes', label: 'Definições', icon: Settings },
 ];
 
 export default function Sidebar() {
