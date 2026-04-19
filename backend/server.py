@@ -1631,6 +1631,176 @@ async def get_financial_dashboard(user=Depends(get_current_user)):
     }
 
 
+@api_router.get("/dashboard/cashflow")
+async def get_cashflow_dashboard(year: Optional[int] = None, user=Depends(get_current_user)):
+    """Unified financial dashboard: entries (invoice payments) vs exits (expenses + payroll),
+    monthly breakdown, top expense categories, pending collections, 30-day forecast."""
+    from datetime import date as _date_cls, timedelta as _timedelta
+
+    now = datetime.now(timezone.utc)
+    y = year or now.year
+    prefix = f"{y:04d}"
+    today = _date_cls.today().isoformat()
+    today_dt = _date_cls.fromisoformat(today)
+    horizon = (today_dt + _timedelta(days=30)).isoformat()
+
+    invoices = await db.invoices.find({}, {"_id": 0}).to_list(5000)
+    expenses = await db.expenses.find({"date": {"$regex": f"^{prefix}"}}, {"_id": 0}).to_list(5000)
+    payroll_runs = await db.payroll_runs.find({"year": y}, {"_id": 0}).to_list(500)
+
+    by_month = {m: {"entries": 0.0, "expenses": 0.0, "payroll": 0.0} for m in range(1, 13)}
+    by_category = {}
+
+    # Entries = sum of invoice payments by payment.date (within year)
+    pending_collection = 0.0
+    overdue_collection = 0.0
+    upcoming_due = []
+    upcoming_due_total = 0.0
+    total_emitted_year = 0.0
+
+    for inv in invoices:
+        issue = (inv.get("issue_date") or "")[:10]
+        if issue.startswith(prefix):
+            total_emitted_year += float(inv.get("value_total", 0) or 0)
+        paid = sum(float(p.get("amount", 0) or 0) for p in inv.get("payments", []))
+        total = float(inv.get("value_total", 0) or 0)
+        balance = round(total - paid, 2)
+        due = (inv.get("due_date") or "")[:10]
+        # Pending / overdue (snapshot, regardless of year)
+        if balance > 0.01:
+            pending_collection += balance
+            if due and due < today:
+                overdue_collection += balance
+            # Upcoming due window (next 30 days, not yet overdue)
+            if due and today <= due <= horizon:
+                upcoming_due.append({
+                    "id": inv.get("id"),
+                    "number": inv.get("number"),
+                    "client_name": inv.get("client_name"),
+                    "due_date": due,
+                    "balance": balance,
+                })
+                upcoming_due_total += balance
+        # Entries by payment date within the year
+        for p in inv.get("payments", []):
+            pdate = (p.get("date") or "")[:10]
+            if pdate.startswith(prefix):
+                try:
+                    m = int(pdate[5:7])
+                    by_month[m]["entries"] = round(by_month[m]["entries"] + float(p.get("amount", 0) or 0), 2)
+                except Exception:
+                    pass
+
+    # Exits (expenses)
+    for e in expenses:
+        try:
+            m = int((e.get("date") or "")[5:7])
+        except Exception:
+            m = 0
+        gross = float(e.get("value_gross", 0) or 0)
+        if m:
+            by_month[m]["expenses"] = round(by_month[m]["expenses"] + gross, 2)
+        cat = e.get("category") or "Outros"
+        by_category[cat] = round(by_category.get(cat, 0) + gross, 2)
+
+    # Exits (payroll) - use custo_total_empresa per run month
+    for r in payroll_runs:
+        m = int(r.get("month", 0) or 0)
+        cost = float(r.get("total_custo_empresa", 0) or 0)
+        if m:
+            by_month[m]["payroll"] = round(by_month[m]["payroll"] + cost, 2)
+
+    # Build monthly list
+    monthly = []
+    total_entries = 0.0
+    total_exits_expenses = 0.0
+    total_exits_payroll = 0.0
+    for m in range(1, 13):
+        d = by_month[m]
+        exits = round(d["expenses"] + d["payroll"], 2)
+        net = round(d["entries"] - exits, 2)
+        monthly.append({
+            "month": m,
+            "entries": round(d["entries"], 2),
+            "expenses": round(d["expenses"], 2),
+            "payroll": round(d["payroll"], 2),
+            "exits": exits,
+            "net": net,
+        })
+        total_entries += d["entries"]
+        total_exits_expenses += d["expenses"]
+        total_exits_payroll += d["payroll"]
+
+    total_exits = total_exits_expenses + total_exits_payroll
+    net_year = total_entries - total_exits
+    margin_pct = round((net_year / total_entries * 100) if total_entries > 0 else 0, 1)
+
+    current_month = now.month if now.year == y else 12
+    cm = by_month.get(current_month, {"entries": 0, "expenses": 0, "payroll": 0})
+    cm_exits = round(cm["expenses"] + cm["payroll"], 2)
+    cm_net = round(cm["entries"] - cm_exits, 2)
+
+    # Forecast 30d: average of last up-to-3 complete months (months with any activity)
+    def _last_n_avg(key, n=3):
+        months_with_data = [by_month[mm][key] for mm in range(1, current_month)
+                            if (by_month[mm]["entries"] + by_month[mm]["expenses"] + by_month[mm]["payroll"]) > 0]
+        tail = months_with_data[-n:] if months_with_data else []
+        return round(sum(tail) / len(tail), 2) if tail else 0.0
+
+    avg_entries = _last_n_avg("entries")
+    avg_expenses = _last_n_avg("expenses")
+    avg_payroll = _last_n_avg("payroll")
+    projected_entries = round(avg_entries, 2)
+    projected_exits = round(avg_expenses + avg_payroll, 2)
+    projected_net = round(projected_entries - projected_exits, 2)
+
+    # Top categories (sorted)
+    top_categories = sorted(
+        [{"category": k, "value": v} for k, v in by_category.items()],
+        key=lambda x: x["value"], reverse=True
+    )[:6]
+
+    upcoming_due.sort(key=lambda x: x["due_date"])
+
+    return {
+        "year": y,
+        "totals": {
+            "entries": round(total_entries, 2),
+            "exits_expenses": round(total_exits_expenses, 2),
+            "exits_payroll": round(total_exits_payroll, 2),
+            "exits": round(total_exits, 2),
+            "net": round(net_year, 2),
+            "margin_pct": margin_pct,
+            "emitted_year": round(total_emitted_year, 2),
+        },
+        "current_month": {
+            "month": current_month,
+            "entries": round(cm["entries"], 2),
+            "expenses": round(cm["expenses"], 2),
+            "payroll": round(cm["payroll"], 2),
+            "exits": cm_exits,
+            "net": cm_net,
+        },
+        "monthly": monthly,
+        "top_categories": top_categories,
+        "collection": {
+            "pending": round(pending_collection, 2),
+            "overdue": round(overdue_collection, 2),
+        },
+        "forecast_30d": {
+            "avg_entries": avg_entries,
+            "avg_expenses": avg_expenses,
+            "avg_payroll": avg_payroll,
+            "projected_entries": projected_entries,
+            "projected_exits": projected_exits,
+            "projected_net": projected_net,
+            "upcoming_due_total": round(upcoming_due_total, 2),
+            "upcoming_due_count": len(upcoming_due),
+            "upcoming_due": upcoming_due[:20],
+        },
+    }
+
+
 # --- Seed Professional Data ---
 
 async def seed_professional_data():

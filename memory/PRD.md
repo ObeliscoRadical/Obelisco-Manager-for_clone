@@ -34,6 +34,19 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 19, 2026 (v10) — Dashboard Financeiro Unificado
+- **Novo endpoint** `GET /api/dashboard/cashflow?year=YYYY` (`server.py`): agrega invoices (pagamentos por data = entradas), expenses (saídas variáveis/fixas/obra), payroll_runs (salários custo total empresa). Devolve:
+  - `totals`: entradas/saídas/resultado/margem % do ano
+  - `current_month`: breakdown do mês em curso
+  - `monthly[12]`: entradas, despesas, salários, saídas, net por mês
+  - `top_categories`: top 6 categorias de despesa com valores
+  - `collection`: pending (a receber) + overdue (vencido)
+  - `forecast_30d`: médias dos últimos 3 meses, projecção + lista de faturas a vencer nos próximos 30 dias
+- **Nova página** `/financeiro` (`DashboardFinanceiroPage.jsx`): KPIs (entradas/saídas/resultado/a receber), cards mês actual + previsão 30d, gráfico de barras mensal (recharts), donut de categorias, lista de "A receber nos próximos 30 dias". Selector de ano.
+- **Sidebar**: novo item "Financeiro" com ícone LineChart.
+- Rota adicionada ao `App.js`.
+- Testado E2E via curl (cálculos correctos: 600€ entradas, 2877€ saídas, -2277€ resultado, 1860€ vencido) + screenshot renderizado.
+
 ### Feb 19, 2026 (v9) — IA OCR nas Faturas
 - **Extracção IA em Faturas** (`/app/backend/invoices.py`): novo endpoint `POST /api/invoices/extract` recebe upload (PDF/JPG/PNG/WEBP), envia para Gemini 2.5 Pro via `emergentintegrations` e devolve JSON com `number`, `issue_date`, `due_date`, `client_name`, `client_nif`, `client_email`, `client_phone`, `value_net`, `vat_rate`, `vat_amount`, `value_total`, `notes`.
 - **GET `/api/invoices/file/{filename}`**: serve ficheiros de faturas guardados em `/app/backend/uploads/invoices/`.
