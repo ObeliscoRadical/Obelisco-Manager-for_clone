@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, MessageCircle, CheckCircle2, Clock, AlertTriangle, Receipt as ReceiptIcon, Euro, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Pencil, MessageCircle, CheckCircle2, Clock, AlertTriangle, Receipt as ReceiptIcon, Euro, DollarSign, Upload, FileText, Loader2, Sparkles, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -25,6 +25,7 @@ const emptyForm = {
   client_name: '', client_phone: '', client_email: '', client_nif: '',
   obra_id: '', proposal_id: '',
   value_net: 0, vat_rate: 23, vat_amount: 0, value_total: 0, notes: '',
+  invoice_file: null,
 };
 
 const addDays = (dateStr, days) => {
@@ -45,6 +46,8 @@ export default function FaturasPage() {
   const [payAmount, setPayAmount] = useState(0);
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [payMethod, setPayMethod] = useState('Transferência');
+  const [extracting, setExtracting] = useState(false);
+  const fileInputRef = useRef(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -107,6 +110,59 @@ export default function FaturasPage() {
       setDialogOpen(false);
       fetchAll();
     } catch (err) { toast.error(err.response?.data?.detail || 'Erro ao guardar'); }
+  };
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    setExtracting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await api.post('/invoices/extract', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const ext = data.extracted || {};
+      if (ext.error) {
+        toast.error(`IA falhou: ${ext.error}`);
+        setForm(prev => ({ ...prev, invoice_file: data.file_name }));
+      } else {
+        setForm(prev => {
+          const next = {
+            ...prev,
+            number: ext.number || prev.number,
+            issue_date: ext.issue_date || prev.issue_date,
+            due_date: ext.due_date || prev.due_date || addDays(ext.issue_date || prev.issue_date, 30),
+            client_name: ext.client_name || prev.client_name,
+            client_nif: ext.client_nif || prev.client_nif,
+            client_email: ext.client_email || prev.client_email,
+            client_phone: ext.client_phone || prev.client_phone,
+            value_net: ext.value_net || prev.value_net,
+            vat_rate: ext.vat_rate || prev.vat_rate,
+            vat_amount: ext.vat_amount || prev.vat_amount,
+            value_total: ext.value_total || prev.value_total,
+            notes: ext.notes ? (prev.notes ? `${prev.notes} | ${ext.notes}` : ext.notes) : prev.notes,
+            invoice_file: data.file_name,
+          };
+          // Re-derive if total present but net missing
+          if (next.value_total && !next.value_net) {
+            const rate = parseFloat(next.vat_rate) || 0;
+            const net = next.value_total / (1 + rate / 100);
+            next.value_net = Math.round(net * 100) / 100;
+            next.vat_amount = Math.round((next.value_total - net) * 100) / 100;
+          }
+          return next;
+        });
+        toast.success('Fatura lida por IA! Confira os dados antes de guardar.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao processar fatura');
+    } finally { setExtracting(false); }
+  };
+
+  const viewInvoice = (filename) => {
+    if (!filename) return;
+    const url = `${process.env.REACT_APP_BACKEND_URL}/api/invoices/file/${filename}`;
+    window.open(url, '_blank');
   };
 
   const handleDelete = async (id) => {
@@ -244,6 +300,7 @@ export default function FaturasPage() {
                   <TableCell className="text-right text-green-400 text-sm">{formatEuro(inv.amount_paid)}</TableCell>
                   <TableCell className="text-right text-yellow-400 font-bold">{formatEuro(inv.balance)}</TableCell>
                   <TableCell className="text-right">
+                    {inv.invoice_file && <button data-testid={`view-file-${inv.id}`} onClick={() => viewInvoice(inv.invoice_file)} className="text-zinc-400 hover:text-yellow-400 p-1 mr-1" title="Ver fatura"><Eye size={14} /></button>}
                     {inv.balance > 0.01 && (
                       <>
                         <button data-testid={`pay-${inv.id}`} onClick={() => openPay(inv)} className="text-green-400 hover:text-green-300 p-1 mr-1" title="Registar pagamento"><DollarSign size={14} /></button>
@@ -265,8 +322,50 @@ export default function FaturasPage() {
         <DialogContent className="bg-zinc-950 border-zinc-800 max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl font-black uppercase text-white">{editing ? 'Editar' : 'Nova'} Fatura</DialogTitle>
-            <DialogDescription className="text-zinc-500">Preencha os dados da fatura emitida</DialogDescription>
+            <DialogDescription className="text-zinc-500">Faça upload da fatura e a IA preenche tudo automaticamente.</DialogDescription>
           </DialogHeader>
+
+          {!editing && (
+            <div className="rounded-2xl border-2 border-dashed border-yellow-400/30 bg-yellow-400/5 p-6 text-center">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png,.webp"
+                onChange={e => handleUpload(e.target.files?.[0])}
+                className="hidden"
+                data-testid="invoice-file-input"
+              />
+              {extracting ? (
+                <div className="flex flex-col items-center gap-3 text-yellow-400">
+                  <Loader2 className="animate-spin" size={32} />
+                  <p className="font-medium">A ler fatura com IA...</p>
+                  <p className="text-xs text-zinc-500">Isto pode demorar 10-20 segundos</p>
+                </div>
+              ) : form.invoice_file ? (
+                <div className="flex flex-col items-center gap-2">
+                  <div className="flex items-center gap-2 text-green-400">
+                    <FileText size={20} />
+                    <span className="font-medium text-sm">Fatura carregada</span>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={() => fileInputRef.current?.click()} className="border-zinc-700 text-zinc-300 rounded-full text-xs">
+                    Carregar outra
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3">
+                  <Sparkles className="text-yellow-400" size={32} />
+                  <div>
+                    <p className="text-white font-semibold">Upload de Fatura (PDF / Imagem)</p>
+                    <p className="text-xs text-zinc-500 mt-1">A IA extrai nº, cliente, NIF, datas, valores e IVA automaticamente</p>
+                  </div>
+                  <Button data-testid="upload-invoice-btn" onClick={() => fileInputRef.current?.click()} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
+                    <Upload size={16} className="mr-2" /> Escolher ficheiro
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
             <div><Label className="text-zinc-400 text-xs">Nº Fatura (auto se vazio)</Label><Input value={form.number} onChange={e => setField('number', e.target.value)} placeholder="FT 2026/0001" className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div className="hidden md:block"></div>

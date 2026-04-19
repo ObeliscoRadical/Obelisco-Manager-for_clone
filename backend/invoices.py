@@ -1,17 +1,98 @@
 """
 Módulo de Faturação / Cobrança.
 Gere faturas emitidas, pagamentos e lembretes manuais (wa.me).
+Inclui extracção IA (Gemini 2.5 Pro) de faturas via upload de PDF/imagem.
 """
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, date as date_cls
+from pathlib import Path
 import uuid
+import os
+import json
 import logging
+
+from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
 
 logger = logging.getLogger(__name__)
 
+INVOICES_UPLOAD_DIR = Path("/app/backend/uploads/invoices")
+INVOICES_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+
 invoices_router = APIRouter(prefix="/api/invoices", tags=["invoices"])
+
+
+async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
+    """Use Gemini 2.5 Pro to extract structured data from a PT invoice (emitida)."""
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        return {"error": "EMERGENT_LLM_KEY not set"}
+
+    system = (
+        "És um assistente especializado em extrair dados de faturas portuguesas emitidas a clientes. "
+        "Responde APENAS com JSON válido, sem texto antes ou depois. "
+        "Se um campo não for visível na fatura, devolve string vazia ou 0. "
+        "Valores monetários em euros como número (não como string com €)."
+    )
+
+    prompt = (
+        "Analisa esta fatura portuguesa e extrai os seguintes dados em JSON "
+        "(foca-te nos dados do CLIENTE a quem foi emitida, não do emissor):\n"
+        "{\n"
+        '  "number": "número da fatura (ex: FT 2026/0001)",\n'
+        '  "issue_date": "data de emissão YYYY-MM-DD",\n'
+        '  "due_date": "data de vencimento YYYY-MM-DD (se não indicada, vazio)",\n'
+        '  "client_name": "nome completo do cliente / destinatário",\n'
+        '  "client_nif": "NIF do cliente (9 dígitos)",\n'
+        '  "client_email": "email do cliente se visível",\n'
+        '  "client_phone": "telefone do cliente se visível",\n'
+        '  "value_net": valor líquido sem IVA (number),\n'
+        '  "vat_rate": taxa de IVA em % (6, 13 ou 23),\n'
+        '  "vat_amount": valor do IVA (number),\n'
+        '  "value_total": valor total com IVA (number),\n'
+        '  "notes": "breve descrição dos serviços/artigos faturados"\n'
+        "}\n\n"
+        "Responde APENAS com o JSON, sem markdown ```."
+    )
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"invoice-emit-{uuid.uuid4().hex[:8]}",
+            system_message=system,
+        ).with_model("gemini", "gemini-2.5-pro")
+
+        attach = FileContentWithMimeType(file_path=str(file_path), mime_type=mime_type)
+        response = await chat.send_message(UserMessage(text=prompt, file_contents=[attach]))
+
+        text = response.strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+        data = json.loads(text)
+        return {
+            "number": str(data.get("number", "")).strip(),
+            "issue_date": str(data.get("issue_date", "")).strip()[:10],
+            "due_date": str(data.get("due_date", "")).strip()[:10],
+            "client_name": str(data.get("client_name", "")).strip(),
+            "client_nif": str(data.get("client_nif", "")).strip().replace(" ", ""),
+            "client_email": str(data.get("client_email", "")).strip(),
+            "client_phone": str(data.get("client_phone", "")).strip(),
+            "value_net": float(data.get("value_net", 0) or 0),
+            "vat_rate": float(data.get("vat_rate", 23) or 23),
+            "vat_amount": float(data.get("vat_amount", 0) or 0),
+            "value_total": float(data.get("value_total", 0) or 0),
+            "notes": str(data.get("notes", "")).strip(),
+        }
+    except Exception as e:
+        logger.error(f"Invoice extraction failed: {e}")
+        return {"error": str(e)}
 
 
 class PaymentEntry(BaseModel):
@@ -36,6 +117,7 @@ class InvoiceCreate(BaseModel):
     vat_amount: float = 0
     value_total: float                      # required
     notes: str = ""
+    invoice_file: Optional[str] = None     # uploaded file name (if IA extracted)
 
 
 class InvoiceUpdate(BaseModel):
@@ -53,6 +135,7 @@ class InvoiceUpdate(BaseModel):
     vat_amount: Optional[float] = None
     value_total: Optional[float] = None
     notes: Optional[str] = None
+    invoice_file: Optional[str] = None
 
 
 class PaymentInput(BaseModel):
@@ -96,6 +179,45 @@ def compute_status(invoice: dict) -> dict:
 
 
 def create_invoices_router(db, get_current_user):
+
+    @invoices_router.post("/extract")
+    async def extract_from_upload(file: UploadFile = File(...), user=Depends(get_current_user)):
+        """Upload a file and get AI-extracted invoice data. Does NOT save the invoice yet."""
+        filename = file.filename or "invoice"
+        ext = Path(filename).suffix.lower() or ".bin"
+        if ext not in [".pdf", ".jpg", ".jpeg", ".png", ".webp"]:
+            raise HTTPException(status_code=400, detail="Formato não suportado. Use PDF, JPG, PNG ou WEBP.")
+
+        mime_map = {
+            ".pdf": "application/pdf",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }
+        mime = mime_map[ext]
+
+        saved_name = f"{uuid.uuid4().hex}{ext}"
+        saved_path = INVOICES_UPLOAD_DIR / saved_name
+        content = await file.read()
+        saved_path.write_bytes(content)
+
+        extracted = await extract_invoice_data(saved_path, mime)
+        return {
+            "file_name": saved_name,
+            "original_name": filename,
+            "file_size": len(content),
+            "extracted": extracted,
+        }
+
+    @invoices_router.get("/file/{filename}")
+    async def get_invoice_file(filename: str, user=Depends(get_current_user)):
+        """Serve an uploaded invoice file (PDF/image)."""
+        from fastapi.responses import FileResponse
+        fp = INVOICES_UPLOAD_DIR / filename
+        if not fp.exists():
+            raise HTTPException(status_code=404, detail="Ficheiro não encontrado")
+        return FileResponse(fp)
 
     @invoices_router.get("")
     async def list_invoices(

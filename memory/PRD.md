@@ -34,6 +34,13 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 19, 2026 (v9) — IA OCR nas Faturas
+- **Extracção IA em Faturas** (`/app/backend/invoices.py`): novo endpoint `POST /api/invoices/extract` recebe upload (PDF/JPG/PNG/WEBP), envia para Gemini 2.5 Pro via `emergentintegrations` e devolve JSON com `number`, `issue_date`, `due_date`, `client_name`, `client_nif`, `client_email`, `client_phone`, `value_net`, `vat_rate`, `vat_amount`, `value_total`, `notes`.
+- **GET `/api/invoices/file/{filename}`**: serve ficheiros de faturas guardados em `/app/backend/uploads/invoices/`.
+- **Campo `invoice_file`** adicionado a `InvoiceCreate` / `InvoiceUpdate` para persistir associação ficheiro ↔ fatura.
+- **FaturasPage.jsx**: dropzone amarelo estilo "Sparkles" no topo do diálogo "Nova Fatura" (mesmo padrão UX de DespesasPage). Upload → loader "A ler fatura com IA..." → campos preenchidos automaticamente → utilizador confirma e guarda. Botão "olho" na lista para abrir ficheiro original.
+- **Validado E2E**: curl end-to-end testou extracção (200 OK, 12 campos), file download (200, tamanho correcto), criação de fatura com `invoice_file` persistido, delete. Screenshot do diálogo confirma UI.
+
 ### Feb 18, 2026 (v8) — Stock + Faturas + Lembretes WhatsApp
 - **Stock em Materiais**: campos `stock_current`, `stock_min`, `unit`. Endpoint `/api/stock/movement` regista entradas/saídas com validação (rejeita saída se stock insuficiente). Histórico completo em `/api/stock/movements`. Alerta de stock baixo em `/api/stock/low`.
 - **Badge de stock em Orçamentos**: ao escolher item com nome igual a material, aparece badge verde (OK) / amarelo (baixo) / vermelho (insuficiente para quantidade do orçamento).
