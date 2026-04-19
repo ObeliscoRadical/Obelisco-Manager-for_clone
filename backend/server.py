@@ -2348,6 +2348,10 @@ app.include_router(public_router)
 from payroll import create_payroll_router
 app.include_router(create_payroll_router(db, get_current_user))
 
+# Expenses / Custos module
+from expenses import create_expenses_router
+app.include_router(create_expenses_router(db, get_current_user))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")],

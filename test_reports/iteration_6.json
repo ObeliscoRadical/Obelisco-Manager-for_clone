@@ -1,0 +1,118 @@
+{
+  "summary": "Completed comprehensive testing of new Expenses/Costs module (Despesas). Backend: 111/111 tests passed (100%) including 32 new expenses tests. Frontend: All expense flows working correctly - page loads, KPI cards, monthly chart, filters, expense table, Nova Despesa dialog with AI upload area, form fields, auto-calculation, save/edit/delete. Sidebar navigation regression verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "NegociacaoPage",
+        "issues": ["Console warning: span cannot be child of option (hydration warning) - cosmetic only, page works correctly"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_expenses_module.py",
+    "/app/backend/tests/test_obelisco_api.py",
+    "/app/backend/tests/test_payroll_module.py",
+    "/app/backend/tests/test_signature_feature.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_expenses_module.py"
+  ],
+  "success_rate": {
+    "backend": "100% (111/111 tests passed - 32 new expenses + 79 existing)",
+    "frontend": "100% (all expense flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "Test expenses created during testing with TEST_ prefix were cleaned up after tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Expenses module fully tested and working. Key verified flows: (1) GET /api/expenses/categories returns 13 PT categories, (2) POST /api/expenses creates expense with auto-compute gross from net+rate, (3) GET /api/expenses supports filters (month, year, category, type, obra_id), (4) PUT/DELETE /api/expenses/{id} work correctly, (5) GET /api/expenses/summary returns yearly aggregations by_month/by_category/by_type/by_obra, (6) POST /api/expenses/extract accepts PDF/JPG/PNG and returns AI-extracted data or error gracefully, (7) Frontend DespesasPage shows KPI cards, monthly chart, top categories, filters, expenses table, (8) Nova Despesa dialog has upload area with AI extraction, all form fields, type toggle (fixo/variavel/obra), VAT rate select, auto-calculation, (9) Sidebar navigation to /despesas works, no accented paths.",
+  "features_tested": {
+    "backend_categories_auth_required": "PASS - Returns 401 without auth",
+    "backend_categories_returns_13": "PASS - Returns exactly 13 PT categories",
+    "backend_categories_expected_values": "PASS - All expected categories present (Combustível, Material, Fornecedor, Serviços, Comunicações, Rendas, Seguros, Contabilidade/Advogado, Ferramentas, Viatura, Alimentação, Imposto/Taxa, Outros)",
+    "backend_create_expense_manual": "PASS - Creates with all fields",
+    "backend_create_expense_auto_compute": "PASS - Auto-computes gross from net+rate (100 * 1.23 = 123)",
+    "backend_create_expense_obra_type": "PASS - Creates with type=obra and obra_id",
+    "backend_list_expenses_no_filter": "PASS - Returns all expenses",
+    "backend_list_expenses_filter_year": "PASS - Filters by year regex",
+    "backend_list_expenses_filter_month_year": "PASS - Filters by month+year regex",
+    "backend_list_expenses_filter_category": "PASS - Filters by category",
+    "backend_list_expenses_filter_type": "PASS - Filters by type",
+    "backend_get_single_expense": "PASS - Returns expense by ID",
+    "backend_get_nonexistent_expense": "PASS - Returns 404",
+    "backend_update_expense": "PASS - Updates fields and persists",
+    "backend_update_nonexistent": "PASS - Returns 404",
+    "backend_delete_expense": "PASS - Deletes and verifies 404",
+    "backend_delete_nonexistent": "PASS - Returns 404",
+    "backend_summary_auth_required": "PASS - Returns 401 without auth",
+    "backend_summary_structure": "PASS - Returns year, total_year, total_iva, current_month_total, count, by_month (12), by_category, by_type, by_obra",
+    "backend_summary_aggregates": "PASS - Correctly aggregates expenses",
+    "backend_extract_auth_required": "PASS - Returns 401 without auth",
+    "backend_extract_rejects_txt": "PASS - Returns 400 for .txt",
+    "backend_extract_rejects_doc": "PASS - Returns 400 for .doc",
+    "backend_extract_accepts_pdf": "PASS - Returns 200 with file_name, original_name, file_size, extracted",
+    "backend_extract_accepts_jpg": "PASS - Returns 200",
+    "backend_extract_accepts_png": "PASS - Returns 200",
+    "backend_file_auth_required": "PASS - Returns 401 without auth",
+    "backend_file_nonexistent": "PASS - Returns 404",
+    "frontend_despesas_page_loads": "PASS - data-testid='despesas-page' found",
+    "frontend_kpi_cards": "PASS - Total year, Este Mês, IVA Pago, Total Despesas",
+    "frontend_monthly_chart": "PASS - Gastos Mensais 2026 with 12 months",
+    "frontend_top_categories": "PASS - Shows top 5 categories with progress bars",
+    "frontend_filters": "PASS - Mês, Ano, Categoria, Tipo selects",
+    "frontend_expenses_table": "PASS - Shows date, supplier, category, type, obra, values, actions",
+    "frontend_nova_despesa_button": "PASS - data-testid='new-expense-btn'",
+    "frontend_dialog_upload_area": "PASS - Yellow dashed border with 'Escolher ficheiro' button",
+    "frontend_dialog_form_fields": "PASS - Date, Supplier, NIF, Invoice#, Category, Type toggle, VAT rate, Values, Payment, Notes",
+    "frontend_dialog_type_toggle": "PASS - Custo Fixo, Custo Variável, Custo de Obra buttons",
+    "frontend_dialog_auto_calc": "PASS - Gross auto-calculates from net+rate (81.29 + 18.7 = 99.99)",
+    "frontend_dialog_save": "PASS - Creates expense, closes dialog, shows toast, refreshes list",
+    "frontend_sidebar_despesas": "PASS - data-testid='nav-despesas' navigates to /despesas",
+    "regression_orcamentos_nav": "PASS - /orcamentos works",
+    "regression_negociacao_nav": "PASS - /negociacao works",
+    "regression_propostas_nav": "PASS - /propostas works",
+    "regression_budgets_api": "PASS",
+    "regression_proposals_api": "PASS",
+    "regression_works_api": "PASS",
+    "regression_payroll_api": "PASS"
+  },
+  "data_testids_verified": {
+    "despesas-page": "FOUND",
+    "new-expense-btn": "FOUND",
+    "invoice-file-input": "FOUND (hidden)",
+    "upload-invoice-btn": "FOUND",
+    "exp-date": "FOUND",
+    "exp-supplier": "FOUND",
+    "exp-gross": "FOUND",
+    "save-expense-btn": "FOUND",
+    "nav-despesas": "FOUND",
+    "sidebar": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "GET /api/expenses/categories (auth required)",
+    "POST /api/expenses (create with auto-compute)",
+    "GET /api/expenses (list with filters)",
+    "GET /api/expenses/{id} (single)",
+    "PUT /api/expenses/{id} (update)",
+    "DELETE /api/expenses/{id} (delete)",
+    "GET /api/expenses/summary?year=2026 (aggregations)",
+    "POST /api/expenses/extract (file upload + AI)",
+    "GET /api/expenses/file/{filename} (serve file)",
+    "GET /api/budgets (regression)",
+    "GET /api/proposals (regression)",
+    "GET /api/works (regression)",
+    "GET /api/payroll/summary (regression)"
+  ]
+}
