@@ -34,6 +34,14 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 18, 2026 (v8) — Stock + Faturas + Lembretes WhatsApp
+- **Stock em Materiais**: campos `stock_current`, `stock_min`, `unit`. Endpoint `/api/stock/movement` regista entradas/saídas com validação (rejeita saída se stock insuficiente). Histórico completo em `/api/stock/movements`. Alerta de stock baixo em `/api/stock/low`.
+- **Badge de stock em Orçamentos**: ao escolher item com nome igual a material, aparece badge verde (OK) / amarelo (baixo) / vermelho (insuficiente para quantidade do orçamento).
+- **Módulo Faturas/Cobrança** (`/app/backend/invoices.py`): CRUD faturas com auto-numeração (FT YYYY/NNNN), status automático (pendente/parcial/vencida/vencida_parcial/paga) baseado em due_date + pagamentos, dias em atraso calculados, pagamentos parciais, summary agregado (emitido, recebido, em aberto, vencido).
+- **Lembretes WhatsApp grátis**: botão verde MessageCircle em cada fatura em aberto → abre wa.me com mensagem pré-feita personalizada (número fatura, valor, dias atraso) → regista lembrete no backend.
+- **Sidebar**: "Despesas" e "Faturas" entre Agenda e Salários.
+- **Testado**: 147/147 (36 novos testes de stock+faturas).
+
 ### Feb 18, 2026 (v7) — Módulo Despesas / Mini-ERP com IA
 - **Novo módulo Custos** (`/app/backend/expenses.py`): CRUD de despesas, classificação por 13 categorias PT, tipo (fixo/variável/obra), associação a obra (centro de custo), cálculo automático IVA (6/13/23%).
 - **Upload de Faturas com IA** (Gemini 2.5 Pro): aceita PDF/JPG/PNG/WEBP. Extrai automaticamente: fornecedor, NIF, nº fatura, data, valor líquido/IVA/total, categoria. Zero digitação manual quando a IA acerta.
