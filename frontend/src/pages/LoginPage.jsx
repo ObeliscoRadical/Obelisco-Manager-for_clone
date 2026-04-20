@@ -26,10 +26,19 @@ export default function LoginPage() {
       await login(email, password);
       navigate('/');
     } catch (err) {
+      console.error('[login] error:', err);
       const detail = err.response?.data?.detail;
-      if (typeof detail === 'string') setError(detail);
-      else if (Array.isArray(detail)) setError(detail.map(d => d.msg || JSON.stringify(d)).join(' '));
-      else setError('Erro ao fazer login');
+      if (typeof detail === 'string') {
+        setError(detail);
+      } else if (Array.isArray(detail)) {
+        setError(detail.map(d => d.msg || JSON.stringify(d)).join(' '));
+      } else if (!err.response) {
+        // No response = network error (CORS, dead backend URL, offline, wrong PWA base URL)
+        const backendUrl = process.env.REACT_APP_BACKEND_URL || '(não definido)';
+        setError(`Não foi possível contactar o servidor (${backendUrl}). Se guardaste esta app no Dock/Desktop, provavelmente a URL está desactualizada — abre a versão mais recente no browser.`);
+      } else {
+        setError(`Erro ao fazer login (HTTP ${err.response.status})`);
+      }
     } finally {
       setLoading(false);
     }
