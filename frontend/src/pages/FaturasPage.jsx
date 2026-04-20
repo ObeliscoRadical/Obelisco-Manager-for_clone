@@ -207,35 +207,105 @@ export default function FaturasPage() {
     } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
   };
 
+  // Gera mensagem de cobrança formal e amigável, com 3 tons consoante dias em atraso.
+  const buildCollectionMessage = (invoice) => {
+    const name = (invoice.client_name || '').split(/\s+/)[0] || 'Cliente';
+    const amount = formatEuro(invoice.balance);
+    const number = invoice.number || '—';
+    const due = invoice.due_date || '—';
+    const days = invoice.days_overdue || 0;
+
+    if (days <= 0) {
+      // Lembrete antes do vencimento / no dia
+      return (
+        `Olá ${name}, tudo bem? 👋\n\n` +
+        `Aqui é da Obelisco Radical — Instalações Eléctricas. Enviamos este lembrete amigável da fatura *${number}* no valor de *${amount}*, com vencimento a *${due}*.\n\n` +
+        `Se já tiver efectuado o pagamento, por favor desconsidere esta mensagem. Caso contrário, agradecemos desde já a regularização.\n\n` +
+        `Qualquer dúvida estamos ao seu dispor.\n\n` +
+        `Com os melhores cumprimentos,\nObelisco Radical`
+      );
+    }
+    if (days <= 7) {
+      // Primeira cobrança amigável
+      return (
+        `Olá ${name}, tudo bem? 👋\n\n` +
+        `Aqui é da Obelisco Radical. Notámos que a fatura *${number}* no valor de *${amount}* venceu a *${due}* e ainda não foi liquidada (${days} dia${days === 1 ? '' : 's'} em atraso).\n\n` +
+        `Presumimos que se tenha tratado de um esquecimento. Agradecíamos que procedesse ao pagamento logo que possível. Se já efectuou a transferência, por favor confirme-nos para atualizarmos os nossos registos.\n\n` +
+        `Obrigado pela preferência!\n\nObelisco Radical`
+      );
+    }
+    if (days <= 30) {
+      // Segunda cobrança, mais firme mas cordial
+      return (
+        `Bom dia ${name},\n\n` +
+        `Da parte da Obelisco Radical, vimos por este meio alertar que a fatura *${number}* no valor de *${amount}*, com vencimento a *${due}*, está em atraso há *${days} dias*.\n\n` +
+        `Solicitamos que proceda à regularização no prazo de 48h. Caso exista alguma questão ou necessite de acordar um plano de pagamento, fale connosco e procuramos a melhor solução em conjunto.\n\n` +
+        `Agradecemos a sua atenção.\n\nObelisco Radical · Gestão de Cobranças`
+      );
+    }
+    // Cobrança formal final (acima de 30 dias)
+    return (
+      `Exmo(a). ${invoice.client_name},\n\n` +
+      `Serve a presente para informar V. Exa. que a fatura *${number}*, emitida em nome de V. Exa., no valor de *${amount}* e com data de vencimento a *${due}*, encontra-se em atraso há *${days} dias*.\n\n` +
+      `Apesar das tentativas de contacto prévias, o valor permanece por liquidar. Solicitamos encarecidamente a regularização no prazo máximo de 5 dias úteis, findo o qual seremos forçados a encaminhar o processo para cobrança judicial, com os encargos legais e honorários inerentes a correrem por conta de V. Exa.\n\n` +
+      `Caso pretenda negociar um plano de pagamento, contacte-nos com urgência.\n\n` +
+      `Atenciosamente,\nObelisco Radical · Departamento de Cobranças`
+    );
+  };
+
   const sendWhatsAppReminder = async (invoice) => {
     const phone = (invoice.client_phone || '').replace(/\D/g, '');
-    if (!phone) { toast.error('Cliente sem telefone'); return; }
+    if (!phone) { toast.error(`${invoice.client_name}: sem telefone registado`); return false; }
     const fullPhone = phone.startsWith('351') ? phone : `351${phone}`;
-    const overdue = invoice.days_overdue > 0
-      ? `Está em atraso há ${invoice.days_overdue} dia(s). `
-      : `Vence a ${invoice.due_date}. `;
-    const msg = `Olá ${invoice.client_name}, este é um lembrete amigável da fatura ${invoice.number} no valor de ${formatEuro(invoice.balance)}. ${overdue}Agradecemos o pagamento. - Obelisco Radical`;
+    const msg = buildCollectionMessage(invoice);
     const url = `https://wa.me/${fullPhone}?text=${encodeURIComponent(msg)}`;
     window.open(url, '_blank');
-    // Log reminder
     try {
       await api.post(`/invoices/${invoice.id}/reminder-log`);
       fetchAll();
     } catch { /* ignore */ }
+    return true;
+  };
+
+  const sendBulkCollection = async () => {
+    const overdue = invoices.filter(i => i.status && i.status.startsWith('vencida') && i.balance > 0.01);
+    if (overdue.length === 0) { toast.info('Sem faturas vencidas para cobrar'); return; }
+    const withPhone = overdue.filter(i => (i.client_phone || '').trim());
+    const noPhone = overdue.length - withPhone.length;
+    if (withPhone.length === 0) { toast.error('Nenhuma fatura vencida tem telefone registado'); return; }
+    const confirmMsg = `Vai abrir ${withPhone.length} conversa${withPhone.length === 1 ? '' : 's'} de WhatsApp para cobrança${noPhone > 0 ? ` (${noPhone} sem telefone serão ignoradas)` : ''}. Continuar?`;
+    if (!window.confirm(confirmMsg)) return;
+    for (const inv of withPhone) {
+      await sendWhatsAppReminder(inv);
+      await new Promise(r => setTimeout(r, 400));   // dá tempo ao browser para abrir separador novo
+    }
+    toast.success(`${withPhone.length} mensagem${withPhone.length === 1 ? '' : 's'} aberta${withPhone.length === 1 ? '' : 's'} no WhatsApp`);
   };
 
   if (loading) return <div className="text-zinc-400 text-sm">A carregar...</div>;
 
   return (
     <div data-testid="faturas-page" className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Faturas</h1>
           <p className="text-zinc-400 mt-1 font-medium">Controlo de cobrança e lembretes via WhatsApp</p>
         </div>
-        <Button data-testid="new-invoice-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-          <Plus size={18} className="mr-2" /> Nova Fatura
-        </Button>
+        <div className="flex items-center gap-2">
+          {summary?.count_vencidas > 0 && (
+            <Button
+              data-testid="bulk-collection-btn"
+              onClick={sendBulkCollection}
+              className="bg-red-500 text-white hover:bg-red-600 rounded-full font-semibold"
+              title={`Enviar cobrança a ${summary.count_vencidas} fatura(s) vencida(s)`}
+            >
+              <MessageCircle size={16} className="mr-2" /> Cobrar vencidas ({summary.count_vencidas})
+            </Button>
+          )}
+          <Button data-testid="new-invoice-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
+            <Plus size={18} className="mr-2" /> Nova Fatura
+          </Button>
+        </div>
       </div>
 
       {summary && (
@@ -364,8 +434,21 @@ export default function FaturasPage() {
                     {inv.invoice_file && <button data-testid={`view-file-${inv.id}`} onClick={() => viewInvoice(inv.invoice_file)} className="text-zinc-400 hover:text-yellow-400 p-1 mr-1" title="Ver fatura"><Eye size={14} /></button>}
                     {inv.balance > 0.01 && (
                       <>
+                        {/* Botão de cobrança WhatsApp: destacado para vencidas, discreto para pendentes */}
+                        {inv.client_phone && (inv.status || '').startsWith('vencida') && (
+                          <button
+                            data-testid={`collect-${inv.id}`}
+                            onClick={() => sendWhatsAppReminder(inv)}
+                            className="inline-flex items-center gap-1 bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-full text-xs font-semibold mr-2 shadow-lg shadow-red-500/20"
+                            title={`Cobrar ${inv.days_overdue} dia(s) de atraso via WhatsApp`}
+                          >
+                            <MessageCircle size={12} /> Cobrar
+                          </button>
+                        )}
                         <button data-testid={`pay-${inv.id}`} onClick={() => openPay(inv)} className="text-green-400 hover:text-green-300 p-1 mr-1" title="Registar pagamento"><DollarSign size={14} /></button>
-                        {inv.client_phone && <button data-testid={`whatsapp-${inv.id}`} onClick={() => sendWhatsAppReminder(inv)} className="text-green-500 hover:text-green-400 p-1 mr-1" title="Enviar lembrete WhatsApp"><MessageCircle size={14} /></button>}
+                        {inv.client_phone && !(inv.status || '').startsWith('vencida') && (
+                          <button data-testid={`whatsapp-${inv.id}`} onClick={() => sendWhatsAppReminder(inv)} className="text-green-500 hover:text-green-400 p-1 mr-1" title="Enviar lembrete amigável via WhatsApp"><MessageCircle size={14} /></button>
+                        )}
                       </>
                     )}
                     <button onClick={() => openEdit(inv)} className="text-zinc-400 hover:text-yellow-400 p-1 mr-1"><Pencil size={14} /></button>
