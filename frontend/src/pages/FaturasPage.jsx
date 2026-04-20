@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, MessageCircle, CheckCircle2, Clock, AlertTriangle, Receipt as ReceiptIcon, Euro, DollarSign, Upload, FileText, Loader2, Sparkles, Eye } from 'lucide-react';
+import { Plus, Trash2, Pencil, MessageCircle, CheckCircle2, Clock, AlertTriangle, Receipt as ReceiptIcon, Euro, DollarSign, Upload, FileText, Loader2, Sparkles, Eye, Percent } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -309,10 +309,16 @@ export default function FaturasPage() {
       </div>
 
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div data-testid="kpi-emitido" className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
             <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1"><ReceiptIcon size={12} /> Emitido</p>
             <p className="text-2xl font-black text-white mt-1">{formatEuro(summary.total_emitido)}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{summary.count_total} faturas</p>
+          </div>
+          <div data-testid="kpi-iva" className="p-4 rounded-2xl bg-gradient-to-br from-sky-500/10 to-sky-500/5 border border-sky-500/30">
+            <p className="text-xs uppercase tracking-wider text-sky-400/80 font-medium flex items-center gap-1"><Percent size={12} /> IVA Emitido</p>
+            <p className="text-2xl font-black text-sky-400 mt-1">{formatEuro(summary.total_iva)}</p>
+            <p className="text-xs text-zinc-500 mt-0.5">{summary.total_emitido > 0 ? `${((summary.total_iva / summary.total_emitido) * 100).toFixed(1)}% do total` : '—'}</p>
           </div>
           <div className="p-4 rounded-2xl bg-gradient-to-br from-green-500/10 to-green-500/5 border border-green-500/30">
             <p className="text-xs uppercase tracking-wider text-green-400/80 font-medium flex items-center gap-1"><DollarSign size={12} /> Recebido</p>

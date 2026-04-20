@@ -263,6 +263,7 @@ def create_invoices_router(db, get_current_user):
         items = await db.invoices.find(q, {"_id": 0}).to_list(5000)
         items = [compute_status(i) for i in items]
         total_emitido = sum(i.get("value_total", 0) or 0 for i in items)
+        total_iva = sum(i.get("vat_amount", 0) or 0 for i in items)
         total_recebido = sum(i.get("amount_paid", 0) or 0 for i in items)
         total_em_aberto = sum(i.get("balance", 0) or 0 for i in items if i.get("balance", 0) > 0.01)
         total_vencido = sum(i.get("balance", 0) or 0 for i in items if i.get("status", "").startswith("vencida"))
@@ -270,6 +271,7 @@ def create_invoices_router(db, get_current_user):
         count_vencidas = sum(1 for i in items if i.get("status", "").startswith("vencida"))
         return {
             "total_emitido": round(total_emitido, 2),
+            "total_iva": round(total_iva, 2),
             "total_recebido": round(total_recebido, 2),
             "total_em_aberto": round(total_em_aberto, 2),
             "total_vencido": round(total_vencido, 2),
