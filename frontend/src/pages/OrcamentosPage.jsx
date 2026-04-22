@@ -295,7 +295,7 @@ export default function OrcamentosPage() {
           if (!alreadyExists) {
             try {
               await api.post('/categories/save-item', { category: item.category, name: item.name, unit_cost: item.unit_cost, unit: 'unidade' });
-            } catch { /* ignore save errors */ }
+            } catch (err) { console.debug('[categories/save-item] skipped:', err?.message); }
           }
         }
       }

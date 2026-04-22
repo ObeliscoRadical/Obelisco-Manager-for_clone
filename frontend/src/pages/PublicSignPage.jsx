@@ -223,7 +223,7 @@ export default function PublicSignPage() {
                       </thead>
                       <tbody>
                         {proposal.items.map((it, i) => (
-                          <tr key={i} className="border-t border-zinc-100">
+                          <tr key={it.id || `${it.name}-${i}`} className="border-t border-zinc-100">
                             <td className="p-2 text-zinc-700">{it.name}</td>
                             <td className="p-2 text-right text-zinc-600">{it.quantity} {it.unit || ''}</td>
                           </tr>

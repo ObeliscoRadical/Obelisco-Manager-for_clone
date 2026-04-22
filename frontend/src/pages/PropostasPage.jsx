@@ -305,7 +305,7 @@ async function generatePDF(proposal, settings, logoBase64) {
       doc.setGState(new doc.GState({ opacity: 0.03 }));
       doc.addImage(logoBase64, 'PNG', pageW / 2 - 40, pageH / 2 - 20, 80, 40);
       doc.restoreGraphicsState();
-    } catch (e) { /* ignore */ }
+    } catch (e) { console.debug('[PDF watermark] skipped:', e?.message); }
   }
 
   doc.save(`Proposta_${proposal.label}_${proposal.client_name.replace(/\s/g, '_')}.pdf`);
@@ -543,7 +543,7 @@ export default function PropostasPage() {
                                     payment_split: b.payment_split || '',
                                     payment_notes: b.payment_notes || '',
                                   };
-                                } catch { /* ignore, gera com o que existir */ }
+                                } catch (err) { console.debug('[PDF] budget fallback failed:', err?.message); }
                               }
                               generatePDF(enriched, settings, logoBase64);
                             }} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">

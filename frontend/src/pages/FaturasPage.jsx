@@ -263,7 +263,7 @@ export default function FaturasPage() {
     try {
       await api.post(`/invoices/${invoice.id}/reminder-log`);
       fetchAll();
-    } catch { /* ignore */ }
+    } catch (err) { console.debug('[reminder-log] best-effort failed:', err?.message); }
     return true;
   };
 
