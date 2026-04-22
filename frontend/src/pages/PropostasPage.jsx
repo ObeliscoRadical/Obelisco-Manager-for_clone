@@ -202,55 +202,61 @@ async function generatePDF(proposal, settings, logoBase64) {
   const conditions = settings?.conditions || [];
   const notes = settings?.notes || '';
 
-  if (finalY < pageH - 70) {
-    // Payment box (taller if notes)
-    const payBoxH = payNotes ? 24 : 16;
-    doc.setFillColor(24, 24, 27);
-    doc.roundedRect(15, finalY, pageW - 30, payBoxH, 3, 3, 'F');
-    doc.setTextColor(250, 204, 21);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text('FORMA DE PAGAMENTO', 22, finalY + 6);
-    doc.setTextColor(220, 220, 220);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`Métodos aceites: ${payMethods}`, 22, finalY + 11);
-    doc.text(`Condições: ${paySplit}`, 22, finalY + 15);
-    if (payNotes) {
-      const nLines = doc.splitTextToSize(`Obs: ${payNotes}`, pageW - 44);
-      doc.text(nLines.slice(0, 2), 22, finalY + 20);
-    }
+  // Always render payment + conditions: if there isn't enough vertical space, add a new page
+  const payBoxH = payNotes ? 24 : 16;
+  const WARRANTY_LINE = 'Garantia de 2 anos sobre mão de obra e materiais fornecidos';
+  const IVA_LINE = 'Valores em EUR, IVA NÃO incluído (a acrescer à taxa legal em vigor)';
+  const condLines = [
+    `Proposta válida por ${validDays} dias`,
+    WARRANTY_LINE,
+    IVA_LINE,
+    ...conditions.filter(c => {
+      const l = c.toLowerCase();
+      return !l.includes('iva') && !l.includes('garantia');
+    }),
+  ];
+  if (notes) condLines.push(`Nota: ${notes}`);
+  const condBoxH = 8 + condLines.length * 4;
+  const requiredSpace = payBoxH + 6 + condBoxH + 10; // +10 footer margin
 
-    finalY += payBoxH + 6;
-
-    // Conditions box - always enforce 2yr warranty & IVA not included
-    doc.setFillColor(24, 24, 27);
-    const WARRANTY_LINE = 'Garantia de 2 anos sobre mão de obra e materiais fornecidos';
-    const IVA_LINE = 'Valores em EUR, IVA NÃO incluído (a acrescer à taxa legal em vigor)';
-    const condLines = [
-      `Proposta válida por ${validDays} dias`,
-      WARRANTY_LINE,
-      IVA_LINE,
-      // Keep other user-configured conditions but exclude any IVA/warranty duplicates
-      ...conditions.filter(c => {
-        const l = c.toLowerCase();
-        return !l.includes('iva') && !l.includes('garantia');
-      }),
-    ];
-    if (notes) condLines.push(`Nota: ${notes}`);
-    const boxH = 8 + condLines.length * 4;
-    doc.roundedRect(15, finalY, pageW - 30, boxH, 3, 3, 'F');
-    doc.setTextColor(250, 204, 21);
-    doc.setFontSize(7);
-    doc.setFont('helvetica', 'bold');
-    doc.text('CONDIÇÕES GERAIS', 22, finalY + 6);
-    doc.setTextColor(180, 180, 180);
-    doc.setFontSize(6.5);
-    doc.setFont('helvetica', 'normal');
-    condLines.forEach((line, i) => {
-      doc.text(`• ${line}`, 22, finalY + 10 + i * 4);
-    });
+  if (finalY + requiredSpace > pageH - 25) {
+    doc.addPage();
+    finalY = 20;
   }
+
+  // Payment box
+  doc.setFillColor(24, 24, 27);
+  doc.roundedRect(15, finalY, pageW - 30, payBoxH, 3, 3, 'F');
+  doc.setTextColor(250, 204, 21);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('FORMA DE PAGAMENTO', 22, finalY + 6);
+  doc.setTextColor(220, 220, 220);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Métodos aceites: ${payMethods}`, 22, finalY + 11);
+  const splitLines = doc.splitTextToSize(`Condições: ${paySplit}`, pageW - 44);
+  doc.text(splitLines.slice(0, 2), 22, finalY + 15);
+  if (payNotes) {
+    const nLines = doc.splitTextToSize(`Obs: ${payNotes}`, pageW - 44);
+    doc.text(nLines.slice(0, 2), 22, finalY + 20);
+  }
+
+  finalY += payBoxH + 6;
+
+  // Conditions box
+  doc.setFillColor(24, 24, 27);
+  doc.roundedRect(15, finalY, pageW - 30, condBoxH, 3, 3, 'F');
+  doc.setTextColor(250, 204, 21);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'bold');
+  doc.text('CONDIÇÕES GERAIS', 22, finalY + 6);
+  doc.setTextColor(180, 180, 180);
+  doc.setFontSize(6.5);
+  doc.setFont('helvetica', 'normal');
+  condLines.forEach((line, i) => {
+    doc.text(`• ${line}`, 22, finalY + 10 + i * 4);
+  });
 
   // ===== SIGNATURE BLOCK (if signed) =====
   if (proposal.signature_data && proposal.sign_status === 'signed') {
@@ -523,7 +529,24 @@ export default function PropostasPage() {
                             </div>
                           )}
                           <div className="mt-5 flex gap-2">
-                            <Button data-testid={`export-pdf-${p.id}`} onClick={() => generatePDF(p, settings, logoBase64)} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">
+                            <Button data-testid={`export-pdf-${p.id}`} onClick={async () => {
+                              // Backup: se a proposta não tem condições próprias preenchidas,
+                              // vai buscar ao orçamento de origem as mais recentes antes de gerar.
+                              let enriched = p;
+                              const missing = (!p.payment_methods || p.payment_methods.length === 0) && !p.payment_split && !p.payment_notes;
+                              if (missing && p.budget_id) {
+                                try {
+                                  const { data: b } = await api.get(`/budgets/${p.budget_id}`);
+                                  enriched = {
+                                    ...p,
+                                    payment_methods: b.payment_methods || [],
+                                    payment_split: b.payment_split || '',
+                                    payment_notes: b.payment_notes || '',
+                                  };
+                                } catch { /* ignore, gera com o que existir */ }
+                              }
+                              generatePDF(enriched, settings, logoBase64);
+                            }} size="sm" className="flex-1 bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full text-xs font-semibold">
                               <Download size={14} className="mr-1" /> PDF
                             </Button>
                             <Button data-testid={`send-whatsapp-${p.id}`} onClick={() => sendWhatsApp(p)} size="sm" className="flex-1 bg-green-500 text-white hover:bg-green-600 rounded-full text-xs font-semibold">
