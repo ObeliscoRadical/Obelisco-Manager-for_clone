@@ -48,7 +48,7 @@ export default function DespesasPage() {
     try {
       const [expRes, sumRes, catRes, obraRes] = await Promise.all([
         api.get('/expenses', { params: { month, year, category: filterCategory || undefined, type: filterType || undefined } }),
-        api.get('/expenses/summary', { params: { year } }),
+        api.get('/expenses/summary', { params: { year, month } }),
         api.get('/expenses/categories'),
         api.get('/works'),
       ]);
@@ -200,21 +200,25 @@ export default function DespesasPage() {
 
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-yellow-400/10 to-yellow-400/5 border border-yellow-400/30">
+          <div data-testid="kpi-total-year" className="p-4 rounded-2xl bg-gradient-to-br from-yellow-400/10 to-yellow-400/5 border border-yellow-400/30">
             <p className="text-xs uppercase tracking-wider text-yellow-400/80 font-medium">Total {summary.year}</p>
             <p className="text-2xl font-black text-yellow-400 mt-1">{formatEuro(summary.total_year)}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">{summary.count_year ?? summary.count} despesas no ano</p>
           </div>
-          <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
-            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Este Mês</p>
-            <p className="text-2xl font-black text-white mt-1">{formatEuro(summary.current_month_total)}</p>
+          <div data-testid="kpi-month-total" className="p-4 rounded-2xl bg-gradient-to-br from-yellow-400/5 to-zinc-900 border border-yellow-400/20">
+            <p className="text-xs uppercase tracking-wider text-yellow-400/80 font-medium">{monthName(month)} {summary.year}</p>
+            <p className="text-2xl font-black text-white mt-1">{formatEuro(summary.month_total ?? summary.current_month_total)}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Total de gastos no mês</p>
           </div>
-          <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
-            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">IVA Pago</p>
-            <p className="text-2xl font-black text-orange-400 mt-1">{formatEuro(summary.total_iva)}</p>
+          <div data-testid="kpi-month-iva" className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">IVA pago em {monthName(month)}</p>
+            <p className="text-2xl font-black text-orange-400 mt-1">{formatEuro(summary.month_iva ?? 0)}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Ano: {formatEuro(summary.total_iva)}</p>
           </div>
-          <div className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
-            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Total Despesas</p>
-            <p className="text-2xl font-black text-white mt-1">{summary.count}</p>
+          <div data-testid="kpi-month-count" className="p-4 rounded-2xl bg-zinc-900 border border-zinc-800">
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium">Faturas em {monthName(month)}</p>
+            <p className="text-2xl font-black text-white mt-1">{summary.month_count ?? 0}</p>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Ano: {summary.count_year ?? summary.count} despesas</p>
           </div>
         </div>
       )}

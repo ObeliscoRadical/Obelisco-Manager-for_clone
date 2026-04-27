@@ -230,12 +230,14 @@ def create_expenses_router(db, get_current_user):
         return expenses
 
     @expenses_router.get("/summary")
-    async def summary(year: Optional[int] = None, user=Depends(get_current_user)):
+    async def summary(year: Optional[int] = None, month: Optional[int] = None, user=Depends(get_current_user)):
         now = datetime.now(timezone.utc)
         y = year or now.year
         all_exp = await db.expenses.find({"date": {"$regex": f"^{y:04d}"}}, {"_id": 0}).to_list(5000)
 
         by_month = {m: 0 for m in range(1, 13)}
+        iva_by_month = {m: 0 for m in range(1, 13)}
+        count_by_month = {m: 0 for m in range(1, 13)}
         by_category = {}
         by_type = {"fixo": 0, "variavel": 0, "obra": 0}
         by_obra = {}
@@ -253,6 +255,8 @@ def create_expenses_router(db, get_current_user):
             total_iva += iva
             if m:
                 by_month[m] = round(by_month.get(m, 0) + gross, 2)
+                iva_by_month[m] = round(iva_by_month.get(m, 0) + iva, 2)
+                count_by_month[m] = count_by_month.get(m, 0) + 1
             cat = e.get("category", "Outros")
             by_category[cat] = round(by_category.get(cat, 0) + gross, 2)
             tp = e.get("type", "variavel")
@@ -261,16 +265,23 @@ def create_expenses_router(db, get_current_user):
                 ob = e.get("obra_name") or e["obra_id"]
                 by_obra[ob] = round(by_obra.get(ob, 0) + gross, 2)
 
-        current_month = now.month if now.year == y else 12
-        month_total = by_month.get(current_month, 0)
+        # Selected month: defaults to current month if same year, else December
+        selected_month = month if (month and 1 <= month <= 12) else (now.month if now.year == y else 12)
 
         return {
             "year": y,
+            "selected_month": selected_month,
             "total_year": round(total_year, 2),
             "total_iva": round(total_iva, 2),
-            "current_month_total": round(month_total, 2),
-            "count": len(all_exp),
+            "count_year": len(all_exp),
+            "month_total": round(by_month.get(selected_month, 0), 2),
+            "month_iva": round(iva_by_month.get(selected_month, 0), 2),
+            "month_count": count_by_month.get(selected_month, 0),
+            "current_month_total": round(by_month.get(selected_month, 0), 2),  # backward compat
+            "count": len(all_exp),  # backward compat
             "by_month": by_month,
+            "iva_by_month": iva_by_month,
+            "count_by_month": count_by_month,
             "by_category": by_category,
             "by_type": by_type,
             "by_obra": by_obra,
