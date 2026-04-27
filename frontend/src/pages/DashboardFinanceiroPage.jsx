@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
-import { TrendingUp, TrendingDown, Euro, AlertTriangle, Calendar, PieChart as PieIcon, ArrowDownRight, ArrowUpRight, Wallet, Receipt, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, Euro, AlertTriangle, Calendar, PieChart as PieIcon, ArrowDownRight, ArrowUpRight, Wallet, Receipt, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -31,12 +31,25 @@ export default function DashboardFinanceiroPage() {
       ]);
       setData(dataRes.data);
       setClients(clientsRes.data);
-    } catch {
+    } catch (err) {
+      console.debug('[dashboard/cashflow]', err?.message);
       toast.error('Erro ao carregar dashboard financeiro');
     } finally { setLoading(false); }
   }, [year, month, client]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Refetch when page regains focus (e.g. user came back from Despesas after adding expense)
+  useEffect(() => {
+    const onFocus = () => fetchData();
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchData(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchData]);
 
   if (loading || !data) {
     return <div className="flex items-center justify-center h-64"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>;
@@ -120,6 +133,15 @@ export default function DashboardFinanceiroPage() {
             <X size={14} /> Limpar filtros
           </button>
         )}
+        <button
+          data-testid="refresh-dashboard"
+          onClick={fetchData}
+          disabled={loading}
+          className="h-10 px-4 rounded-md bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 hover:bg-yellow-400/20 text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+          title="Atualizar dados agora"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+        </button>
       </div>
 
       {clientActive && (
@@ -156,7 +178,7 @@ export default function DashboardFinanceiroPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div data-testid="current-month-card" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1"><Calendar size={12} /> Mês Actual ({MONTHS[cm.month - 1]})</p>
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1"><Calendar size={12} /> {monthActive ? `Mês Seleccionado (${MONTHS[cm.month - 1]})` : `Mês Actual (${MONTHS[cm.month - 1]})`}</p>
             <span className={`text-xs font-bold ${cmColor}`}>{cm.net >= 0 ? <TrendingUp size={14} className="inline" /> : <TrendingDown size={14} className="inline" />}</span>
           </div>
           <div className="space-y-2">
@@ -189,11 +211,29 @@ export default function DashboardFinanceiroPage() {
 
       {/* Monthly bar chart */}
       <div data-testid="monthly-chart" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-        <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-4 flex items-center gap-1"><Receipt size={12} /> Cashflow mensal · {data.year}</p>
+        <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-4 flex items-center gap-1">
+          <Receipt size={12} /> Cashflow mensal · {data.year}
+          {monthActive && <span className="ml-2 text-yellow-400 normal-case tracking-normal">(destaque: {MONTHS[data.month - 1]})</span>}
+        </p>
         <div style={{ width: '100%', height: 320 }}>
           <ResponsiveContainer>
             <BarChart data={chartData}>
-              <XAxis dataKey="name" stroke="#71717a" fontSize={11} />
+              <XAxis
+                dataKey="name"
+                stroke="#71717a"
+                fontSize={11}
+                tick={(props) => {
+                  const { x, y, payload } = props;
+                  const isSel = monthActive && MONTHS[data.month - 1] === payload.value;
+                  return (
+                    <text x={x} y={y + 14} textAnchor="middle" fontSize={11}
+                          fill={isSel ? '#facc15' : '#71717a'}
+                          fontWeight={isSel ? 700 : 400}>
+                      {payload.value}
+                    </text>
+                  );
+                }}
+              />
               <YAxis stroke="#71717a" fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip
                 contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}
@@ -201,9 +241,21 @@ export default function DashboardFinanceiroPage() {
                 cursor={{ fill: 'rgba(250, 204, 21, 0.05)' }}
               />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Resultado" fill="#facc15" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Entradas" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <Cell key={`e-${i}`} fill="#22c55e" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                ))}
+              </Bar>
+              <Bar dataKey="Saídas" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <Cell key={`s-${i}`} fill="#ef4444" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                ))}
+              </Bar>
+              <Bar dataKey="Resultado" radius={[4, 4, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <Cell key={`r-${i}`} fill="#facc15" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>
