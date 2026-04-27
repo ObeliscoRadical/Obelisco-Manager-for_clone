@@ -6,8 +6,9 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil } from 'lucide-react';
+import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 const monthName = (m) => ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][m] || '';
@@ -61,6 +62,18 @@ export default function DespesasPage() {
   }, [month, year, filterCategory, filterType]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // Auto-refresh quando a página volta a ficar visível
+  useEffect(() => {
+    const onFocus = () => fetchAll();
+    const onVisibility = () => { if (document.visibilityState === 'visible') fetchAll(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchAll]);
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDialogOpen(true); };
@@ -154,7 +167,11 @@ export default function DespesasPage() {
   };
 
   const topCats = summary ? Object.entries(summary.by_category || {}).sort((a, b) => b[1] - a[1]).slice(0, 5) : [];
-  const maxMonth = summary ? Math.max(...Object.values(summary.by_month || { 0: 0 })) || 1 : 1;
+  const monthlyChartData = summary ? Object.entries(summary.by_month || {}).map(([m, v]) => ({
+    name: monthName(parseInt(m)),
+    monthNum: parseInt(m),
+    value: v || 0,
+  })) : [];
 
   if (loading) return <div className="text-zinc-400 text-sm">A carregar...</div>;
 
@@ -165,9 +182,20 @@ export default function DespesasPage() {
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Despesas</h1>
           <p className="text-zinc-400 mt-1 font-medium">Controlo de custos mensais com extração IA de faturas</p>
         </div>
-        <Button data-testid="new-expense-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-          <Plus size={18} className="mr-2" /> Nova Despesa
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            data-testid="refresh-expenses"
+            onClick={fetchAll}
+            disabled={loading}
+            className="h-10 px-4 rounded-full bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 hover:bg-yellow-400/20 text-xs font-semibold flex items-center gap-1 disabled:opacity-50"
+            title="Atualizar dados"
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Atualizar
+          </button>
+          <Button data-testid="new-expense-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
+            <Plus size={18} className="mr-2" /> Nova Despesa
+          </Button>
+        </div>
       </div>
 
       {summary && (
@@ -193,21 +221,43 @@ export default function DespesasPage() {
 
       {summary && (
         <div className="grid grid-cols-1 md:grid-cols-[1fr_350px] gap-4">
-          <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-            <h3 className="text-sm uppercase tracking-wider text-zinc-400 font-semibold mb-4 flex items-center gap-2"><TrendingUp size={14} /> Gastos Mensais {summary.year}</h3>
-            <div className="flex items-end gap-2 h-40">
-              {Object.entries(summary.by_month || {}).map(([m, v]) => (
-                <div key={m} className="flex-1 flex flex-col items-center gap-1 group">
-                  <div className="w-full relative h-full flex items-end">
-                    <div
-                      className={`w-full rounded-t-md transition-all ${parseInt(m) === month ? 'bg-yellow-400' : 'bg-zinc-700 group-hover:bg-zinc-600'}`}
-                      style={{ height: `${Math.max((v / maxMonth) * 100, v > 0 ? 4 : 0)}%` }}
-                      title={formatEuro(v)}
-                    />
-                  </div>
-                  <span className="text-[10px] text-zinc-500">{monthName(parseInt(m))}</span>
-                </div>
-              ))}
+          <div data-testid="monthly-chart" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+            <h3 className="text-sm uppercase tracking-wider text-zinc-400 font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp size={14} /> Gastos Mensais {summary.year}
+              <span className="ml-auto text-[10px] text-yellow-400 normal-case tracking-normal">Mês selecionado: {monthName(month)}</span>
+            </h3>
+            <div style={{ width: '100%', height: 200 }}>
+              <ResponsiveContainer>
+                <BarChart data={monthlyChartData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                  <XAxis
+                    dataKey="name"
+                    stroke="#71717a"
+                    fontSize={10}
+                    tick={(props) => {
+                      const { x, y, payload } = props;
+                      const isSel = monthName(month) === payload.value;
+                      return (
+                        <text x={x} y={y + 12} textAnchor="middle" fontSize={10}
+                              fill={isSel ? '#facc15' : '#71717a'}
+                              fontWeight={isSel ? 700 : 400}>
+                          {payload.value}
+                        </text>
+                      );
+                    }}
+                  />
+                  <YAxis stroke="#71717a" fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}
+                    formatter={(v) => formatEuro(v)}
+                    cursor={{ fill: 'rgba(250, 204, 21, 0.05)' }}
+                  />
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                    {monthlyChartData.map((d, i) => (
+                      <Cell key={i} fill={d.monthNum === month ? '#facc15' : '#3f3f46'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
           <div className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
