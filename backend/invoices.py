@@ -145,6 +145,13 @@ class PaymentInput(BaseModel):
     notes: str = ""
 
 
+class PaymentUpdate(BaseModel):
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    method: Optional[str] = None
+    notes: Optional[str] = None
+
+
 def _today():
     return date_cls.today().isoformat()
 
@@ -346,6 +353,32 @@ def create_invoices_router(db, get_current_user):
             "registered_by": user.get("name", ""),
         }
         payments = invoice.get("payments", []) + [payment]
+        await db.invoices.update_one({"id": invoice_id}, {"$set": {"payments": payments}})
+        updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        return compute_status(updated)
+
+    @invoices_router.put("/{invoice_id}/payment/{payment_id}")
+    async def update_payment(invoice_id: str, payment_id: str, input: PaymentUpdate, user=Depends(get_current_user)):
+        invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+        if not invoice:
+            raise HTTPException(status_code=404, detail="Fatura não encontrada")
+        payments = invoice.get("payments", [])
+        idx = next((k for k, p in enumerate(payments) if p.get("id") == payment_id), None)
+        if idx is None:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        data = input.model_dump(exclude_none=True)
+        if not data:
+            raise HTTPException(status_code=400, detail="Nada para atualizar")
+        if "amount" in data:
+            if data["amount"] <= 0:
+                raise HTTPException(status_code=400, detail="Valor deve ser maior que zero")
+            data["amount"] = round(float(data["amount"]), 2)
+        payments[idx] = {
+            **payments[idx],
+            **data,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user.get("name", ""),
+        }
         await db.invoices.update_one({"id": invoice_id}, {"$set": {"payments": payments}})
         updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
         return compute_status(updated)

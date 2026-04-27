@@ -202,8 +202,7 @@ async function generatePDF(proposal, settings, logoBase64) {
   const conditions = settings?.conditions || [];
   const notes = settings?.notes || '';
 
-  // Always render payment + conditions: if there isn't enough vertical space, add a new page
-  const payBoxH = payNotes ? 24 : 16;
+  // Compute condition lines (always include warranty + IVA)
   const WARRANTY_LINE = 'Garantia de 2 anos sobre mão de obra e materiais fornecidos';
   const IVA_LINE = 'Valores em EUR, IVA NÃO incluído (a acrescer à taxa legal em vigor)';
   const condLines = [
@@ -216,13 +215,41 @@ async function generatePDF(proposal, settings, logoBase64) {
     }),
   ];
   if (notes) condLines.push(`Nota: ${notes}`);
-  const condBoxH = 8 + condLines.length * 4;
-  const requiredSpace = payBoxH + 6 + condBoxH + 10; // +10 footer margin
 
-  if (finalY + requiredSpace > pageH - 25) {
+  // Footer top edge ~ pageH - 22mm (linhas em pageH-16, -11, -6)
+  const footerTop = pageH - 22;
+  const availableSpace = footerTop - finalY - 1;   // 1mm respiro acima do footer
+
+  // Required heights — versão normal
+  const payBoxH_normal = payNotes ? 24 : 16;
+  const condLineHeight_normal = 4;
+  const condBoxH_normal = 8 + condLines.length * condLineHeight_normal;
+  const gap_normal = 6;
+  const requiredNormal = payBoxH_normal + gap_normal + condBoxH_normal;
+
+  // Required heights — versão compacta (linhas mais juntas, gap mínimo)
+  const payBoxH_compact = payNotes ? 21 : 14;
+  const condLineHeight_compact = 3.4;
+  const condBoxH_compact = 6.5 + condLines.length * condLineHeight_compact;
+  const gap_compact = 3;
+  const requiredCompact = payBoxH_compact + gap_compact + condBoxH_compact;
+
+  // Decide modo: tenta normal → compacto → nova página
+  let useCompact = false;
+  if (requiredNormal <= availableSpace) {
+    useCompact = false;
+  } else if (requiredCompact <= availableSpace) {
+    useCompact = true;
+  } else {
     doc.addPage();
     finalY = 20;
+    useCompact = false;
   }
+
+  const payBoxH = useCompact ? payBoxH_compact : payBoxH_normal;
+  const condBoxH = useCompact ? condBoxH_compact : condBoxH_normal;
+  const condLineHeight = useCompact ? condLineHeight_compact : condLineHeight_normal;
+  const gap = useCompact ? gap_compact : gap_normal;
 
   // Payment box
   doc.setFillColor(24, 24, 27);
@@ -230,19 +257,21 @@ async function generatePDF(proposal, settings, logoBase64) {
   doc.setTextColor(250, 204, 21);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
-  doc.text('FORMA DE PAGAMENTO', 22, finalY + 6);
+  doc.text('FORMA DE PAGAMENTO', 22, finalY + (useCompact ? 5 : 6));
   doc.setTextColor(220, 220, 220);
-  doc.setFontSize(7);
+  doc.setFontSize(useCompact ? 6.5 : 7);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Métodos aceites: ${payMethods}`, 22, finalY + 11);
+  const lineY1 = finalY + (useCompact ? 9 : 11);
+  const lineY2 = finalY + (useCompact ? 12.5 : 15);
+  doc.text(`Métodos aceites: ${payMethods}`, 22, lineY1);
   const splitLines = doc.splitTextToSize(`Condições: ${paySplit}`, pageW - 44);
-  doc.text(splitLines.slice(0, 2), 22, finalY + 15);
+  doc.text(splitLines.slice(0, 2), 22, lineY2);
   if (payNotes) {
     const nLines = doc.splitTextToSize(`Obs: ${payNotes}`, pageW - 44);
-    doc.text(nLines.slice(0, 2), 22, finalY + 20);
+    doc.text(nLines.slice(0, useCompact ? 1 : 2), 22, finalY + (useCompact ? 17 : 20));
   }
 
-  finalY += payBoxH + 6;
+  finalY += payBoxH + gap;
 
   // Conditions box
   doc.setFillColor(24, 24, 27);
@@ -250,12 +279,13 @@ async function generatePDF(proposal, settings, logoBase64) {
   doc.setTextColor(250, 204, 21);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'bold');
-  doc.text('CONDIÇÕES GERAIS', 22, finalY + 6);
+  doc.text('CONDIÇÕES GERAIS', 22, finalY + (useCompact ? 4.5 : 6));
   doc.setTextColor(180, 180, 180);
-  doc.setFontSize(6.5);
+  doc.setFontSize(useCompact ? 6 : 6.5);
   doc.setFont('helvetica', 'normal');
+  const condStartY = finalY + (useCompact ? 8 : 10);
   condLines.forEach((line, i) => {
-    doc.text(`• ${line}`, 22, finalY + 10 + i * 4);
+    doc.text(`• ${line}`, 22, condStartY + i * condLineHeight);
   });
 
   // ===== SIGNATURE BLOCK (if signed) =====
