@@ -15,7 +15,7 @@ const emptyForm = {
   name: '', nif: '', niss: '', iban: '', address: '', phone: '', email: '',
   role: '', category: '', contract_type: 'efetivo', admission_date: '',
   base_salary: 0, hourly_rate: 0, meal_allowance: 6.00,
-  weekly_hours: 40, work_days_per_week: 5, active: true,
+  weekly_hours: 40, work_days_per_week: 5, payment_frequency: 'mensal', active: true,
   has_duodecimos: false, has_commissions: false, has_advances: false, has_fixed_deductions: false,
   accident_insurance: '', notes: '',
 };
@@ -91,6 +91,7 @@ export default function FuncionariosPage() {
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Cargo</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Contrato</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Salário Base</TableHead>
+              <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Pagamento</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">S. Alimentacao</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider">Estado</TableHead>
               <TableHead className="text-zinc-400 text-xs uppercase tracking-wider text-right">Ações</TableHead>
@@ -98,7 +99,7 @@ export default function FuncionariosPage() {
           </TableHeader>
           <TableBody>
             {list.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-zinc-500 py-8">Sem funcionários. Clique em "Novo Funcionário".</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-zinc-500 py-8">Sem funcionários. Clique em "Novo Funcionário".</TableCell></TableRow>
             ) : list.map(e => (
               <TableRow key={e.id} className="border-zinc-800/50 hover:bg-zinc-800/30">
                 <TableCell className="text-white font-medium">{e.name}</TableCell>
@@ -106,6 +107,14 @@ export default function FuncionariosPage() {
                 <TableCell className="text-zinc-300">{e.role || '-'}</TableCell>
                 <TableCell className="text-zinc-400 text-xs capitalize">{e.contract_type}</TableCell>
                 <TableCell className="text-right text-yellow-400 font-semibold">{formatEuro(e.base_salary)}</TableCell>
+                <TableCell>
+                  {(() => {
+                    const f = e.payment_frequency || 'mensal';
+                    const cls = f === 'semanal' ? 'bg-purple-500/20 text-purple-300' : f === 'quinzenal' ? 'bg-blue-500/20 text-blue-300' : 'bg-zinc-700 text-zinc-300';
+                    const lbl = f === 'semanal' ? 'Semanal' : f === 'quinzenal' ? 'Quinzenal' : 'Mensal';
+                    return <Badge className={`${cls} border-0 capitalize`}>{lbl}</Badge>;
+                  })()}
+                </TableCell>
                 <TableCell className="text-right text-zinc-300">{formatEuro(e.meal_allowance)}/dia</TableCell>
                 <TableCell>
                   {e.active
@@ -154,6 +163,20 @@ export default function FuncionariosPage() {
             <div><Label className="text-zinc-400 text-xs">Subsidio alimentacao/dia (EUR)</Label><Input type="number" min="0" step="0.01" value={form.meal_allowance} onChange={e => updateField('meal_allowance', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Horas semanais</Label><Input type="number" min="0" step="0.5" value={form.weekly_hours} onChange={e => updateField('weekly_hours', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Dias/semana</Label><Input type="number" min="1" max="7" value={form.work_days_per_week} onChange={e => updateField('work_days_per_week', parseInt(e.target.value) || 5)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+            <div className="md:col-span-2">
+              <Label className="text-zinc-400 text-xs">Frequência de pagamento</Label>
+              <select
+                data-testid="emp-payment-frequency"
+                value={form.payment_frequency || 'mensal'}
+                onChange={e => updateField('payment_frequency', e.target.value)}
+                className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm"
+              >
+                <option value="mensal">Mensal — 1 pagamento no fim do mês</option>
+                <option value="quinzenal">Quinzenal — 2 pagamentos (dia 15 e fim do mês)</option>
+                <option value="semanal">Semanal — pagamento à sexta-feira de cada semana</option>
+              </select>
+              <p className="text-[10px] text-zinc-500 mt-1">O salário base continua mensal (para IRS/SS) — esta opção apenas divide o pagamento ao funcionário.</p>
+            </div>
             <div><Label className="text-zinc-400 text-xs">Seguro de acidentes</Label><Input value={form.accident_insurance} onChange={e => updateField('accident_insurance', e.target.value)} placeholder="Apolice n." className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
 
             <div className="md:col-span-2">

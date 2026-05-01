@@ -62,6 +62,7 @@ class EmployeeCreate(BaseModel):
     meal_allowance: float = 6.00            # subsidio alimentacao/dia
     weekly_hours: float = 40.0
     work_days_per_week: int = 5
+    payment_frequency: str = "mensal"       # mensal, quinzenal, semanal
     active: bool = True
     has_duodecimos: bool = False
     has_commissions: bool = False
@@ -88,6 +89,7 @@ class EmployeeUpdate(BaseModel):
     meal_allowance: Optional[float] = None
     weekly_hours: Optional[float] = None
     work_days_per_week: Optional[int] = None
+    payment_frequency: Optional[str] = None
     active: Optional[bool] = None
     has_duodecimos: Optional[bool] = None
     has_commissions: Optional[bool] = None
@@ -137,6 +139,20 @@ class PayrollItemUpdate(BaseModel):
     desconto_irs: Optional[float] = None
     outros_descontos: Optional[float] = None
     observacoes: Optional[str] = None
+
+
+class PayrollPaymentInput(BaseModel):
+    date: str
+    amount: float
+    method: str = "Transferência"
+    notes: str = ""
+
+
+class PayrollPaymentUpdate(BaseModel):
+    date: Optional[str] = None
+    amount: Optional[float] = None
+    method: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class PayrollSettingsUpdate(BaseModel):
@@ -462,6 +478,8 @@ def create_payroll_router(db, get_current_user):
                 "employee_nif": emp.get("nif", ""),
                 "month": input.month,
                 "year": input.year,
+                "payment_frequency": emp.get("payment_frequency", "mensal"),
+                "payments": [],
                 **final_item,
                 "status": "rascunho",
             }
@@ -628,5 +646,137 @@ def create_payroll_router(db, get_current_user):
             "total_overtime_month": round(total_ot, 2),
             "faltas_injustificadas_month": faltas_att,
         }
+
+    # ----- Item Payments (plano semanal/quinzenal/mensal) -----
+    def _build_payment_plan(item: dict) -> List[dict]:
+        """Generate suggested payment plan based on payment_frequency.
+        Returns list of {date, amount, label} with NO id (these are suggestions)."""
+        from datetime import date as _date_cls, timedelta as _timedelta
+        freq = (item.get("payment_frequency") or "mensal").lower()
+        total = float(item.get("total_liquido", 0) or 0)
+        year = int(item.get("year"))
+        month = int(item.get("month"))
+
+        # Last day of month
+        if month == 12:
+            last_day = _date_cls(year + 1, 1, 1) - _timedelta(days=1)
+        else:
+            last_day = _date_cls(year, month + 1, 1) - _timedelta(days=1)
+
+        if freq == "semanal":
+            # Find every Friday inside the month; if last week ends after last_day, include too
+            d = _date_cls(year, month, 1)
+            fridays = []
+            while d.month == month:
+                if d.weekday() == 4:    # 4 = Friday
+                    fridays.append(d)
+                d += _timedelta(days=1)
+            if not fridays:
+                fridays = [last_day]
+            n = len(fridays)
+            slice_amt = round(total / n, 2)
+            plan = []
+            paid_so_far = 0.0
+            for i, fri in enumerate(fridays):
+                if i == n - 1:
+                    amt = round(total - paid_so_far, 2)        # acerto na última semana
+                else:
+                    amt = slice_amt
+                    paid_so_far += amt
+                plan.append({
+                    "date": fri.isoformat(),
+                    "amount": amt,
+                    "label": f"Semana {i + 1}/{n}",
+                })
+            return plan
+
+        if freq == "quinzenal":
+            day15 = _date_cls(year, month, 15)
+            half = round(total / 2, 2)
+            return [
+                {"date": day15.isoformat(), "amount": half, "label": "1ª quinzena"},
+                {"date": last_day.isoformat(), "amount": round(total - half, 2), "label": "2ª quinzena"},
+            ]
+
+        # mensal (default)
+        return [{"date": last_day.isoformat(), "amount": total, "label": "Mensal"}]
+
+    @payroll_router.get("/items/{item_id}")
+    async def get_item(item_id: str, user=Depends(get_current_user)):
+        item = await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        return item
+
+    @payroll_router.get("/items/{item_id}/plan")
+    async def get_payment_plan(item_id: str, user=Depends(get_current_user)):
+        item = await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        plan = _build_payment_plan(item)
+        payments = item.get("payments", [])
+        amount_paid = round(sum(float(p.get("amount", 0) or 0) for p in payments), 2)
+        balance = round(float(item.get("total_liquido", 0) or 0) - amount_paid, 2)
+        return {
+            "payment_frequency": item.get("payment_frequency", "mensal"),
+            "total_liquido": item.get("total_liquido", 0),
+            "amount_paid": amount_paid,
+            "balance": balance,
+            "plan": plan,
+            "payments": payments,
+        }
+
+    @payroll_router.post("/items/{item_id}/payment")
+    async def add_item_payment(item_id: str, input: PayrollPaymentInput, user=Depends(get_current_user)):
+        item = await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        if input.amount <= 0:
+            raise HTTPException(status_code=400, detail="Valor deve ser maior que zero")
+        payment = {
+            "id": str(uuid.uuid4()),
+            "date": input.date,
+            "amount": round(float(input.amount), 2),
+            "method": input.method,
+            "notes": input.notes,
+            "registered_at": datetime.now(timezone.utc).isoformat(),
+            "registered_by": user.get("name", ""),
+        }
+        await db.payroll_items.update_one({"id": item_id}, {"$push": {"payments": payment}})
+        return await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+
+    @payroll_router.put("/items/{item_id}/payment/{payment_id}")
+    async def update_item_payment(item_id: str, payment_id: str, input: PayrollPaymentUpdate, user=Depends(get_current_user)):
+        item = await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        payments = item.get("payments", [])
+        idx = next((k for k, p in enumerate(payments) if p.get("id") == payment_id), None)
+        if idx is None:
+            raise HTTPException(status_code=404, detail="Pagamento não encontrado")
+        data = input.model_dump(exclude_none=True)
+        if not data:
+            raise HTTPException(status_code=400, detail="Nada para atualizar")
+        if "amount" in data:
+            if data["amount"] <= 0:
+                raise HTTPException(status_code=400, detail="Valor deve ser maior que zero")
+            data["amount"] = round(float(data["amount"]), 2)
+        payments[idx] = {
+            **payments[idx],
+            **data,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "updated_by": user.get("name", ""),
+        }
+        await db.payroll_items.update_one({"id": item_id}, {"$set": {"payments": payments}})
+        return await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+
+    @payroll_router.delete("/items/{item_id}/payment/{payment_id}")
+    async def delete_item_payment(item_id: str, payment_id: str, user=Depends(get_current_user)):
+        item = await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
+        if not item:
+            raise HTTPException(status_code=404, detail="Item não encontrado")
+        payments = [p for p in item.get("payments", []) if p.get("id") != payment_id]
+        await db.payroll_items.update_one({"id": item_id}, {"$set": {"payments": payments}})
+        return await db.payroll_items.find_one({"id": item_id}, {"_id": 0})
 
     return payroll_router
