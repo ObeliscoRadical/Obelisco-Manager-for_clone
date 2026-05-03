@@ -2617,6 +2617,9 @@ app.include_router(create_expenses_router(db, get_current_user))
 from invoices import create_invoices_router
 app.include_router(create_invoices_router(db, get_current_user))
 
+from employee_loans import create_loans_router
+app.include_router(create_loans_router(db, get_current_user))
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")],

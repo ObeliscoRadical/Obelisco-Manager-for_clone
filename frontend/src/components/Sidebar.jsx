@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
@@ -24,6 +24,7 @@ const salariosItems = [
   { path: '/funcionarios', label: 'Funcionários', icon: Wallet },
   { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2 },
   { path: '/processamento-salarial', label: 'Processamento', icon: Calculator },
+  { path: '/creditos', label: 'Créditos', icon: PiggyBank },
   { path: '/config-salariais', label: 'Config. Salariais', icon: Coins },
 ];
 
