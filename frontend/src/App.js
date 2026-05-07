@@ -19,6 +19,7 @@ import FuncionariosPage from "./pages/FuncionariosPage";
 import AssiduidadePage from "./pages/AssiduidadePage";
 import ProcessamentoSalarialPage from "./pages/ProcessamentoSalarialPage";
 import CreditosPage from "./pages/CreditosPage";
+import CustosFixosPage from "./pages/CustosFixosPage";
 import ConfiguracoesSalariaisPage from "./pages/ConfiguracoesSalariaisPage";
 import PublicSignPage from "./pages/PublicSignPage";
 import DespesasPage from "./pages/DespesasPage";
@@ -82,6 +83,7 @@ function App() {
           <Route path="/assiduidade" element={<ProtectedRoute><AssiduidadePage /></ProtectedRoute>} />
           <Route path="/processamento-salarial" element={<ProtectedRoute><ProcessamentoSalarialPage /></ProtectedRoute>} />
           <Route path="/creditos" element={<ProtectedRoute><CreditosPage /></ProtectedRoute>} />
+          <Route path="/custos-fixos" element={<ProtectedRoute><CustosFixosPage /></ProtectedRoute>} />
           <Route path="/config-salariais" element={<ProtectedRoute><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
           <Route path="/despesas" element={<ProtectedRoute><DespesasPage /></ProtectedRoute>} />
           <Route path="/faturas" element={<ProtectedRoute><FaturasPage /></ProtectedRoute>} />
