@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -38,6 +38,7 @@ export default function DespesasPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [extracting, setExtracting] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
   const [filterCategory, setFilterCategory] = useState('');
@@ -75,8 +76,8 @@ export default function DespesasPage() {
     };
   }, [fetchAll]);
 
-  const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
-  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setForm(emptyForm); setDuplicateWarning(null); setDialogOpen(true); };
+  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDuplicateWarning(null); setDialogOpen(true); };
 
   const setField = (k, v) => {
     setForm(prev => {
@@ -98,6 +99,7 @@ export default function DespesasPage() {
   const handleUpload = async (file) => {
     if (!file) return;
     setExtracting(true);
+    setDuplicateWarning(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -123,32 +125,50 @@ export default function DespesasPage() {
           notes: ext.description ? (prev.notes ? `${prev.notes} | ${ext.description}` : ext.description) : prev.notes,
           invoice_file: data.file_name,
         }));
-        toast.success('Fatura lida por IA! Confira os dados antes de guardar.');
+        if (data.duplicate) {
+          setDuplicateWarning(data.duplicate);
+          toast.warning(`⚠️ Esta fatura já foi registada anteriormente em ${data.duplicate.date}`);
+        } else {
+          toast.success('Fatura lida por IA! Confira os dados antes de guardar.');
+        }
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao processar fatura');
     } finally { setExtracting(false); }
   };
 
-  const handleSave = async () => {
+  const handleSave = async (force = false) => {
     if (!form.date || !form.value_gross) { toast.error('Data e valor total são obrigatórios'); return; }
     try {
       const payload = { ...form };
-      // find obra_name if obra_id set
       if (payload.obra_id) {
         const o = obras.find(o => o.id === payload.obra_id);
         if (o) payload.obra_name = o.client_name || o.title;
       }
-      if (editing) {
-        await api.put(`/expenses/${editing.id}`, payload);
-        toast.success('Despesa atualizada');
-      } else {
-        await api.post('/expenses', payload);
-        toast.success('Despesa guardada');
-      }
+      const url = editing ? `/expenses/${editing.id}` : '/expenses';
+      const method = editing ? 'put' : 'post';
+      const params = force ? { force: true } : {};
+      await api[method](url, payload, { params });
+      toast.success(editing ? 'Despesa atualizada' : 'Despesa guardada');
       setDialogOpen(false);
+      setDuplicateWarning(null);
       fetchAll();
-    } catch (err) { toast.error(err.response?.data?.detail || 'Erro ao guardar'); }
+    } catch (err) {
+      const detail = err.response?.data?.detail;
+      // Duplicate detected → ask user what to do
+      if (err.response?.status === 409 && detail?.code === 'duplicate_invoice') {
+        const existing = detail.existing;
+        const msg =
+          `⚠️ Fatura duplicada\n\n` +
+          `Fatura ${existing.invoice_number} de ${existing.supplier} já foi registada em ${existing.date} (${formatEuro(existing.value_gross)}).\n\n` +
+          `Continuar a guardar mesmo assim?`;
+        if (window.confirm(msg)) {
+          await handleSave(true);    // re-tenta com force=true
+        }
+        return;
+      }
+      toast.error(typeof detail === 'string' ? detail : 'Erro ao guardar');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -407,6 +427,23 @@ export default function DespesasPage() {
             </div>
           )}
 
+          {duplicateWarning && (
+            <div data-testid="duplicate-warning" className="rounded-xl border-2 border-orange-500/50 bg-orange-500/10 p-3 flex items-start gap-3">
+              <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={20} />
+              <div className="flex-1 min-w-0">
+                <p className="text-orange-400 font-bold text-sm">Possível fatura duplicada</p>
+                <p className="text-xs text-zinc-300 mt-1">
+                  A fatura <span className="font-semibold text-white">{duplicateWarning.invoice_number}</span>
+                  {' '}de <span className="font-semibold text-white">{duplicateWarning.supplier}</span>
+                  {' '}já foi registada em <span className="font-semibold text-white">{duplicateWarning.date}</span>
+                  {duplicateWarning.value_gross && <> ({formatEuro(duplicateWarning.value_gross)})</>}.
+                </p>
+                <p className="text-[10px] text-zinc-500 mt-1">Verifica se não estás a registar a mesma fatura duas vezes. Se tentares guardar, o sistema vai pedir-te confirmação.</p>
+              </div>
+              <button onClick={() => setDuplicateWarning(null)} className="text-zinc-500 hover:text-white text-xs">✕</button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
             <div><Label className="text-zinc-400 text-xs">Data *</Label><Input data-testid="exp-date" type="date" value={form.date} onChange={e => setField('date', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Fornecedor</Label><Input data-testid="exp-supplier" value={form.supplier} onChange={e => setField('supplier', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
@@ -454,7 +491,7 @@ export default function DespesasPage() {
 
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-zinc-700 text-zinc-300">Cancelar</Button>
-            <Button data-testid="save-expense-btn" onClick={handleSave} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 font-semibold">Guardar Despesa</Button>
+            <Button data-testid="save-expense-btn" onClick={() => handleSave(false)} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 font-semibold">Guardar Despesa</Button>
           </div>
         </DialogContent>
       </Dialog>

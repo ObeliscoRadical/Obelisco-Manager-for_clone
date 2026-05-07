@@ -154,6 +154,28 @@ def _month_prefix(year: int, month: int) -> str:
 
 def create_expenses_router(db, get_current_user):
 
+    async def _find_duplicate(invoice_number: str, nif: str = "", supplier: str = "", exclude_id: Optional[str] = None) -> Optional[dict]:
+        """Match on (invoice_number) AND (NIF OR supplier). Case-insensitive, trimmed."""
+        inv = (invoice_number or "").strip()
+        if not inv:
+            return None
+        import re as _re
+        inv_re = f"^{_re.escape(inv)}$"
+        or_clauses = []
+        if nif and nif.strip():
+            or_clauses.append({"nif": nif.strip()})
+        if supplier and supplier.strip():
+            or_clauses.append({"supplier": {"$regex": f"^{_re.escape(supplier.strip())}$", "$options": "i"}})
+        if not or_clauses:
+            return None
+        query = {
+            "invoice_number": {"$regex": inv_re, "$options": "i"},
+            "$or": or_clauses,
+        }
+        if exclude_id:
+            query["id"] = {"$ne": exclude_id}
+        return await db.expenses.find_one(query, {"_id": 0})
+
     @expenses_router.get("/categories")
     async def get_categories(user=Depends(get_current_user)):
         return CATEGORIES
@@ -183,15 +205,46 @@ def create_expenses_router(db, get_current_user):
 
         # Call AI
         extracted = await extract_invoice_data(saved_path, mime)
+
+        # Check for duplicate based on AI-extracted fields (warning, not blocking)
+        duplicate = None
+        if isinstance(extracted, dict) and extracted.get("invoice_number"):
+            dup = await _find_duplicate(
+                extracted.get("invoice_number", ""),
+                extracted.get("nif", ""),
+                extracted.get("supplier", ""),
+            )
+            if dup:
+                duplicate = {
+                    "id": dup.get("id"),
+                    "supplier": dup.get("supplier"),
+                    "invoice_number": dup.get("invoice_number"),
+                    "date": dup.get("date"),
+                    "value_gross": dup.get("value_gross"),
+                }
+
         return {
             "file_name": saved_name,
             "original_name": filename,
             "file_size": len(content),
             "extracted": extracted,
+            "duplicate": duplicate,
         }
 
     @expenses_router.post("")
-    async def create_expense(input: ExpenseCreate, user=Depends(get_current_user)):
+    async def create_expense(input: ExpenseCreate, force: bool = False, user=Depends(get_current_user)):
+        # Duplicate guard: invoice_number + (NIF or supplier)
+        if not force and (input.invoice_number or "").strip():
+            dup = await _find_duplicate(input.invoice_number, input.nif, input.supplier)
+            if dup:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "duplicate_invoice",
+                        "message": f"Fatura {input.invoice_number} já registada para {dup.get('supplier', '—')} em {dup.get('date', '—')}.",
+                        "existing": dup,
+                    },
+                )
         doc = {
             **input.model_dump(),
             "id": str(uuid.uuid4()),
@@ -295,10 +348,25 @@ def create_expenses_router(db, get_current_user):
         return e
 
     @expenses_router.put("/{expense_id}")
-    async def update_expense(expense_id: str, input: ExpenseUpdate, user=Depends(get_current_user)):
+    async def update_expense(expense_id: str, input: ExpenseUpdate, force: bool = False, user=Depends(get_current_user)):
         data = input.model_dump(exclude_none=True)
         if not data:
             raise HTTPException(status_code=400, detail="Nada para atualizar")
+        # Duplicate guard if invoice fields changed
+        if not force and "invoice_number" in data and data.get("invoice_number"):
+            current = await db.expenses.find_one({"id": expense_id}, {"_id": 0}) or {}
+            nif = data.get("nif", current.get("nif", ""))
+            sup = data.get("supplier", current.get("supplier", ""))
+            dup = await _find_duplicate(data["invoice_number"], nif, sup, exclude_id=expense_id)
+            if dup:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "duplicate_invoice",
+                        "message": f"Fatura {data['invoice_number']} já registada para {dup.get('supplier', '—')} em {dup.get('date', '—')}.",
+                        "existing": dup,
+                    },
+                )
         r = await db.expenses.update_one({"id": expense_id}, {"$set": data})
         if r.matched_count == 0:
             raise HTTPException(status_code=404, detail="Despesa não encontrada")
