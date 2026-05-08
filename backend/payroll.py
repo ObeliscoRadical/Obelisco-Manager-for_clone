@@ -255,8 +255,11 @@ def calculate_payroll_item(employee, attendance_records, settings):
     he_dom_val = horas_extra_dom * hr * (settings.get("overtime_holiday_pct", 200) / 100)
     total_he = he1_val + he2_val + he_fds_val + he_dom_val
 
-    # Subsidio alimentacao
-    total_sa = dias_com_sa * ma_day
+    # Subsidio alimentacao (informal não tem)
+    if (employee.get("contract_type") or "").lower() == "informal":
+        total_sa = 0
+    else:
+        total_sa = dias_com_sa * ma_day
 
     return {
         "salario_base": round(salary_component, 2),
@@ -281,7 +284,8 @@ def calculate_payroll_item(employee, attendance_records, settings):
 
 
 def finalize_payroll_item(item, employee, settings, extras=None):
-    """Aplica premios, descontos SS/IRS e calcula liquido"""
+    """Aplica premios, descontos SS/IRS e calcula liquido.
+    Para contract_type=='informal', salta-se SS/IRS/subsídios — apenas valor combinado."""
     extras = extras or {}
     premio = extras.get("premio", 0) or 0
     comissao = extras.get("comissao", 0) or 0
@@ -289,6 +293,32 @@ def finalize_payroll_item(item, employee, settings, extras=None):
     adiantamento = extras.get("adiantamento", 0) or 0
     desconto_manual = extras.get("desconto_manual", 0) or 0
     outros = extras.get("outros_descontos", 0) or 0
+
+    # ===== TRABALHADOR INFORMAL =====
+    # Sem impostos, sem SS, sem subsídio alimentação. Apenas o valor combinado +/- ajustes manuais.
+    if (employee.get("contract_type") or "").lower() == "informal":
+        base = item["salario_base"] + item["total_horas_extra"] + premio + comissao + ajuda - item["desconto_faltas"]
+        total_descontos = adiantamento + desconto_manual + outros
+        liquido = base - total_descontos
+        return {
+            **item,
+            "premio": round(premio, 2),
+            "comissao": round(comissao, 2),
+            "ajuda_custo": round(ajuda, 2),
+            "adiantamento": round(adiantamento, 2),
+            "desconto_manual": round(desconto_manual, 2),
+            "outros_descontos": round(outros, 2),
+            "base_tributavel": 0,             # não aplicável
+            "subsidio_alimentacao": 0,        # forçar a 0 (informal não tem)
+            "total_iliquido": round(base, 2),
+            "desconto_ss": 0,
+            "ss_patronal": 0,
+            "irs_rate": 0,
+            "desconto_irs": 0,
+            "total_descontos": round(total_descontos, 2),
+            "total_liquido": round(liquido, 2),
+            "custo_total_empresa": round(base, 2),
+        }
 
     # Iliquido tributavel (subsidio alimentacao em cartao e isento)
     base_tributavel = (

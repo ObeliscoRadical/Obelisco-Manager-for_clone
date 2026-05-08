@@ -40,7 +40,17 @@ export default function FuncionariosPage() {
   const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDialogOpen(true); };
 
-  const updateField = (k, v) => setForm({ ...form, [k]: v });
+  const updateField = (k, v) => {
+    setForm(prev => {
+      const next = { ...prev, [k]: v };
+      // Modo informal: zera subsídio e valor/hora (não se aplicam)
+      if (k === 'contract_type' && v === 'informal') {
+        next.meal_allowance = 0;
+        next.hourly_rate = 0;
+      }
+      return next;
+    });
+  };
 
   const handleSave = async () => {
     if (!form.name) { toast.error('Nome e obrigatorio'); return; }
@@ -105,7 +115,11 @@ export default function FuncionariosPage() {
                 <TableCell className="text-white font-medium">{e.name}</TableCell>
                 <TableCell className="text-zinc-300">{e.nif || '-'}</TableCell>
                 <TableCell className="text-zinc-300">{e.role || '-'}</TableCell>
-                <TableCell className="text-zinc-400 text-xs capitalize">{e.contract_type}</TableCell>
+                <TableCell className="text-zinc-400 text-xs">
+                  {e.contract_type === 'informal'
+                    ? <Badge className="bg-orange-500/20 text-orange-300 border-0">Informal</Badge>
+                    : <span className="capitalize">{(e.contract_type || '').replace('_', ' ')}</span>}
+                </TableCell>
                 <TableCell className="text-right text-yellow-400 font-semibold">{formatEuro(e.base_salary)}</TableCell>
                 <TableCell>
                   {(() => {
@@ -153,14 +167,24 @@ export default function FuncionariosPage() {
                 <option value="efetivo">Efetivo (sem termo)</option>
                 <option value="termo_certo">Termo certo</option>
                 <option value="termo_incerto">Termo incerto</option>
-                <option value="prestacao_serviços">Prestacao de serviços</option>
-                <option value="estagio">Estagio</option>
+                <option value="prestacao_serviços">Prestação de serviços</option>
+                <option value="estagio">Estágio</option>
+                <option value="informal">Informal — valor combinado, sem IRS/SS/subsídios</option>
               </select>
+              {form.contract_type === 'informal' && (
+                <p className="text-[10px] text-orange-300 mt-1">⚠️ Modo informal: o sistema usa só o valor combinado (sem impostos, sem subsídio alimentação). Útil para acertos directos.</p>
+              )}
             </div>
             <div><Label className="text-zinc-400 text-xs">Data admissao</Label><Input type="date" value={form.admission_date} onChange={e => updateField('admission_date', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
-            <div><Label className="text-zinc-400 text-xs">Salário base mensal (EUR) *</Label><Input data-testid="emp-salary" type="number" min="0" step="0.01" value={form.base_salary} onChange={e => updateField('base_salary', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
-            <div><Label className="text-zinc-400 text-xs">Valor/hora (opcional, calculado se 0)</Label><Input type="number" min="0" step="0.01" value={form.hourly_rate} onChange={e => updateField('hourly_rate', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
-            <div><Label className="text-zinc-400 text-xs">Subsidio alimentacao/dia (EUR)</Label><Input type="number" min="0" step="0.01" value={form.meal_allowance} onChange={e => updateField('meal_allowance', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+            <div><Label className="text-zinc-400 text-xs">{form.contract_type === 'informal' ? 'Valor combinado (EUR) *' : 'Salário base mensal (EUR) *'}</Label><Input data-testid="emp-salary" type="number" min="0" step="0.01" value={form.base_salary} onChange={e => updateField('base_salary', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" />
+              {form.contract_type === 'informal' && <p className="text-[10px] text-zinc-500 mt-1">Valor por período de pagamento (semanal/mensal conforme escolhido)</p>}
+            </div>
+            {form.contract_type !== 'informal' && (
+              <>
+                <div><Label className="text-zinc-400 text-xs">Valor/hora (opcional, calculado se 0)</Label><Input type="number" min="0" step="0.01" value={form.hourly_rate} onChange={e => updateField('hourly_rate', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+                <div><Label className="text-zinc-400 text-xs">Subsidio alimentacao/dia (EUR)</Label><Input type="number" min="0" step="0.01" value={form.meal_allowance} onChange={e => updateField('meal_allowance', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
+              </>
+            )}
             <div><Label className="text-zinc-400 text-xs">Horas semanais</Label><Input type="number" min="0" step="0.5" value={form.weekly_hours} onChange={e => updateField('weekly_hours', parseFloat(e.target.value) || 0)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Dias/semana</Label><Input type="number" min="1" max="7" value={form.work_days_per_week} onChange={e => updateField('work_days_per_week', parseInt(e.target.value) || 5)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div className="md:col-span-2">
