@@ -7,7 +7,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown, Download, Upload, Copy, History } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown, Download, Upload, Copy, History, ClipboardCheck, Printer } from 'lucide-react';
+import { generateChecklistPDF } from '../lib/checklistPdf';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -68,6 +69,19 @@ export default function OrcamentosPage() {
   }, []);
 
   const [materials, setMaterials] = useState([]);
+  const [settings, setSettings] = useState(null);
+  const [logoBase64, setLogoBase64] = useState(null);
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const [sRes, lRes] = await Promise.all([
+        api.get('/proposal-settings').catch(() => ({ data: null })),
+        api.get('/logo').catch(() => ({ data: null })),
+      ]);
+      if (sRes.data) setSettings(sRes.data);
+      if (lRes.data?.logo) setLogoBase64(lRes.data.logo);
+    } catch (err) { console.debug('[settings/logo]', err?.message); }
+  }, []);
 
   const fetchCategories = useCallback(async () => {
     try {
@@ -87,7 +101,7 @@ export default function OrcamentosPage() {
     }
   }, []);
 
-  useEffect(() => { fetchBudgets(); fetchCategories(); fetchMaterials(); }, [fetchBudgets, fetchCategories, fetchMaterials]);
+  useEffect(() => { fetchBudgets(); fetchCategories(); fetchMaterials(); fetchSettings(); }, [fetchBudgets, fetchCategories, fetchMaterials, fetchSettings]);
 
   // Helper: find stock for an item name (match by description or name)
   const getStockForItem = (itemName) => {
@@ -415,6 +429,8 @@ export default function OrcamentosPage() {
                       <Button variant="ghost" size="sm" onClick={() => handleExportExcel(b.id)} className="text-green-400 hover:text-green-300 h-8 w-8 p-0" title="Excel"><Download size={15} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleDuplicate(b.id)} className="text-blue-400 hover:text-blue-300 h-8 w-8 p-0" title="Duplicar"><Copy size={15} /></Button>
                       <Button variant="ghost" size="sm" onClick={() => handleSaveVersion(b.id)} className="text-purple-400 hover:text-purple-300 h-8 w-8 p-0" title="Guardar Versao"><History size={15} /></Button>
+                      <Button data-testid={`checklist-pdf-${b.id}`} variant="ghost" size="sm" onClick={() => generateChecklistPDF(b, settings, logoBase64).catch(() => toast.error('Erro a gerar checklist'))} className="text-orange-400 hover:text-orange-300 h-8 w-8 p-0" title="Checklist de Separação (PDF)"><ClipboardCheck size={15} /></Button>
+                      <Button data-testid={`checklist-print-${b.id}`} variant="ghost" size="sm" onClick={() => generateChecklistPDF(b, settings, logoBase64, { autoPrint: true }).catch(() => toast.error('Erro a imprimir'))} className="text-orange-300 hover:text-orange-200 h-8 w-8 p-0" title="Imprimir Checklist directamente"><Printer size={15} /></Button>
                       <Button data-testid={`delete-budget-${b.id}`} variant="ghost" size="sm" onClick={() => handleDelete(b.id)} className="text-red-400 hover:text-red-300 h-8 w-8 p-0" title="Eliminar"><Trash2 size={15} /></Button>
                     </div>
                   </TableCell>
@@ -741,6 +757,17 @@ export default function OrcamentosPage() {
                   </p>
                 </div>
               </div>
+              {editingBudget && (
+                <Button
+                  data-testid="checklist-from-dialog"
+                  variant="outline"
+                  onClick={() => generateChecklistPDF(editingBudget, settings, logoBase64).catch(() => toast.error('Erro a gerar checklist'))}
+                  className="border-orange-400 text-orange-400 hover:bg-orange-400/10 rounded-full font-semibold"
+                  title="Gera folha A4 de separação de material para imprimir"
+                >
+                  <ClipboardCheck size={16} className="mr-2" /> Gerar Checklist
+                </Button>
+              )}
               <Button data-testid="save-budget-btn" onClick={handleSave} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
                 Guardar Orçamento
               </Button>
