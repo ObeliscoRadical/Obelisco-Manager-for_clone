@@ -151,14 +151,30 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
     tableBody.push(['', '', '', 'Sem itens neste orçamento', '', '']);
   }
 
+  // ===== Single-page fit detection =====
+  // Calcula se a tabela + área inferior cabem numa só página. Se não, comprime.
+  const FOOTER_BAR_H = 18;        // faixa preta inferior
+  const ROW_H_DEFAULT = 7.2;      // altura por linha em modo normal
+  const ROW_H_COMPACT = 5.1;      // altura por linha em modo compacto
+  const HEADER_ROW_H = 9;
+  // Bloco assinatura + status + linha amarela (espaço necessário abaixo da tabela)
+  const BOTTOM_BLOCK_DEFAULT = 4 + 6 + 26 + 8 + 8 + FOOTER_BAR_H;     // ≈70mm
+  const BOTTOM_BLOCK_COMPACT = 3 + 4 + 18 + 6 + 4 + FOOTER_BAR_H;     // ≈53mm
+
+  const tableHeightDefault = HEADER_ROW_H + tableBody.length * ROW_H_DEFAULT;
+  const tableHeightCompact = HEADER_ROW_H + tableBody.length * ROW_H_COMPACT;
+  const fitsDefault = (y + tableHeightDefault + BOTTOM_BLOCK_DEFAULT) <= pageH;
+  const fitsCompact = (y + tableHeightCompact + BOTTOM_BLOCK_COMPACT) <= pageH;
+  const useCompact = !fitsDefault && fitsCompact;
+
   autoTable(doc, {
     head: tableHead,
     body: tableBody,
     startY: y,
     margin: { left: 8, right: 8 },
     styles: {
-      fontSize: 8,
-      cellPadding: 2.2,
+      fontSize: useCompact ? 7 : 8,
+      cellPadding: useCompact ? 1.4 : 2.2,
       lineColor: GREY_LIGHT,
       lineWidth: 0.2,
       textColor: BLACK,
@@ -168,9 +184,9 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
       fillColor: BLACK,
       textColor: YELLOW,
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: useCompact ? 7 : 8,
       halign: 'left',
-      cellPadding: 3,
+      cellPadding: useCompact ? 2 : 3,
     },
     columnStyles: {
       0: { cellWidth: 9, halign: 'center' },
@@ -182,57 +198,59 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
     },
     alternateRowStyles: { fillColor: [248, 248, 248] },
     didDrawCell: (data) => {
-      // Desenhar checkbox manual na 1ª coluna do body
       if (data.section === 'body' && data.column.index === 0) {
-        const x = data.cell.x + (data.cell.width / 2) - 2.2;
-        const yy = data.cell.y + (data.cell.height / 2) - 2.2;
+        const sz = useCompact ? 3.6 : 4.4;
+        const x = data.cell.x + (data.cell.width / 2) - sz / 2;
+        const yy = data.cell.y + (data.cell.height / 2) - sz / 2;
         doc.setDrawColor(...BLACK);
         doc.setLineWidth(0.4);
-        doc.rect(x, yy, 4.4, 4.4);
+        doc.rect(x, yy, sz, sz);
       }
     },
   });
 
-  let finalY = doc.lastAutoTable.finalY + 4;
+  let finalY = doc.lastAutoTable.finalY + (useCompact ? 3 : 4);
 
-  // ============ ÁREA INFERIOR: SEPARAÇÃO + ESTADO ============
-  const footerSpace = 60;     // espaço reservado para área inferior + footer
-  if (finalY > pageH - footerSpace) {
+  // Page break só se REALMENTE não couber (modo compacto também já falhou)
+  const bottomNeeded = useCompact ? BOTTOM_BLOCK_COMPACT : BOTTOM_BLOCK_DEFAULT;
+  if (finalY > pageH - bottomNeeded) {
     doc.addPage();
     finalY = 20;
   }
 
+  // ============ ÁREA INFERIOR: SEPARAÇÃO + ESTADO ============
   // Linha divisória amarela
   doc.setFillColor(...YELLOW);
   for (let x = 8; x < pageW - 8; x += 8) {
-    doc.rect(x, finalY, 4, 1.2, 'F');
+    doc.rect(x, finalY, 4, useCompact ? 0.9 : 1.2, 'F');
   }
-  finalY += 6;
+  finalY += useCompact ? 4 : 6;
 
   // BLOCO RESPONSÁVEL / DATA / ASSINATURA
+  const sigH = useCompact ? 18 : 26;
   doc.setFillColor(...BLACK);
-  doc.roundedRect(8, finalY, pageW - 16, 26, 2, 2, 'F');
+  doc.roundedRect(8, finalY, pageW - 16, sigH, 2, 2, 'F');
 
   doc.setTextColor(...YELLOW);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text('RESPONSÁVEL PELA SEPARAÇÃO', 12, finalY + 5);
-  doc.text('DATA', 92, finalY + 5);
-  doc.text('ASSINATURA', 132, finalY + 5);
+  doc.setFontSize(useCompact ? 7 : 8);
+  doc.text('RESPONSÁVEL PELA SEPARAÇÃO', 12, finalY + (useCompact ? 4 : 5));
+  doc.text('DATA', 92, finalY + (useCompact ? 4 : 5));
+  doc.text('ASSINATURA', 132, finalY + (useCompact ? 4 : 5));
 
   doc.setDrawColor(...WHITE);
   doc.setLineWidth(0.4);
-  // 3 linhas para preencher
-  doc.line(12, finalY + 22, 86, finalY + 22);
-  doc.line(92, finalY + 22, 126, finalY + 22);
-  doc.line(132, finalY + 22, pageW - 12, finalY + 22);
+  const lineYY = finalY + sigH - 4;
+  doc.line(12, lineYY, 86, lineYY);
+  doc.line(92, lineYY, 126, lineYY);
+  doc.line(132, lineYY, pageW - 12, lineYY);
 
-  finalY += 32;
+  finalY += sigH + (useCompact ? 4 : 6);
 
   // STATUS DA SEPARAÇÃO (3 caixas)
   doc.setTextColor(...BLACK);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
+  doc.setFontSize(useCompact ? 8 : 9);
   doc.text('ESTADO DA SEPARAÇÃO:', 10, finalY);
 
   const statuses = [
@@ -242,22 +260,19 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
   ];
   let sx = 60;
   statuses.forEach((s) => {
-    // checkbox
     doc.setDrawColor(...BLACK);
     doc.setLineWidth(0.5);
     doc.rect(sx, finalY - 3.5, 4.5, 4.5);
-    // pip cor
     doc.setFillColor(...s.color);
     doc.rect(sx + 5.5, finalY - 3, 2, 4, 'F');
-    // texto
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(7.5);
+    doc.setFontSize(useCompact ? 7 : 7.5);
     doc.setTextColor(...BLACK);
     doc.text(s.label, sx + 9, finalY);
     sx += 47;
   });
 
-  finalY += 8;
+  finalY += useCompact ? 5 : 8;
 
   // ============ FOOTER PRETO ============
   const footerY = pageH - 18;
