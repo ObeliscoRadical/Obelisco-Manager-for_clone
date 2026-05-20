@@ -34,6 +34,26 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 20, 2026 (v12) — Análise de Custo de Obra (Previsto vs Real)
+- **Backend `server.py`** — endpoints novos/expandidos para `/api/works`:
+  - `GET /api/works/{id}/full` devolve `{ work, items, expenses, kpis }` com items computados (predicted_total, real_total, sale_total, delta) e KPIs agregados (sale_total, predicted_total, real_total_items, expenses_total, real_total, predicted_profit, real_profit, margin_predicted_pct, margin_real_pct, overrun_pct, is_overrun). Auto-sync inicial a partir do orçamento se a obra tiver `budget_id`.
+  - `POST /api/works/{id}/sync-budget` recarrega items do orçamento preservando custos reais já preenchidos e items extra.
+  - `PUT /api/works/{id}/items/{item_id}` actualiza `real_unit_cost/real_quantity/real_notes` e regista entrada no array `history` quando o custo real muda (timestamp, utilizador, from, to).
+  - `POST /api/works/{id}/items` adiciona item imprevisto com `is_extra=true`.
+  - `DELETE /api/works/{id}/items/{item_id}` remove item da obra.
+  - Despesas com `obra_id` matching aparecem na resposta de `/full` e somam ao `expenses_total`.
+  - `is_overrun = overrun_pct > 10`.
+- **Frontend `ObrasPage.jsx`** — clicar no card de uma obra abre um Dialog grande (`work-analysis-dialog`) com:
+  - Header sticky com KPI cards (Venda Total, Custo Previsto, Custo Real, Lucro Real) e alerta vermelho "Obra ACIMA DO ORÇAMENTO" quando aplicável.
+  - Toolbar com filtro de items, botão "Histórico" e botão "Item Imprevisto".
+  - Tabela editável: inputs inline `real_unit_cost` + `real_quantity` com botão Guardar por linha (só activa quando dirty), badge "Extra" em items imprevistos, contador de alterações por item, eliminar item extra.
+  - Form de novo item imprevisto (nome, categoria, unidade, qtd, custo previsto, custo real).
+  - Panel de Histórico de alterações global (cronológico).
+  - Secção "Despesas vinculadas a esta obra" com tabela de despesas linkadas via `obra_id`.
+  - Botões "Sincronizar do Orçamento" (apenas se `budget_id`) e "Relatório PDF".
+- **Novo gerador PDF `/app/frontend/src/lib/workReportPdf.js`**: Relatório de Obra A4 com header preto/amarelo Obelisco, info da obra, alerta de overrun, 4 KPI cards, faixa de margens (prevista, real, desvio), tabela de items (Previsto vs Real com cor em desvio), tabela de despesas vinculadas e tabela de histórico de alterações.
+- **Testado E2E**: 168/168 backend (21 novos work_analysis tests) + frontend 100% (todos os testids verificados, fluxos de criar/editar/eliminar regressão OK, KPIs corretos, histórico, PDF download).
+
 ### Feb 19, 2026 (v11) — Filtros Mês + Cliente (Financeiro e Faturas)
 - **Backend `invoices.py`**: param `client` (regex case-insensitive) adicionado a `GET /api/invoices` e `GET /api/invoices/summary`; `summary` aceita também `year`/`month`. Novo endpoint `GET /api/invoices/clients` devolve lista ordenada de nomes distintos para dropdown.
 - **Backend `/api/dashboard/cashflow`**: novos params `month` e `client`. Quando `month` definido, KPIs/mês actual escopados ao mês; gráfico mantém 12 meses para contexto. Quando `client` definido, despesas e salários zerados (não são client-specific) e só são calculadas métricas de faturação desse cliente; devolve flag `client_filter_active` + `scope_label`.
