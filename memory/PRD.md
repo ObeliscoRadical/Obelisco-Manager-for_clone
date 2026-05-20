@@ -34,6 +34,31 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 20, 2026 (v13) — Relatório Financeiro Anual em PDF
+- **Backend `server.py`** — novo `GET /api/reports/annual?year=&client=&category=` agrega TUDO para o relatório anual:
+  - KPIs: `total_in` (pagamentos recebidos), `total_emitted` (faturas emitidas), `total_out` (variáveis+fixas+obra+salários), `result`, `margin_pct`, `vat_paid` / `vat_charged` / `vat_balance` (IVA a entregar/recuperar), `pending_total` (a receber - todos os anos), contadores de invoices/expenses/works/works_in_progress.
+  - `monthly[12]` com `entries`, `expenses_variable/fixed/obra`, `payroll`, `total_out`, `net` e `accumulated` (cashflow cumulativo).
+  - `categories_expense` (top categorias com pct), `clients_revenue` (top clientes com pct).
+  - Listas slim: `invoices[]`, `expenses[]`, `payroll_runs[]`, `works[]`, `works_in_progress[]`.
+  - Filtros: ano (default actual); `client` (regex case-insensitive em invoices.client_name e works.client_name — zera despesas/salários porque não são per-client); `category` (exact match em expenses.category).
+- **Frontend** — nova rota `/relatorios` (Sidebar item "Relatórios" com ícone `FileBarChart`):
+  - Página `RelatoriosPage.jsx` com selectores Ano/Cliente/Categoria, botões Atualizar e Limpar.
+  - Preview KPIs (Entradas, Saídas, Resultado, A Receber) + breakdown das saídas (Variáveis/Fixas/Obra/Salários) + bloco IVA do ano.
+  - Tabela mensal interactiva com totais por mês e linha TOTAL no rodapé.
+  - Top categorias de despesa e top clientes por faturação (com mini-barras).
+  - Card "O que vai estar no PDF" lista contagens (faturas/despesas/salários/obras).
+  - Botão "Exportar PDF Anual" com loading.
+- **PDF `annualReportPdf.js`** — relatório multi-página A4 retrato, identidade Obelisco:
+  - **Capa**: fundo preto, logo, ano grande em amarelo (72pt), faixas decorativas.
+  - **Página de Resumo**: 4 KPI cards a preto/amarelo, breakdown das saídas, bloco IVA (liquidado / suportado / a entregar/recuperar), tabela mensal completa com TOTAL e células em vermelho para resultados negativos.
+  - **Análise Gráfica**: bar chart agrupado mensal (Entradas/Saídas/Resultado), line chart cashflow acumulado, donut despesas por categoria, donut receitas por cliente — todos desenhados vetorialmente em jsPDF (donuts via canvas → PNG).
+  - **Faturas linha-a-linha**: número, datas, cliente+NIF, líquido/IVA/total, pago/saldo/estado com cor para vencidas/pagas.
+  - **Despesas linha-a-linha**: data, fornecedor+NIF, nº fatura, categoria, tipo, obra, líquido/IVA/total.
+  - **Salários**: tabela mensal com nº funcionários, ilíquido/líquido, SS empresa, custo total.
+  - **Obras**: tabela com previsto/real/desvio (verde se poupou, vermelho se gastou mais)/margem.
+  - Footer com paginação e marca de confidencialidade em todas as páginas excepto capa.
+- **Testado**: 18/18 backend + frontend 100% (todos os data-testids encontrados, PDF gerado sem erros JS, regressão Dashboard/Financeiro/Faturas/Despesas/Obras OK).
+
 ### Feb 20, 2026 (v12) — Análise de Custo de Obra (Previsto vs Real)
 - **Backend `server.py`** — endpoints novos/expandidos para `/api/works`:
   - `GET /api/works/{id}/full` devolve `{ work, items, expenses, kpis }` com items computados (predicted_total, real_total, sale_total, delta) e KPIs agregados (sale_total, predicted_total, real_total_items, expenses_total, real_total, predicted_profit, real_profit, margin_predicted_pct, margin_real_pct, overrun_pct, is_overrun). Auto-sync inicial a partir do orçamento se a obra tiver `budget_id`.
