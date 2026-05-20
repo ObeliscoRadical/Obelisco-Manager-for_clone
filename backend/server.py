@@ -937,16 +937,30 @@ async def schedule_from_proposal(proposal_id: str, input: ScheduleProposalInput,
     # Construir URL do widget externo com query params para pré-preencher
     widget_base = "https://tech-app-obelisco.emergent.host/widget"
     from urllib.parse import urlencode
+    proposal_label = proposal.get("label", "") or ""
+    proposal_title = proposal.get("title", "") or ""
+    proposal_value = proposal.get("final_value", 0) or 0
+    auto_description = (
+        f"Visita técnica relacionada com a proposta {proposal_label} — {proposal_title}.\n"
+        f"Valor da proposta: {proposal_value:.2f} EUR."
+    )
     qs = urlencode({
         "client": proposal.get("client_name", "") or "",
+        "client_name": proposal.get("client_name", "") or "",
         "phone": proposal.get("client_phone", "") or "",
-        "title": proposal.get("title", "") or "",
+        "email": proposal.get("client_email", "") or "",
+        "address": proposal.get("client_address", "") or "",
+        "title": proposal_title,
         "proposal_id": proposal_id,
-        "proposal_label": proposal.get("label", "") or "",
-        "value": proposal.get("final_value", 0),
+        "proposal_label": proposal_label,
+        "value": proposal_value,
+        "service_type": "visita_tecnica",
+        "description": auto_description,
         "date": apt_doc["date"],
+        "preferred_date": apt_doc["date"],
         "time_start": apt_doc["time_start"],
         "time_end": apt_doc["time_end"],
+        "preferred_time": apt_doc["time_start"],
     })
     widget_url = f"{widget_base}?{qs}"
 
