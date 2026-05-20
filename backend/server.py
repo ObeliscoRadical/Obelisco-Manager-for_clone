@@ -816,6 +816,143 @@ async def delete_appointment(appointment_id: str, user=Depends(get_current_user)
     return {"message": "Agendamento eliminado"}
 
 
+# --- Schedule from Proposal (auto next slot) ---
+
+class ScheduleProposalInput(BaseModel):
+    duration_hours: float = 4              # tamanho do bloco a procurar
+    window: str = "any"                    # "morning" (09-13), "afternoon" (14-18) ou "any"
+    start_from: Optional[str] = None       # ISO date — opcional, default = amanhã
+
+
+@api_router.post("/proposals/{proposal_id}/schedule")
+async def schedule_from_proposal(proposal_id: str, input: ScheduleProposalInput, user=Depends(get_current_user)):
+    """Encontra o próximo slot livre em horário comercial e cria o agendamento.
+    Bloqueia duplicados: se já existe um appointment para esta proposta, devolve 409 com o existente."""
+    from datetime import date as _date_cls, timedelta as _td, datetime as _dt, time as _tm
+
+    proposal = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
+    if not proposal:
+        raise HTTPException(status_code=404, detail="Proposta não encontrada")
+
+    # Já existe agendamento para esta proposta? → 409
+    existing_for_prop = await db.appointments.find_one({"proposal_id": proposal_id}, {"_id": 0})
+    if existing_for_prop:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Já existe um agendamento para esta proposta.",
+                "appointment": existing_for_prop,
+            },
+        )
+
+    # Janelas comerciais
+    WINDOWS = {
+        "morning": [("09:00", "13:00")],
+        "afternoon": [("14:00", "18:00")],
+        "any": [("09:00", "13:00"), ("14:00", "18:00")],
+    }
+    candidate_windows = WINDOWS.get((input.window or "any").lower(), WINDOWS["any"])
+    duration_min = int(round((input.duration_hours or 4) * 60))
+
+    # Carrega todos os appointments próximos (90 dias)
+    if input.start_from:
+        try:
+            start_date = _date_cls.fromisoformat(input.start_from)
+        except Exception:
+            start_date = _date_cls.today() + _td(days=1)
+    else:
+        start_date = _date_cls.today() + _td(days=1)
+    end_date = start_date + _td(days=60)
+
+    apts = await db.appointments.find(
+        {"date": {"$gte": start_date.isoformat(), "$lte": end_date.isoformat()}},
+        {"_id": 0},
+    ).to_list(2000)
+    by_day = {}
+    for a in apts:
+        by_day.setdefault(a["date"], []).append(a)
+
+    def _hm_to_min(s: str) -> int:
+        h, m = s.split(":")
+        return int(h) * 60 + int(m)
+
+    def _min_to_hm(m: int) -> str:
+        return f"{m // 60:02d}:{m % 60:02d}"
+
+    found = None
+    d = start_date
+    while d <= end_date and not found:
+        # skip weekends
+        if d.weekday() >= 5:
+            d += _td(days=1)
+            continue
+        day_apts = by_day.get(d.isoformat(), [])
+        # Para cada janela do dia, gerar slots possíveis em passos de 30min e ver se cabe
+        for win_start, win_end in candidate_windows:
+            ws = _hm_to_min(win_start)
+            we = _hm_to_min(win_end)
+            if we - ws < duration_min:
+                continue
+            slot_start = ws
+            while slot_start + duration_min <= we:
+                slot_end = slot_start + duration_min
+                # Verifica conflito com appointments existentes
+                conflict = False
+                for a in day_apts:
+                    a_s = _hm_to_min((a.get("time_start") or "00:00")[:5])
+                    a_e = _hm_to_min((a.get("time_end") or "00:00")[:5])
+                    if not (slot_end <= a_s or slot_start >= a_e):
+                        conflict = True
+                        break
+                if not conflict:
+                    found = (d, slot_start, slot_end)
+                    break
+                slot_start += 30
+            if found:
+                break
+        d += _td(days=1)
+
+    if not found:
+        raise HTTPException(status_code=422, detail="Sem slots livres nos próximos 60 dias úteis em horário comercial")
+
+    day, s_min, e_min = found
+    title = f"Obra — {proposal.get('title') or proposal.get('label') or 'Proposta'}"
+    apt_doc = {
+        "id": str(uuid.uuid4()),
+        "title": title,
+        "client_name": proposal.get("client_name", ""),
+        "client_phone": proposal.get("client_phone", ""),
+        "date": day.isoformat(),
+        "time_start": _min_to_hm(s_min),
+        "time_end": _min_to_hm(e_min),
+        "notes": f"Agendado a partir da proposta {proposal.get('label') or ''} · Valor {proposal.get('final_value', 0)} EUR",
+        "proposal_id": proposal_id,
+        "budget_id": proposal.get("budget_id", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_by": user.get("id", ""),
+    }
+    await db.appointments.insert_one(apt_doc)
+    apt_doc.pop("_id", None)
+
+    # Construir URL do widget externo com query params para pré-preencher
+    widget_base = "https://tech-app-obelisco.emergent.host/widget"
+    from urllib.parse import urlencode
+    qs = urlencode({
+        "client": proposal.get("client_name", "") or "",
+        "phone": proposal.get("client_phone", "") or "",
+        "title": proposal.get("title", "") or "",
+        "proposal_id": proposal_id,
+        "proposal_label": proposal.get("label", "") or "",
+        "value": proposal.get("final_value", 0),
+        "date": apt_doc["date"],
+        "time_start": apt_doc["time_start"],
+        "time_end": apt_doc["time_end"],
+    })
+    widget_url = f"{widget_base}?{qs}"
+
+    return {"appointment": apt_doc, "widget_url": widget_url}
+
+
 # --- Dashboard ---
 
 @api_router.get("/dashboard/stats")

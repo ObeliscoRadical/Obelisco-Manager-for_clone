@@ -7,7 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Check, X, PenLine, Copy } from 'lucide-react';
+import { Download, MessageCircle, HardHat, Trash2, ClipboardList, Settings, Check, X, PenLine, Copy, CalendarPlus, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -448,6 +448,43 @@ export default function PropostasPage() {
     } catch { toast.error('Erro ao criar obra'); }
   };
 
+  const [scheduleDialog, setScheduleDialog] = useState({ open: false, proposal: null, window: 'any', duration: 4 });
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleResult, setScheduleResult] = useState(null); // {appointment, widget_url}
+
+  const openSchedule = (proposal) => {
+    setScheduleResult(null);
+    setScheduleDialog({ open: true, proposal, window: 'any', duration: 4 });
+  };
+
+  const runSchedule = async () => {
+    if (!scheduleDialog.proposal) return;
+    setScheduleLoading(true);
+    try {
+      const { data } = await api.post(`/proposals/${scheduleDialog.proposal.id}/schedule`, {
+        window: scheduleDialog.window,
+        duration_hours: scheduleDialog.duration,
+      });
+      setScheduleResult(data);
+      toast.success(`Agendado para ${data.appointment.date} às ${data.appointment.time_start}`);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      if (err?.response?.status === 409 && typeof detail === 'object' && detail?.appointment) {
+        setScheduleResult({ appointment: detail.appointment, widget_url: null, duplicate: true });
+        toast.warning(detail.message || 'Já existe agendamento para esta proposta');
+      } else {
+        toast.error(typeof detail === 'string' ? detail : 'Erro a agendar');
+      }
+    } finally {
+      setScheduleLoading(false);
+    }
+  };
+
+  const openWidget = (url) => {
+    if (!url) return;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
   const [signLinkDialog, setSignLinkDialog] = useState({ open: false, proposal: null, token: '' });
 
   const handleSignLink = async (proposal) => {
@@ -589,6 +626,9 @@ export default function PropostasPage() {
                           <Button data-testid={`create-work-${p.id}`} onClick={() => handleCreateWork(p.id)} variant="outline" size="sm" className="w-full mt-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800 rounded-full text-xs">
                             <HardHat size={14} className="mr-1" /> Criar Obra
                           </Button>
+                          <Button data-testid={`schedule-${p.id}`} onClick={() => openSchedule(p)} size="sm" className="w-full mt-2 bg-yellow-400/10 text-yellow-400 hover:bg-yellow-400/20 border border-yellow-400/30 rounded-full text-xs font-semibold">
+                            <CalendarPlus size={14} className="mr-1" /> Agendar
+                          </Button>
                         </CardContent>
                       </Card>
                     ))}
@@ -717,6 +757,117 @@ export default function PropostasPage() {
 
               <Button data-testid="save-settings-btn" onClick={saveSettings} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
                 Guardar Definições
+              </Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Dialog */}
+      <Dialog open={scheduleDialog.open} onOpenChange={(open) => setScheduleDialog({ ...scheduleDialog, open })}>
+        <DialogContent data-testid="schedule-dialog" className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Agendar Visita</DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">
+              {scheduleDialog.proposal ? `${scheduleDialog.proposal.client_name} · ${scheduleDialog.proposal.title}` : ''}
+            </DialogDescription>
+          </DialogHeader>
+
+          {!scheduleResult && (
+            <div className="space-y-5 mt-2">
+              <div>
+                <Label className="text-zinc-300 text-sm">Janela horária preferida</Label>
+                <div className="grid grid-cols-3 gap-2 mt-2">
+                  {[
+                    { v: 'any', label: 'Indiferente', sub: '09–13 / 14–18' },
+                    { v: 'morning', label: 'Manhã', sub: '09–13' },
+                    { v: 'afternoon', label: 'Tarde', sub: '14–18' },
+                  ].map(opt => (
+                    <button
+                      key={opt.v}
+                      data-testid={`window-${opt.v}`}
+                      onClick={() => setScheduleDialog({ ...scheduleDialog, window: opt.v })}
+                      className={`text-left px-3 py-2 rounded-xl border transition ${
+                        scheduleDialog.window === opt.v
+                          ? 'bg-yellow-400/10 border-yellow-400/40 text-yellow-400'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="font-bold text-sm">{opt.label}</div>
+                      <div className="text-[10px] opacity-70">{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-zinc-300 text-sm">Duração necessária</Label>
+                <div className="grid grid-cols-4 gap-2 mt-2">
+                  {[2, 3, 4, 8].map(h => (
+                    <button
+                      key={h}
+                      data-testid={`duration-${h}`}
+                      onClick={() => setScheduleDialog({ ...scheduleDialog, duration: h })}
+                      className={`px-3 py-2 rounded-xl border transition text-sm font-bold ${
+                        scheduleDialog.duration === h
+                          ? 'bg-yellow-400/10 border-yellow-400/40 text-yellow-400'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-700'
+                      }`}
+                    >
+                      {h}h
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-zinc-500 mt-2">Procuro o próximo slot livre em dias úteis (seg-sex) que caiba na janela escolhida.</p>
+              </div>
+
+              <Button
+                data-testid="confirm-schedule-btn"
+                onClick={runSchedule}
+                disabled={scheduleLoading}
+                className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12"
+              >
+                <span translate="no" className="inline-flex items-center">
+                  <CalendarPlus size={16} className="mr-2" />
+                  {scheduleLoading ? 'A procurar slot…' : 'Encontrar próximo slot e agendar'}
+                </span>
+              </Button>
+            </div>
+          )}
+
+          {scheduleResult && (
+            <div className="space-y-4 mt-2" data-testid="schedule-result">
+              <div className={`p-4 rounded-2xl border ${scheduleResult.duplicate ? 'bg-amber-500/10 border-amber-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
+                <p className={`font-bold ${scheduleResult.duplicate ? 'text-amber-300' : 'text-green-400'}`}>
+                  {scheduleResult.duplicate ? 'Já existe agendamento' : 'Agendado com sucesso'}
+                </p>
+                <div className="mt-2 text-sm text-white">
+                  <div>{scheduleResult.appointment.date} · {scheduleResult.appointment.time_start}–{scheduleResult.appointment.time_end}</div>
+                  <div className="text-zinc-400">{scheduleResult.appointment.title}</div>
+                </div>
+              </div>
+
+              {scheduleResult.widget_url && (
+                <Button
+                  data-testid="open-widget-btn"
+                  onClick={() => openWidget(scheduleResult.widget_url)}
+                  className="w-full bg-zinc-100 text-zinc-950 hover:bg-white rounded-full font-semibold h-11"
+                >
+                  <span translate="no" className="inline-flex items-center">
+                    <ExternalLink size={16} className="mr-2" />
+                    Abrir em "Inserir Pedidos" pré-preenchido
+                  </span>
+                </Button>
+              )}
+              {scheduleResult.duplicate && (
+                <p className="text-xs text-zinc-500 text-center">Vai à Agenda para alterar ou eliminar antes de re-agendar.</p>
+              )}
+              <Button
+                onClick={() => setScheduleDialog({ ...scheduleDialog, open: false })}
+                variant="outline"
+                className="w-full rounded-full border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+              >
+                Fechar
               </Button>
             </div>
           )}

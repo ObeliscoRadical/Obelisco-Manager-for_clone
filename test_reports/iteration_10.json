@@ -1,0 +1,89 @@
+{
+  "summary": "Completed comprehensive testing of Proposal Scheduling (Agendar) feature. Backend: 15/15 tests passed (100%). Frontend: All scheduling UI features working correctly - schedule dialog opens, window/duration selection works, appointment creation successful, duplicate blocking with 409 and amber UI, widget URL generated with correct query params, Agenda shows created appointments.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_schedule_proposal.py",
+    "/app/test_reports/pytest/pytest_schedule_proposal.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_schedule_proposal.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (all scheduling flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "Test budgets, proposals, and appointments created during testing with TEST_ prefix were cleaned up after tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Proposal Scheduling feature fully tested and working. Key verified flows: (1) POST /api/proposals/{id}/schedule with {window:'any'|'morning'|'afternoon', duration_hours:2|3|4|8} creates appointment in next available business hours slot (09-13 or 14-18, Mon-Fri), (2) Respects window preference - morning only schedules 09-13, afternoon only 14-18, (3) Respects duration_hours - slot time_end - time_start = duration, (4) Skips weekends - never schedules on Sat/Sun, (5) 409 Conflict when appointment already exists for proposal_id, returns detail.appointment with existing, (6) Appointment has proposal_id, budget_id, client_name, client_phone, notes with proposal value, (7) 422 when duration doesn't fit in any window (e.g., 10h in morning), (8) widget_url contains client, phone, title, proposal_id, value, date, time_start, time_end as query params, (9) POST /api/appointments regression - still rejects overlapping appointments, (10) Frontend: data-testid='schedule-{id}' button on each proposal card, (11) data-testid='schedule-dialog' opens with window-any/morning/afternoon and duration-2/3/4/8 buttons, (12) confirm-schedule-btn calls backend and shows schedule-result with date/time, (13) open-widget-btn triggers window.open with widget URL, (14) Duplicate shows amber UI with 'Já existe agendamento' message, (15) Agenda page shows created appointment on correct date with all details, (16) Regression: /relatorios and /obras pages load correctly.",
+  "features_tested": {
+    "backend_schedule_any_window": "PASS - Creates appointment in next available slot (morning or afternoon)",
+    "backend_schedule_morning_window": "PASS - Only schedules in 09-13",
+    "backend_schedule_afternoon_window": "PASS - Only schedules in 14-18",
+    "backend_schedule_duration_2h": "PASS - Creates 2-hour slot",
+    "backend_schedule_duration_3h": "PASS - Creates 3-hour slot",
+    "backend_schedule_duration_4h": "PASS - Creates 4-hour slot",
+    "backend_schedule_duration_8h": "PASS - Correctly rejected (doesn't fit in any window)",
+    "backend_duplicate_409": "PASS - Returns 409 with existing appointment",
+    "backend_widget_url_params": "PASS - Contains all required query params",
+    "backend_skips_weekends": "PASS - Never schedules on Sat/Sun",
+    "backend_404_nonexistent": "PASS - Returns 404 for invalid proposal_id",
+    "backend_422_impossible_duration": "PASS - Returns 422 for duration that doesn't fit",
+    "backend_appointment_fields": "PASS - Has proposal_id, budget_id, client_name, client_phone, notes with value",
+    "backend_appointments_overlap_regression": "PASS - POST /api/appointments still rejects overlaps",
+    "backend_appointments_adjacent": "PASS - Allows adjacent (non-overlapping) appointments",
+    "frontend_schedule_button_exists": "PASS - data-testid='schedule-{id}' on each proposal card",
+    "frontend_schedule_dialog_opens": "PASS - data-testid='schedule-dialog' found",
+    "frontend_window_buttons": "PASS - window-any, window-morning, window-afternoon all present",
+    "frontend_duration_buttons": "PASS - duration-2, duration-3, duration-4, duration-8 all present",
+    "frontend_confirm_button": "PASS - confirm-schedule-btn found and works",
+    "frontend_schedule_result": "PASS - schedule-result shows date/time after scheduling",
+    "frontend_open_widget_btn": "PASS - open-widget-btn found",
+    "frontend_duplicate_amber_ui": "PASS - Shows amber styling and 'Já existe agendamento'",
+    "frontend_agenda_shows_appointment": "PASS - Appointment visible on Agenda page with correct details",
+    "regression_relatorios": "PASS - Page loads with all KPIs and monthly table",
+    "regression_obras": "PASS - Page loads with work cards"
+  },
+  "data_testids_verified": {
+    "propostas-page": "FOUND",
+    "schedule-{id}": "FOUND (18 buttons)",
+    "schedule-dialog": "FOUND",
+    "window-any": "FOUND",
+    "window-morning": "FOUND",
+    "window-afternoon": "FOUND",
+    "duration-2": "FOUND",
+    "duration-3": "FOUND",
+    "duration-4": "FOUND",
+    "duration-8": "FOUND",
+    "confirm-schedule-btn": "FOUND",
+    "schedule-result": "FOUND",
+    "open-widget-btn": "FOUND",
+    "relatorios-page": "FOUND",
+    "obras-page": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "POST /api/proposals/{id}/schedule (creates appointment from proposal)",
+    "POST /api/appointments (regression - overlap rejection)",
+    "GET /api/appointments (list appointments)",
+    "DELETE /api/appointments/{id} (cleanup)",
+    "POST /api/budgets (create test budget)",
+    "POST /api/budgets/{id}/generate-proposals (generate test proposals)",
+    "DELETE /api/budgets/{id} (cleanup)",
+    "DELETE /api/proposals/{id} (cleanup)",
+    "POST /api/auth/login (authentication)"
+  ]
+}
