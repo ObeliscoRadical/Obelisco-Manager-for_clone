@@ -550,6 +550,223 @@ async def create_work_from_proposal(proposal_id: str, user=Depends(get_current_u
     return doc
 
 
+# --- Work Items: Real vs Predicted Cost Tracking ---
+
+class WorkItemUpdate(BaseModel):
+    real_unit_cost: Optional[float] = None
+    real_quantity: Optional[float] = None
+    real_notes: Optional[str] = None
+
+
+class WorkItemExtra(BaseModel):
+    name: str
+    category: str = "Extra"
+    unit: str = "un"
+    quantity: float = 1
+    predicted_unit_cost: float = 0
+    margin: float = 0.6
+    real_unit_cost: float = 0
+    real_quantity: Optional[float] = None
+    notes: str = ""
+
+
+def _compute_work_item_totals(it: dict) -> dict:
+    """Calcula custos previsto vs real + preço de venda + margem por linha."""
+    qty = float(it.get("quantity") or 0)
+    real_qty = it.get("real_quantity")
+    real_qty = float(real_qty) if real_qty is not None else qty
+    pred_uc = float(it.get("predicted_unit_cost") or 0)
+    real_uc = float(it.get("real_unit_cost") or 0)
+    margin = float(it.get("margin") or 0)
+    sale_unit = round(pred_uc * (1 + margin), 2)         # preço cobrado ao cliente
+    return {
+        **it,
+        "real_quantity": real_qty,
+        "predicted_total": round(pred_uc * qty, 2),
+        "real_total": round(real_uc * real_qty, 2) if real_uc > 0 else 0,
+        "sale_unit_price": sale_unit,
+        "sale_total": round(sale_unit * qty, 2),
+        "delta": round((real_uc * real_qty) - (pred_uc * qty), 2) if real_uc > 0 else 0,
+    }
+
+
+@api_router.post("/works/{work_id}/sync-budget")
+async def sync_work_from_budget(work_id: str, user=Depends(get_current_user)):
+    """Carrega/actualiza os itens do orçamento de origem para a obra.
+    Items que já tinham custo real preenchido na obra são preservados."""
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+    if not work.get("budget_id"):
+        raise HTTPException(status_code=400, detail="Esta obra não tem orçamento associado")
+    budget = await db.budgets.find_one({"id": work["budget_id"]}, {"_id": 0})
+    if not budget:
+        raise HTTPException(status_code=404, detail="Orçamento de origem não encontrado")
+
+    existing = {it.get("budget_item_idx"): it for it in (work.get("items") or [])}
+    new_items = []
+    for idx, b_it in enumerate(budget.get("items", [])):
+        prev = existing.get(idx) or {}
+        item = {
+            "id": prev.get("id") or str(uuid.uuid4()),
+            "budget_item_idx": idx,
+            "category": b_it.get("category", ""),
+            "name": b_it.get("name", ""),
+            "unit": b_it.get("unit", "un"),
+            "quantity": b_it.get("quantity", 1),
+            "predicted_unit_cost": b_it.get("unit_cost", 0),
+            "margin": b_it.get("margin", 0.6),
+            "real_unit_cost": prev.get("real_unit_cost", 0),
+            "real_quantity": prev.get("real_quantity"),
+            "real_notes": prev.get("real_notes", ""),
+            "history": prev.get("history", []),
+            "is_extra": False,
+        }
+        new_items.append(item)
+    # Preserve extras
+    for it in (work.get("items") or []):
+        if it.get("is_extra"):
+            new_items.append(it)
+
+    await db.works.update_one({"id": work_id}, {"$set": {"items": new_items, "items_synced_at": datetime.now(timezone.utc).isoformat()}})
+    return await get_work_full(work_id, user)
+
+
+@api_router.get("/works/{work_id}/full")
+async def get_work_full(work_id: str, user=Depends(get_current_user)):
+    """Devolve a obra + items computados + despesas vinculadas + KPIs agregados."""
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+
+    # Auto-sync se nunca foi sincronizado e tem budget_id
+    if not work.get("items") and work.get("budget_id"):
+        budget = await db.budgets.find_one({"id": work["budget_id"]}, {"_id": 0})
+        if budget:
+            items = []
+            for idx, b_it in enumerate(budget.get("items", [])):
+                items.append({
+                    "id": str(uuid.uuid4()),
+                    "budget_item_idx": idx,
+                    "category": b_it.get("category", ""),
+                    "name": b_it.get("name", ""),
+                    "unit": b_it.get("unit", "un"),
+                    "quantity": b_it.get("quantity", 1),
+                    "predicted_unit_cost": b_it.get("unit_cost", 0),
+                    "margin": b_it.get("margin", 0.6),
+                    "real_unit_cost": 0,
+                    "real_quantity": None,
+                    "real_notes": "",
+                    "history": [],
+                    "is_extra": False,
+                })
+            work["items"] = items
+            await db.works.update_one({"id": work_id}, {"$set": {"items": items, "items_synced_at": datetime.now(timezone.utc).isoformat()}})
+
+    items = [_compute_work_item_totals(it) for it in (work.get("items") or [])]
+
+    # Despesas vinculadas a esta obra
+    expenses = await db.expenses.find({"obra_id": work_id}, {"_id": 0}).to_list(2000)
+    expenses_total = round(sum(float(e.get("value_gross") or 0) for e in expenses), 2)
+
+    # KPIs
+    sale_total = round(sum(it.get("sale_total", 0) for it in items), 2)
+    predicted_total = round(sum(it.get("predicted_total", 0) for it in items), 2)
+    real_total_items = round(sum(it.get("real_total", 0) for it in items), 2)
+    real_total = round(real_total_items + expenses_total, 2)
+    predicted_profit = round(sale_total - predicted_total, 2)
+    real_profit = round(sale_total - real_total, 2)
+    margin_predicted_pct = round((predicted_profit / sale_total * 100) if sale_total > 0 else 0, 1)
+    margin_real_pct = round((real_profit / sale_total * 100) if sale_total > 0 else 0, 1)
+    overrun_pct = round(((real_total - predicted_total) / predicted_total * 100) if predicted_total > 0 else 0, 1)
+
+    return {
+        "work": work,
+        "items": items,
+        "expenses": expenses,
+        "kpis": {
+            "sale_total": sale_total,
+            "predicted_total": predicted_total,
+            "real_total_items": real_total_items,
+            "expenses_total": expenses_total,
+            "real_total": real_total,
+            "predicted_profit": predicted_profit,
+            "real_profit": real_profit,
+            "margin_predicted_pct": margin_predicted_pct,
+            "margin_real_pct": margin_real_pct,
+            "overrun_pct": overrun_pct,
+            "is_overrun": overrun_pct > 10,
+        },
+    }
+
+
+@api_router.put("/works/{work_id}/items/{item_id}")
+async def update_work_item(work_id: str, item_id: str, input: WorkItemUpdate, user=Depends(get_current_user)):
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+    items = list(work.get("items") or [])
+    idx = next((i for i, it in enumerate(items) if it.get("id") == item_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    data = input.model_dump(exclude_none=True)
+    if not data:
+        raise HTTPException(status_code=400, detail="Nada para atualizar")
+
+    # Registar histórico se o custo real mudar
+    prev_real = float(items[idx].get("real_unit_cost") or 0)
+    new_real = data.get("real_unit_cost", prev_real)
+    if new_real != prev_real:
+        items[idx].setdefault("history", []).append({
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": user.get("name", ""),
+            "from": prev_real,
+            "to": float(new_real),
+        })
+
+    items[idx] = {**items[idx], **data}
+    await db.works.update_one({"id": work_id}, {"$set": {"items": items}})
+    return await get_work_full(work_id, user)
+
+
+@api_router.post("/works/{work_id}/items")
+async def add_work_item_extra(work_id: str, input: WorkItemExtra, user=Depends(get_current_user)):
+    """Adiciona item extra à obra (algo que não estava no orçamento original)."""
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+    item = {
+        "id": str(uuid.uuid4()),
+        "budget_item_idx": None,
+        "is_extra": True,
+        "category": input.category,
+        "name": input.name,
+        "unit": input.unit,
+        "quantity": input.quantity,
+        "predicted_unit_cost": input.predicted_unit_cost,
+        "margin": input.margin,
+        "real_unit_cost": input.real_unit_cost,
+        "real_quantity": input.real_quantity,
+        "real_notes": input.notes,
+        "history": [],
+        "added_at": datetime.now(timezone.utc).isoformat(),
+        "added_by": user.get("name", ""),
+    }
+    await db.works.update_one({"id": work_id}, {"$push": {"items": item}})
+    return await get_work_full(work_id, user)
+
+
+@api_router.delete("/works/{work_id}/items/{item_id}")
+async def delete_work_item(work_id: str, item_id: str, user=Depends(get_current_user)):
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+    new_items = [it for it in (work.get("items") or []) if it.get("id") != item_id]
+    await db.works.update_one({"id": work_id}, {"$set": {"items": new_items}})
+    return await get_work_full(work_id, user)
+
+
+
 # --- Appointment Endpoints ---
 
 @api_router.get("/appointments")
