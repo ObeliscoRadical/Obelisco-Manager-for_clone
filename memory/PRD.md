@@ -34,6 +34,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 20, 2026 (v14) — Auto-Agendamento a partir de Proposta
+- **Backend `server.py`** — novo `POST /api/proposals/{id}/schedule`:
+  - Input `{ window: 'any'|'morning'|'afternoon', duration_hours: 2|3|4|8 }` (defaults: any, 4h).
+  - Procura próximo slot livre em janelas comerciais (09–13 manhã, 14–18 tarde), dias úteis seg-sex, em passos de 30min, até 60 dias.
+  - Bloqueia duplicados: retorna **409** se já existe appointment com o mesmo `proposal_id`, incluindo o appointment existente em `detail.appointment`.
+  - Cria appointment com `proposal_id`, `budget_id`, `client_name`, `client_phone`, `title="Obra — <título>"`, `notes` com valor da proposta.
+  - Retorna também `widget_url` com query params (`client`, `phone`, `title`, `proposal_id`, `proposal_label`, `value`, `date`, `time_start`, `time_end`) para abrir o widget externo (`https://tech-app-obelisco.emergent.host/widget?...`) pré-preenchido.
+- **Frontend `PropostasPage.jsx`** — botão "Agendar" (data-testid `schedule-{id}`) em cada cartão:
+  - Dialog `schedule-dialog` com selecção de janela (Indiferente/Manhã/Tarde) e duração (2h/3h/4h/8h).
+  - Botão "Encontrar próximo slot e agendar" chama o backend, mostra resultado verde com data+hora.
+  - Se já existe → UI amber + appointment existente + dica para ir à Agenda alterar/eliminar antes de re-agendar.
+  - Botão "Abrir em Inserir Pedidos pré-preenchido" → `window.open(widget_url)` em nova tab.
+- **Testado E2E**: 15/15 backend (todas as combinações de window/duration + 409 duplicado + 422 sem slot + 404 + regressão overlap appointments) + frontend 100% (todos os testids encontrados, Agenda mostra appointment criado).
+
 ### Feb 20, 2026 (v13) — Relatório Financeiro Anual em PDF
 - **Backend `server.py`** — novo `GET /api/reports/annual?year=&client=&category=` agrega TUDO para o relatório anual:
   - KPIs: `total_in` (pagamentos recebidos), `total_emitted` (faturas emitidas), `total_out` (variáveis+fixas+obra+salários), `result`, `margin_pct`, `vat_paid` / `vat_charged` / `vat_balance` (IVA a entregar/recuperar), `pending_total` (a receber - todos os anos), contadores de invoices/expenses/works/works_in_progress.
