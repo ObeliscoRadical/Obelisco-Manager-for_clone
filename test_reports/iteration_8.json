@@ -1,0 +1,126 @@
+{
+  "summary": "Completed comprehensive testing of Work Analysis (Análise de Custo de Obra - Previsto vs Real) feature. Backend: 168/168 tests passed (100%) including 21 new work analysis tests. Frontend: All new features working correctly - WorkAnalysisDialog opens on card click, KPI cards display correctly, items table with editable real costs, Item Imprevisto form, History panel, PDF export button, overrun alert, expenses section.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Despesas chart",
+        "issues": ["Console warning about chart width/height being -1 - cosmetic only, page works correctly"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_work_analysis_module.py",
+    "/app/backend/tests/test_obelisco_api.py",
+    "/app/backend/tests/test_payroll_module.py",
+    "/app/backend/tests/test_signature_feature.py",
+    "/app/backend/tests/test_expenses_module.py",
+    "/app/backend/tests/test_stock_invoices_module.py",
+    "/app/test_reports/pytest/pytest_work_analysis.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_work_analysis_module.py"
+  ],
+  "success_rate": {
+    "backend": "100% (168/168 tests passed - 21 new work analysis + 147 existing)",
+    "frontend": "100% (all work analysis flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "Test budgets, works, expenses, and items created during testing with TEST_ prefix were cleaned up after tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Work Analysis feature fully tested and working. Key verified flows: (1) GET /api/works/{id}/full returns {work, items, expenses, kpis} with all computed values, (2) KPIs correctly computed: sale_total, predicted_total, real_total_items, expenses_total, real_total, predicted_profit, real_profit, margin_predicted_pct, margin_real_pct, overrun_pct, is_overrun, (3) POST /api/works/{id}/sync-budget syncs items from budget preserving real costs and extras, (4) POST /api/works/{id}/items adds extra item with is_extra=true, (5) PUT /api/works/{id}/items/{item_id} updates real_unit_cost/real_quantity/real_notes and records history when cost changes, (6) DELETE /api/works/{id}/items/{item_id} removes item, (7) Expenses with obra_id appear in /full response and are summed in expenses_total, (8) is_overrun=true when overrun_pct > 10, (9) Frontend WorkAnalysisDialog opens on card click with data-testid='work-analysis-dialog', (10) KPI cards show Venda Total, Custo Previsto, Custo Real, Lucro Real, (11) Items table has editable real_unit_cost and real_quantity inputs with Guardar button per row, (12) Item Imprevisto button opens form to add extra items, (13) Histórico button shows history panel with cost change entries, (14) Sincronizar do Orçamento button appears only if work has budget_id, (15) Relatório PDF button generates PDF download, (16) Overrun alert appears when is_overrun=true, (17) Expenses section shows linked expenses with total, (18) Regression: create/edit/delete works via old dialog still works.",
+  "features_tested": {
+    "backend_get_work_full_structure": "PASS - Returns {work, items, expenses, kpis}",
+    "backend_auto_sync_items_from_budget": "PASS - Items auto-synced on first /full call if budget_id exists",
+    "backend_kpis_sale_total": "PASS - Correctly computed from items",
+    "backend_kpis_predicted_total": "PASS - Sum of predicted_unit_cost * quantity",
+    "backend_kpis_real_total_items": "PASS - Sum of real_unit_cost * real_quantity",
+    "backend_kpis_expenses_total": "PASS - Sum of expenses with obra_id",
+    "backend_kpis_real_total": "PASS - real_total_items + expenses_total",
+    "backend_kpis_profits_margins": "PASS - predicted_profit, real_profit, margin_predicted_pct, margin_real_pct",
+    "backend_kpis_overrun": "PASS - overrun_pct computed, is_overrun=true when >10%",
+    "backend_update_item_real_cost": "PASS - PUT updates real_unit_cost/real_quantity/real_notes",
+    "backend_history_on_cost_change": "PASS - History entry created when real_unit_cost changes",
+    "backend_add_extra_item": "PASS - POST creates item with is_extra=true",
+    "backend_delete_item": "PASS - DELETE removes item from work",
+    "backend_sync_budget_preserves_real": "PASS - Sync preserves existing real costs and extras",
+    "backend_sync_without_budget_400": "PASS - Returns 400 if work has no budget_id",
+    "backend_expenses_in_full": "PASS - Expenses with obra_id appear in response",
+    "backend_work_crud_regression": "PASS - Create/get/update/list/delete works",
+    "frontend_work_card_opens_dialog": "PASS - Click on card opens WorkAnalysisDialog",
+    "frontend_dialog_testid": "PASS - data-testid='work-analysis-dialog' found",
+    "frontend_kpi_cards": "PASS - Venda Total, Custo Previsto, Custo Real, Lucro Real displayed",
+    "frontend_overrun_alert": "PASS - Red alert shown when is_overrun=true",
+    "frontend_items_table": "PASS - Table with editable real cost inputs",
+    "frontend_save_item_button": "PASS - Guardar button per row",
+    "frontend_item_imprevisto_btn": "PASS - data-testid='add-extra-btn' found",
+    "frontend_extra_form": "PASS - Form opens with all fields",
+    "frontend_history_btn": "PASS - data-testid='toggle-history-btn' found",
+    "frontend_history_panel": "PASS - data-testid='history-panel' shows history",
+    "frontend_sync_budget_btn": "PASS - data-testid='sync-budget-btn' shown if budget_id exists",
+    "frontend_pdf_export_btn": "PASS - data-testid='export-pdf-btn' enabled",
+    "frontend_expenses_section": "PASS - data-testid='expenses-count' shows count and total",
+    "frontend_items_filter": "PASS - data-testid='items-filter' input found",
+    "frontend_edit_work_dialog": "PASS - Edit dialog opens and works correctly",
+    "frontend_new_work_dialog": "PASS - New work dialog opens and works correctly",
+    "regression_orcamentos": "PASS - Page loads",
+    "regression_propostas": "PASS - Page loads",
+    "regression_despesas": "PASS - Page loads",
+    "regression_faturas": "PASS - Page loads",
+    "regression_materiais": "PASS - Page loads",
+    "regression_dashboard": "PASS - Page loads with all KPIs"
+  },
+  "data_testids_verified": {
+    "obras-page": "FOUND",
+    "new-work-btn": "FOUND",
+    "work-card-{id}": "FOUND",
+    "work-analysis-dialog": "FOUND",
+    "sync-budget-btn": "FOUND (when budget_id exists)",
+    "export-pdf-btn": "FOUND",
+    "add-extra-btn": "FOUND",
+    "toggle-history-btn": "FOUND",
+    "items-filter": "FOUND",
+    "expenses-count": "FOUND",
+    "overrun-alert": "FOUND (when is_overrun=true)",
+    "extra-form": "FOUND",
+    "extra-name": "FOUND",
+    "save-extra-btn": "FOUND",
+    "history-panel": "FOUND",
+    "real-uc-{id}": "FOUND",
+    "real-qty-{id}": "FOUND",
+    "save-item-{id}": "FOUND",
+    "work-title-input": "FOUND",
+    "work-client-input": "FOUND",
+    "save-work-btn": "FOUND",
+    "edit-work-{id}": "FOUND",
+    "delete-work-{id}": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "GET /api/works/{id}/full (returns work + items + expenses + kpis)",
+    "POST /api/works/{id}/sync-budget (sync items from budget)",
+    "POST /api/works/{id}/items (add extra item)",
+    "PUT /api/works/{id}/items/{item_id} (update real cost with history)",
+    "DELETE /api/works/{id}/items/{item_id} (delete item)",
+    "POST /api/works (create work)",
+    "GET /api/works (list works)",
+    "GET /api/works/{id} (get single work)",
+    "PUT /api/works/{id} (update work)",
+    "DELETE /api/works/{id} (delete work)",
+    "POST /api/budgets (create budget for testing)",
+    "DELETE /api/budgets/{id} (cleanup)",
+    "POST /api/expenses (create expense linked to work)",
+    "DELETE /api/expenses/{id} (cleanup)",
+    "GET /api/proposal-settings (for PDF generation)"
+  ]
+}
