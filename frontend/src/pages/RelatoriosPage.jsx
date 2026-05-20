@@ -75,14 +75,16 @@ export default function RelatoriosPage() {
   const onGeneratePDF = async () => {
     if (!data) return;
     setGenerating(true);
+    // Cede o ciclo ao React para renderizar o estado "A gerar…" antes de bloquear com jsPDF
+    await new Promise((r) => setTimeout(r, 50));
     try {
       const { data: settings } = await api.get('/proposal-settings').catch(() => ({ data: {} }));
       const logo = settings?.logo_base64 || settings?.logo || null;
       await generateAnnualReportPDF(data, settings, logo);
       toast.success('PDF gerado com sucesso');
     } catch (e) {
-      console.error(e);
-      toast.error('Erro a gerar PDF');
+      console.error('PDF generation error:', e);
+      toast.error('Erro a gerar PDF: ' + (e?.message || 'erro desconhecido'));
     } finally {
       setGenerating(false);
     }
@@ -106,10 +108,17 @@ export default function RelatoriosPage() {
           data-testid="generate-pdf-btn"
           onClick={onGeneratePDF}
           disabled={!data || generating}
-          className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12 px-6"
+          translate="no"
+          className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12 px-6 notranslate"
         >
-          {generating ? <Loader2 className="animate-spin mr-2" size={18} /> : <Download size={18} className="mr-2" />}
-          {generating ? 'A gerar PDF…' : 'Exportar PDF Anual'}
+          <span className="inline-flex items-center" translate="no">
+            {generating ? (
+              <Loader2 className="animate-spin mr-2" size={18} />
+            ) : (
+              <Download size={18} className="mr-2" />
+            )}
+            <span translate="no">{generating ? 'A gerar PDF…' : 'Exportar PDF Anual'}</span>
+          </span>
         </Button>
       </div>
 
