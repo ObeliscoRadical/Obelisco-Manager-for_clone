@@ -1,0 +1,92 @@
+{
+  "summary": "Completed comprehensive testing of Annual Financial Reports (Relatório Financeiro Anual) feature. Backend: 18/18 tests passed (100%). Frontend: All features working correctly - /relatorios page loads, all data-testids found, KPI cards display correct values, monthly table has 12 rows + TOTAL, filters work, PDF export button works without JavaScript errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_annual_reports_module.py",
+    "/app/test_reports/pytest/pytest_annual_reports.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_annual_reports_module.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 tests passed)",
+    "frontend": "100% (all features working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "No new seed data created. Used existing invoices, expenses, works data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Annual Financial Reports feature fully tested and working. Key verified flows: (1) GET /api/reports/annual?year=2026 returns complete structure with year, scope_label, filters, kpis, monthly[12], categories_expense, clients_revenue, invoices[], expenses[], payroll_runs[], works[], works_in_progress[], generated_at, (2) KPIs correctly computed: total_in=600, total_emitted=2460, total_out=4401.65, result=-3801.65, margin_pct=-633.6, vat_paid=803.14, vat_charged=460, vat_balance=-343.14, pending_total=1860, invoices_count=2, expenses_count=31, works_count=2, (3) monthly has 12 entries with accumulated cashflow growing correctly, (4) ?client=X filters invoices by client_name (case-insensitive regex) and ZEROS expenses/payroll, (5) ?category=X filters expenses by exact category match, (6) categories_expense sorted desc by total with correct pct, (7) clients_revenue sorted desc by total with correct pct, (8) pending_total includes all invoices with balance > 0 (all years), (9) Frontend /relatorios page loads with data-testid='relatorios-page', (10) All selectors work: year-select, client-select, category-select, (11) KPI cards display: kpi-entradas, kpi-saidas, kpi-resultado, kpi-receber, (12) monthly-table has 12 rows + TOTAL footer, (13) refresh-btn refetches data, (14) reset-filters-btn resets client and category, (15) generate-pdf-btn triggers PDF download without JS errors, (16) Sidebar has 'Relatórios' nav item with FileBarChart icon, (17) Regression: Dashboard, Financeiro, Faturas, Despesas, Obras pages all load correctly.",
+  "features_tested": {
+    "backend_annual_report_structure": "PASS - Returns complete structure with all required fields",
+    "backend_kpis_all_fields": "PASS - total_in, total_emitted, total_out, total_out_variable, total_out_fixed, total_out_obra, total_payroll, result, margin_pct, vat_paid, vat_charged, vat_balance, pending_total, invoices_count, expenses_count, works_count, works_in_progress_count",
+    "backend_kpis_values_correct": "PASS - total_in=600, total_emitted=2460, total_out=4401.65, result=-3801.65",
+    "backend_monthly_12_entries": "PASS - 12 monthly entries returned",
+    "backend_monthly_structure": "PASS - month, month_label, entries, expenses_variable, expenses_fixed, expenses_obra, payroll, total_out, net, accumulated",
+    "backend_monthly_accumulated_grows": "PASS - Accumulated is cumulative sum of net",
+    "backend_client_filter": "PASS - Filters invoices, zeros expenses/payroll",
+    "backend_category_filter": "PASS - Filters expenses by exact category match",
+    "backend_categories_expense_sorted": "PASS - Sorted desc by total",
+    "backend_categories_expense_pct": "PASS - Percentages correct",
+    "backend_clients_revenue_sorted": "PASS - Sorted desc by total",
+    "backend_clients_revenue_pct": "PASS - Percentages correct",
+    "backend_pending_total": "PASS - Includes all invoices with balance > 0",
+    "backend_invoices_structure": "PASS - All required fields present",
+    "backend_expenses_structure": "PASS - All required fields present",
+    "backend_works_structure": "PASS - All required fields present",
+    "backend_payroll_structure": "PASS - All required fields present",
+    "backend_unauthorized": "PASS - Returns 401 without auth",
+    "frontend_relatorios_page_loads": "PASS - data-testid='relatorios-page' found",
+    "frontend_year_select": "PASS - data-testid='year-select' found",
+    "frontend_client_select": "PASS - data-testid='client-select' found",
+    "frontend_category_select": "PASS - data-testid='category-select' found",
+    "frontend_kpi_entradas": "PASS - data-testid='kpi-entradas' found, shows 600,00 €",
+    "frontend_kpi_saidas": "PASS - data-testid='kpi-saidas' found, shows 4401,65 €",
+    "frontend_kpi_resultado": "PASS - data-testid='kpi-resultado' found, shows -3801,65 €",
+    "frontend_kpi_receber": "PASS - data-testid='kpi-receber' found, shows 1860,00 €",
+    "frontend_monthly_table": "PASS - data-testid='monthly-table' found with 12 rows + TOTAL",
+    "frontend_refresh_btn": "PASS - data-testid='refresh-btn' found and clickable",
+    "frontend_reset_filters_btn": "PASS - data-testid='reset-filters-btn' found and clickable",
+    "frontend_generate_pdf_btn": "PASS - data-testid='generate-pdf-btn' found, no JS errors on click",
+    "frontend_sidebar_relatorios": "PASS - nav-relatorios found in sidebar",
+    "regression_dashboard": "PASS - Page loads",
+    "regression_financeiro": "PASS - Page loads",
+    "regression_faturas": "PASS - Page loads",
+    "regression_despesas": "PASS - Page loads",
+    "regression_obras": "PASS - Page loads"
+  },
+  "data_testids_verified": {
+    "relatorios-page": "FOUND",
+    "year-select": "FOUND",
+    "client-select": "FOUND",
+    "category-select": "FOUND",
+    "kpi-entradas": "FOUND",
+    "kpi-saidas": "FOUND",
+    "kpi-resultado": "FOUND",
+    "kpi-receber": "FOUND",
+    "monthly-table": "FOUND",
+    "refresh-btn": "FOUND",
+    "reset-filters-btn": "FOUND",
+    "generate-pdf-btn": "FOUND",
+    "nav-relatorios": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "GET /api/reports/annual?year=2026 (returns full annual report)",
+    "GET /api/reports/annual?year=2026&client=Test (filters by client)",
+    "GET /api/reports/annual?year=2026&category=Combustível (filters by category)",
+    "POST /api/auth/login (authentication)"
+  ]
+}

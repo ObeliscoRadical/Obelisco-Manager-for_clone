@@ -2047,6 +2047,273 @@ async def get_cashflow_dashboard(
     }
 
 
+# --- Annual Financial Report (Detailed PDF source) ---
+
+@api_router.get("/reports/annual")
+async def get_annual_report(
+    year: Optional[int] = None,
+    client: Optional[str] = None,
+    category: Optional[str] = None,
+    user=Depends(get_current_user),
+):
+    """Aggregates EVERYTHING for an annual financial report (PDF source):
+    invoices (linha-a-linha), expenses (linha-a-linha), payroll, works,
+    monthly aggregates, cumulative cashflow, top categories of expense, top clients by revenue.
+
+    Filters:
+        - year (default current)
+        - client: regex case-insensitive on invoices.client_name and expenses.obra_name
+        - category: exact match on expenses.category
+    """
+    import re as _re
+    now = datetime.now(timezone.utc)
+    y = year or now.year
+    prefix = f"{y:04d}"
+
+    cli = (client or "").strip()
+    cat = (category or "").strip()
+    has_cli = bool(cli)
+    has_cat = bool(cat)
+
+    # ---------------- INVOICES ----------------
+    inv_q = {}
+    if has_cli:
+        inv_q["client_name"] = {"$regex": _re.escape(cli), "$options": "i"}
+    invoices_all = await db.invoices.find(inv_q, {"_id": 0}).to_list(20000)
+    invoices_year = []
+    for inv in invoices_all:
+        issue = (inv.get("issue_date") or "")[:10]
+        if issue.startswith(prefix):
+            invoices_year.append(inv)
+
+    # ---------------- EXPENSES ----------------
+    exp_q = {"date": {"$regex": f"^{prefix}"}}
+    if has_cat:
+        exp_q["category"] = cat
+    # Despesas não têm cliente — quando filtra cliente, despesas viram []
+    if has_cli:
+        expenses_year = []
+    else:
+        expenses_year = await db.expenses.find(exp_q, {"_id": 0}).sort("date", 1).to_list(20000)
+
+    # ---------------- PAYROLL ----------------
+    if has_cli:
+        payroll_runs = []
+    else:
+        payroll_runs = await db.payroll_runs.find({"year": y}, {"_id": 0}).sort("month", 1).to_list(500)
+
+    # ---------------- WORKS ----------------
+    works_q = {}
+    if has_cli:
+        works_q["client_name"] = {"$regex": _re.escape(cli), "$options": "i"}
+    works = await db.works.find(works_q, {"_id": 0}).to_list(2000)
+    works_in_progress = [w for w in works if (w.get("status") or "").lower() in ("em_execucao", "em_execução", "em execucao", "em execução")]
+
+    # ---------------- MONTHLY BREAKDOWN ----------------
+    monthly = []
+    by_cat_expense = {}
+    by_client_revenue = {}
+    total_in_year = 0.0
+    total_out_var = 0.0
+    total_out_fixed = 0.0
+    total_out_obra = 0.0
+    total_payroll_year = 0.0
+    total_emitted_year = 0.0
+    total_vat_paid = 0.0     # IVA suportado em despesas
+    total_vat_charged = 0.0  # IVA liquidado em faturas
+
+    # Per-invoice loop for revenue (use payments dates for entries; issue_date for emitted)
+    for inv in invoices_year:
+        emitted = float(inv.get("value_total", 0) or 0)
+        total_emitted_year += emitted
+        total_vat_charged += float(inv.get("vat_amount", 0) or 0)
+        cn = inv.get("client_name") or "—"
+        by_client_revenue[cn] = round(by_client_revenue.get(cn, 0.0) + emitted, 2)
+
+    in_by_m = {m: 0.0 for m in range(1, 13)}
+    for inv in invoices_all:
+        for p in (inv.get("payments") or []):
+            d = (p.get("date") or "")[:10]
+            if d.startswith(prefix):
+                try:
+                    m = int(d[5:7])
+                    amt = float(p.get("amount", 0) or 0)
+                    in_by_m[m] = round(in_by_m[m] + amt, 2)
+                    total_in_year += amt
+                except Exception:
+                    pass
+
+    exp_by_m = {m: {"var": 0.0, "fix": 0.0, "obra": 0.0} for m in range(1, 13)}
+    for e in expenses_year:
+        try:
+            m = int((e.get("date") or "")[5:7])
+        except Exception:
+            continue
+        gross = float(e.get("value_gross", 0) or 0)
+        vat = float(e.get("vat_amount", 0) or 0)
+        total_vat_paid += vat
+        t = (e.get("type") or "variavel").lower()
+        if t == "fixo":
+            exp_by_m[m]["fix"] = round(exp_by_m[m]["fix"] + gross, 2)
+            total_out_fixed += gross
+        elif t == "obra":
+            exp_by_m[m]["obra"] = round(exp_by_m[m]["obra"] + gross, 2)
+            total_out_obra += gross
+        else:
+            exp_by_m[m]["var"] = round(exp_by_m[m]["var"] + gross, 2)
+            total_out_var += gross
+        c = e.get("category") or "Outros"
+        by_cat_expense[c] = round(by_cat_expense.get(c, 0.0) + gross, 2)
+
+    pay_by_m = {m: 0.0 for m in range(1, 13)}
+    for r in payroll_runs:
+        m = int(r.get("month", 0) or 0)
+        cost = float(r.get("total_custo_empresa", 0) or 0)
+        if m:
+            pay_by_m[m] = round(pay_by_m[m] + cost, 2)
+            total_payroll_year += cost
+
+    accumulated = 0.0
+    months_pt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    for m in range(1, 13):
+        entries = round(in_by_m[m], 2)
+        out_var = round(exp_by_m[m]["var"], 2)
+        out_fix = round(exp_by_m[m]["fix"], 2)
+        out_obra = round(exp_by_m[m]["obra"], 2)
+        out_pay = round(pay_by_m[m], 2)
+        total_out = round(out_var + out_fix + out_obra + out_pay, 2)
+        net = round(entries - total_out, 2)
+        accumulated = round(accumulated + net, 2)
+        monthly.append({
+            "month": m,
+            "month_label": months_pt[m - 1],
+            "entries": entries,
+            "expenses_variable": out_var,
+            "expenses_fixed": out_fix,
+            "expenses_obra": out_obra,
+            "payroll": out_pay,
+            "total_out": total_out,
+            "net": net,
+            "accumulated": accumulated,
+        })
+
+    total_out_year = round(total_out_var + total_out_fixed + total_out_obra + total_payroll_year, 2)
+    result_year = round(total_in_year - total_out_year, 2)
+    margin_pct = round((result_year / total_in_year * 100) if total_in_year > 0 else 0, 1)
+
+    cats_sorted = sorted(
+        [{"category": k, "total": v, "pct": round(v / total_out_year * 100, 1) if total_out_year > 0 else 0}
+         for k, v in by_cat_expense.items()],
+        key=lambda x: x["total"], reverse=True,
+    )
+    clients_sorted = sorted(
+        [{"client": k, "total": v, "pct": round(v / total_emitted_year * 100, 1) if total_emitted_year > 0 else 0}
+         for k, v in by_client_revenue.items()],
+        key=lambda x: x["total"], reverse=True,
+    )
+
+    # Pending collection (todos os anos, importante para fim de ano)
+    pending = 0.0
+    for inv in invoices_all:
+        paid = sum(float(p.get("amount", 0) or 0) for p in (inv.get("payments") or []))
+        total = float(inv.get("value_total", 0) or 0)
+        bal = total - paid
+        if bal > 0.01:
+            pending += bal
+
+    # Slimmed-down invoice and expense rows for the report (only fields we render)
+    def _slim_inv(i):
+        paid = sum(float(p.get("amount", 0) or 0) for p in (i.get("payments") or []))
+        total = float(i.get("value_total", 0) or 0)
+        return {
+            "id": i.get("id"), "number": i.get("number"),
+            "issue_date": (i.get("issue_date") or "")[:10],
+            "due_date": (i.get("due_date") or "")[:10],
+            "client_name": i.get("client_name") or "—",
+            "client_nif": i.get("client_nif") or "",
+            "value_net": float(i.get("value_net", 0) or 0),
+            "vat_amount": float(i.get("vat_amount", 0) or 0),
+            "value_total": total,
+            "paid": round(paid, 2),
+            "balance": round(total - paid, 2),
+            "status": i.get("status") or "—",
+        }
+    def _slim_exp(e):
+        return {
+            "id": e.get("id"),
+            "date": (e.get("date") or "")[:10],
+            "supplier": e.get("supplier") or "—",
+            "nif": e.get("nif") or "",
+            "invoice_number": e.get("invoice_number") or "",
+            "category": e.get("category") or "Outros",
+            "type": e.get("type") or "variavel",
+            "obra_name": e.get("obra_name") or "",
+            "value_net": float(e.get("value_net", 0) or 0),
+            "vat_amount": float(e.get("vat_amount", 0) or 0),
+            "value_gross": float(e.get("value_gross", 0) or 0),
+        }
+    def _slim_work(w):
+        return {
+            "id": w.get("id"), "title": w.get("title") or "—",
+            "client_name": w.get("client_name") or "—",
+            "status": w.get("status") or "—",
+            "predicted_cost": float(w.get("predicted_cost", 0) or 0),
+            "real_cost": float(w.get("real_cost", 0) or 0),
+            "start_date": w.get("start_date") or "",
+            "end_date": w.get("end_date") or "",
+        }
+    def _slim_pay(r):
+        return {
+            "year": r.get("year"), "month": r.get("month"),
+            "total_iliquido": float(r.get("total_iliquido", 0) or 0),
+            "total_liquido": float(r.get("total_liquido", 0) or 0),
+            "total_ss_empresa": float(r.get("total_ss_empresa", 0) or 0),
+            "total_custo_empresa": float(r.get("total_custo_empresa", 0) or 0),
+            "employees_count": len(r.get("employees", []) or []),
+            "status": r.get("status") or "—",
+        }
+
+    invoices_year.sort(key=lambda i: (i.get("issue_date") or ""))
+    return {
+        "year": y,
+        "filters": {
+            "client": cli or None,
+            "category": cat or None,
+            "has_client_filter": has_cli,
+            "has_category_filter": has_cat,
+        },
+        "scope_label": f"{y:04d}" + (f" · {cli}" if has_cli else "") + (f" · {cat}" if has_cat else ""),
+        "kpis": {
+            "total_in": round(total_in_year, 2),
+            "total_emitted": round(total_emitted_year, 2),
+            "total_out": total_out_year,
+            "total_out_variable": round(total_out_var, 2),
+            "total_out_fixed": round(total_out_fixed, 2),
+            "total_out_obra": round(total_out_obra, 2),
+            "total_payroll": round(total_payroll_year, 2),
+            "result": result_year,
+            "margin_pct": margin_pct,
+            "vat_paid": round(total_vat_paid, 2),
+            "vat_charged": round(total_vat_charged, 2),
+            "vat_balance": round(total_vat_charged - total_vat_paid, 2),
+            "pending_total": round(pending, 2),
+            "invoices_count": len(invoices_year),
+            "expenses_count": len(expenses_year),
+            "works_count": len(works),
+            "works_in_progress_count": len(works_in_progress),
+        },
+        "monthly": monthly,
+        "categories_expense": cats_sorted,
+        "clients_revenue": clients_sorted,
+        "invoices": [_slim_inv(i) for i in invoices_year],
+        "expenses": [_slim_exp(e) for e in expenses_year],
+        "payroll_runs": [_slim_pay(r) for r in payroll_runs],
+        "works": [_slim_work(w) for w in works],
+        "works_in_progress": [_slim_work(w) for w in works_in_progress],
+        "generated_at": now.isoformat(),
+    }
+
+
 # --- Seed Professional Data ---
 
 async def seed_professional_data():

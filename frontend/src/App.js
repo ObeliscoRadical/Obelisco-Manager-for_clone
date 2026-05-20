@@ -25,6 +25,7 @@ import PublicSignPage from "./pages/PublicSignPage";
 import DespesasPage from "./pages/DespesasPage";
 import FaturasPage from "./pages/FaturasPage";
 import DashboardFinanceiroPage from "./pages/DashboardFinanceiroPage";
+import RelatoriosPage from "./pages/RelatoriosPage";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -88,6 +89,7 @@ function App() {
           <Route path="/despesas" element={<ProtectedRoute><DespesasPage /></ProtectedRoute>} />
           <Route path="/faturas" element={<ProtectedRoute><FaturasPage /></ProtectedRoute>} />
           <Route path="/financeiro" element={<ProtectedRoute><DashboardFinanceiroPage /></ProtectedRoute>} />
+          <Route path="/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
           <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
