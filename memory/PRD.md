@@ -34,6 +34,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 21, 2026 (v15) — Guias de Transporte + Auth Técnico
+- **Backend `transport_guides.py` (novo módulo)**:
+  - Auth técnico: `POST /api/employees/{id}/set-password` (admin define), `POST /api/tech/auth/login` (devolve JWT `type=tech` 12h), `GET /api/tech/auth/me`.
+  - CRUD admin: `GET/POST/PUT/DELETE /api/transport-guides`, auto-numeração `GT YYYY/NNNN`, status (rascunho → emitida → em_transito → recebida/recebida_com_diferencas), history automático.
+  - `POST /api/transport-guides/{id}/emit` — decrementa stock dos materiais com `material_id`, cria stock_movements `saida`.
+  - Endpoints técnico: `GET /api/tech/transport-guides` (só atribuídas a mim), `POST /api/tech/transport-guides/{id}/receive` — actualiza qty_received/damaged_qty/notes/fotos/assinatura, cria stock_movement `perda` se qty_received < qty_planned, muda status.
+  - Helper: `GET /api/transport-guides/_helpers/work-materials/{work_id}` — items do orçamento + extras da obra.
+- **CORS alargado** para `*.emergent.host` e domínio do `tech-app-obelisco` permitirem consumo cross-origin.
+- **Frontend** — nova rota `/guias` (sidebar item "Guias Transporte", ícone Truck):
+  - `GuiasPage.jsx` — cards filtráveis (all/rascunho/emitida/recebida/c_diferencas), dialog de criação com modos work (puxa items do orçamento) e manual (escolhe do stock), atribuição a técnico activo, guardar rascunho ou criar+emitir, dialog de detalhe com tabela items prev/recebido/danificado + bloco de receção (assinatura, fotos) + histórico, download PDF.
+  - `FuncionariosPage.jsx` — botão KeyRound abre dialog "set-password-dialog" para admin definir password do técnico (requer email na ficha).
+- **PDF `guidePdf.js`** — A4 retrato com header preto/amarelo Obelisco, bloco info (obra/cliente/origem/destino/técnico/estado), tabela items, QR code com link da guia, espaço para assinatura/data.
+- **Testado E2E**: 24/24 backend (incluindo flows tech_login_inactive_403, receive_with_shortfall, perda automática) + frontend 100% + 8/8 regressões.
+
 ### Feb 20, 2026 (v14) — Auto-Agendamento a partir de Proposta
 - **Backend `server.py`** — novo `POST /api/proposals/{id}/schedule`:
   - Input `{ window: 'any'|'morning'|'afternoon', duration_hours: 2|3|4|8 }` (defaults: any, 4h).
