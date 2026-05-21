@@ -1,0 +1,130 @@
+{
+  "summary": "Completed comprehensive testing of Transport Guides (Guias de Transporte) module. Backend: 24/24 tests passed (100%). Frontend: All UI features working correctly - GuiasPage with filters, create dialog (work/manual modes), detail dialog with items table and reception info, PDF download. FuncionariosPage set-password feature working with KeyRound button and dialog. Regression: All main pages (Dashboard, Orçamentos, Propostas, Obras, Agenda, Despesas, Faturas, Relatórios) load correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Despesas page",
+        "issues": ["Minor chart warning about width/height being -1 (recharts library issue, non-blocking)"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_transport_guides.py",
+    "/app/test_reports/pytest/pytest_transport_guides.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_transport_guides.py"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24 tests passed)",
+    "frontend": "100% (all UI flows working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024",
+    "tech_email": "tecnico@obelisco.pt",
+    "tech_password": "tech1234"
+  },
+  "seed_data_creation": "Test employees and guides created during testing with TEST_ prefix. Some emitted guides remain in DB (cannot be deleted once emitted).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Transport Guides module fully tested and working. Key verified flows: (1) POST /api/employees/{id}/set-password - admin sets password for employee with email, rejects if no email or password < 4 chars, (2) POST /api/tech/auth/login - tech login with email+password, returns access_token type='tech', rejects inactive with 403, (3) GET /api/tech/auth/me - returns employee data without password_hash, (4) POST /api/transport-guides - creates guide with auto-numbering GT YYYY/NNNN, status=rascunho, requires items>=1, (5) GET /api/transport-guides with filters status/work_id/employee_id, (6) PUT /api/transport-guides/{id} - updates fields, regenerates item IDs, blocked if status=recebida, (7) DELETE /api/transport-guides/{id} - only allowed for rascunho, (8) POST /api/transport-guides/{id}/emit - requires assigned_employee_id, decrements stock_current, creates stock_movements type='saida', sets status=emitida, (9) GET /api/tech/transport-guides - tech sees only assigned guides with status in [emitida, em_transito, recebida, recebida_com_diferencas], (10) GET /api/tech/transport-guides/{id} - 404 if not assigned to tech, (11) POST /api/tech/transport-guides/{id}/receive - updates qty_received/damaged_qty, creates stock_movement type='perda' if shortfall, sets status=recebida or recebida_com_diferencas, stores signature_data/photos/signed_by_name, blocked if already received, (12) GET /api/transport-guides/_helpers/work-materials/{work_id} - returns budget items + extras. Frontend: GuiasPage with filter buttons (all/rascunho/emitida/recebida/c_diferencas), Nova Guia dialog with work/manual modes, select work loads budget items, select employee dropdown, save draft or create+emit buttons, detail dialog shows items table with qty_prevista/qty_recebida/danificado columns, reception section with signature, history timeline, PDF download. FuncionariosPage: KeyRound button opens set-password dialog with employee name/email, password input, save button.",
+  "features_tested": {
+    "backend_set_password_success": "PASS - Admin sets password for employee with email",
+    "backend_set_password_short": "PASS - Rejects password < 4 chars",
+    "backend_set_password_no_email": "PASS - Rejects if employee has no email",
+    "backend_set_password_404": "PASS - 404 for nonexistent employee",
+    "backend_tech_login_success": "PASS - Tech login returns access_token type='tech'",
+    "backend_tech_login_wrong_password": "PASS - Rejects wrong password",
+    "backend_tech_login_nonexistent": "PASS - Rejects nonexistent email",
+    "backend_tech_login_inactive_403": "PASS - Returns 403 for inactive employee",
+    "backend_tech_me": "PASS - Returns employee data without password_hash",
+    "backend_create_guide": "PASS - Creates with auto-numbering GT YYYY/NNNN",
+    "backend_create_guide_requires_items": "PASS - Rejects empty items",
+    "backend_list_guides_filters": "PASS - Filters by status/work_id/employee_id",
+    "backend_update_guide": "PASS - Updates fields and regenerates item IDs",
+    "backend_delete_guide_draft": "PASS - Deletes draft guides",
+    "backend_emit_guide": "PASS - Changes status, sets emitted_at, creates history",
+    "backend_emit_requires_employee": "PASS - Rejects if no assigned_employee_id",
+    "backend_tech_list_my_guides": "PASS - Returns only assigned emitted guides",
+    "backend_tech_get_guide_not_assigned": "PASS - 404 if not assigned to tech",
+    "backend_tech_receive_guide": "PASS - Updates items, creates loss movements, sets status",
+    "backend_tech_receive_already_received": "PASS - Blocks double receive",
+    "backend_work_materials_helper": "PASS - Returns budget items + extras",
+    "backend_work_materials_404": "PASS - 404 for nonexistent work",
+    "frontend_guias_page_loads": "PASS - Page title and filter buttons present",
+    "frontend_create_guide_dialog": "PASS - Mode buttons, work/employee selectors, save buttons",
+    "frontend_detail_guide_dialog": "PASS - Items table, reception info, history, PDF button",
+    "frontend_funcionarios_set_password": "PASS - KeyRound button opens dialog with password input",
+    "regression_dashboard": "PASS",
+    "regression_orcamentos": "PASS",
+    "regression_propostas": "PASS",
+    "regression_obras": "PASS",
+    "regression_agenda": "PASS",
+    "regression_despesas": "PASS",
+    "regression_faturas": "PASS",
+    "regression_relatorios": "PASS"
+  },
+  "data_testids_verified": {
+    "guias-page": "FOUND",
+    "new-guide-btn": "FOUND",
+    "filter-all": "FOUND",
+    "filter-rascunho": "FOUND",
+    "filter-emitida": "FOUND",
+    "filter-recebida": "FOUND",
+    "filter-recebida_com_diferencas": "FOUND",
+    "create-guide-dialog": "FOUND",
+    "mode-work": "FOUND",
+    "mode-manual": "FOUND",
+    "select-work": "FOUND",
+    "select-employee": "FOUND",
+    "save-draft-btn": "FOUND",
+    "save-emit-btn": "FOUND",
+    "detail-guide-dialog": "FOUND",
+    "guide-card-{id}": "FOUND (multiple)",
+    "funcionários-page": "FOUND",
+    "new-employee-btn": "FOUND",
+    "set-password-{id}": "FOUND (2 buttons)",
+    "set-password-dialog": "FOUND",
+    "employee-password-input": "FOUND",
+    "save-password-btn": "FOUND",
+    "emp-name": "FOUND",
+    "emp-nif": "FOUND",
+    "emp-salary": "FOUND",
+    "save-employee-btn": "FOUND",
+    "nav-guias": "FOUND",
+    "nav-funcionarios": "FOUND",
+    "sidebar": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "POST /api/auth/login (admin authentication)",
+    "POST /api/employees/{id}/set-password (set tech password)",
+    "POST /api/tech/auth/login (tech authentication)",
+    "GET /api/tech/auth/me (tech profile)",
+    "POST /api/transport-guides (create guide)",
+    "GET /api/transport-guides (list guides with filters)",
+    "GET /api/transport-guides/{id} (get guide detail)",
+    "PUT /api/transport-guides/{id} (update guide)",
+    "DELETE /api/transport-guides/{id} (delete draft guide)",
+    "POST /api/transport-guides/{id}/emit (emit guide)",
+    "GET /api/tech/transport-guides (tech list assigned guides)",
+    "GET /api/tech/transport-guides/{id} (tech get guide)",
+    "POST /api/tech/transport-guides/{id}/receive (tech receive guide)",
+    "GET /api/transport-guides/_helpers/work-materials/{work_id} (get work materials)",
+    "GET /api/payroll/employees (list employees)",
+    "POST /api/payroll/employees (create employee)",
+    "DELETE /api/payroll/employees/{id} (delete employee)",
+    "POST /api/budgets (create budget for helper test)",
+    "POST /api/works (create work for helper test)",
+    "DELETE /api/budgets/{id} (cleanup)",
+    "DELETE /api/works/{id} (cleanup)"
+  ]
+}

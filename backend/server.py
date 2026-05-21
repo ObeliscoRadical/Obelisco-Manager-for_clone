@@ -3258,9 +3258,19 @@ app.include_router(create_loans_router(db, get_current_user))
 from fixed_costs import create_fixed_costs_router
 app.include_router(create_fixed_costs_router(db, get_current_user))
 
+# Transport Guides module (Guias de Transporte)
+from transport_guides import create_transport_guides_router
+app.include_router(create_transport_guides_router(db, get_current_user))
+
+_default_origins = [
+    os.environ.get("FRONTEND_URL", "http://localhost:3000"),
+    "https://tech-app-obelisco.emergent.host",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.environ.get("FRONTEND_URL", "http://localhost:3000")],
+    allow_origins=_default_origins,
+    allow_origin_regex=r"https://.*\.emergentagent\.com|https://.*\.emergent\.host",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

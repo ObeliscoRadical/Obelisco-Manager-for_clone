@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, UserCheck, UserX } from 'lucide-react';
+import { Plus, Trash2, Pencil, UserCheck, UserX, KeyRound } from 'lucide-react';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -39,6 +39,32 @@ export default function FuncionariosPage() {
 
   const openNew = () => { setEditing(null); setForm(emptyForm); setDialogOpen(true); };
   const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDialogOpen(true); };
+
+  const [pwdDialog, setPwdDialog] = useState({ open: false, employee: null, password: '' });
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const openSetPassword = (emp) => {
+    if (!emp.email) {
+      toast.error('Adicione o email na ficha antes de definir password');
+      return;
+    }
+    setPwdDialog({ open: true, employee: emp, password: '' });
+  };
+  const handleSavePassword = async () => {
+    if (!pwdDialog.password || pwdDialog.password.length < 4) {
+      toast.error('Password mínimo 4 caracteres');
+      return;
+    }
+    setPwdSaving(true);
+    try {
+      await api.post(`/employees/${pwdDialog.employee.id}/set-password`, { password: pwdDialog.password });
+      toast.success(`Password definida. ${pwdDialog.employee.name} pode agora fazer login na app móvel com ${pwdDialog.employee.email}`);
+      setPwdDialog({ open: false, employee: null, password: '' });
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Erro a definir password');
+    } finally {
+      setPwdSaving(false);
+    }
+  };
 
   const updateField = (k, v) => {
     setForm(prev => {
@@ -136,6 +162,7 @@ export default function FuncionariosPage() {
                     : <Badge className="bg-zinc-700 text-zinc-400 border-0"><UserX size={10} className="mr-1" /> Inativo</Badge>}
                 </TableCell>
                 <TableCell className="text-right">
+                  <button data-testid={`set-password-${e.id}`} onClick={() => openSetPassword(e)} title="Definir password de acesso à app móvel" className="text-zinc-400 hover:text-yellow-400 p-1 mr-1"><KeyRound size={14} /></button>
                   <button data-testid={`edit-employee-${e.id}`} onClick={() => openEdit(e)} className="text-zinc-400 hover:text-yellow-400 p-1 mr-1"><Pencil size={14} /></button>
                   <button onClick={() => handleDelete(e.id)} className="text-zinc-400 hover:text-red-400 p-1"><Trash2 size={14} /></button>
                 </TableCell>
@@ -228,6 +255,42 @@ export default function FuncionariosPage() {
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-zinc-700 text-zinc-300">Cancelar</Button>
             <Button data-testid="save-employee-btn" onClick={handleSave} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 font-semibold">Guardar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Set Password Dialog */}
+      <Dialog open={pwdDialog.open} onOpenChange={(open) => setPwdDialog({ ...pwdDialog, open })}>
+        <DialogContent data-testid="set-password-dialog" className="bg-zinc-950 border-zinc-800 max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-black uppercase text-white">Password de Acesso</DialogTitle>
+            <DialogDescription className="text-zinc-500">
+              {pwdDialog.employee ? `${pwdDialog.employee.name} (${pwdDialog.employee.email})` : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="p-3 rounded-xl bg-yellow-400/5 border border-yellow-400/20 text-xs text-yellow-200">
+              Esta password permite ao funcionário fazer login na app móvel <span className="font-mono">tech-app-obelisco</span> para ver guias de transporte e confirmar entregas.
+            </div>
+            <div>
+              <Label className="text-zinc-300 text-sm">Nova password (mínimo 4 caracteres)</Label>
+              <Input
+                data-testid="employee-password-input"
+                type="text"
+                value={pwdDialog.password}
+                onChange={(e) => setPwdDialog({ ...pwdDialog, password: e.target.value })}
+                className="mt-1 bg-zinc-900 border-zinc-700 text-white"
+                autoFocus
+                placeholder="ex: obra1234"
+              />
+              <p className="text-[10px] text-zinc-500 mt-1">Partilha esta password com o funcionário — pode mudá-la quando quiser pedindo-te.</p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setPwdDialog({ open: false, employee: null, password: '' })} className="border-zinc-700 text-zinc-300">Cancelar</Button>
+              <Button data-testid="save-password-btn" disabled={pwdSaving} onClick={handleSavePassword} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 font-semibold">
+                {pwdSaving ? 'A guardar…' : 'Guardar Password'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
