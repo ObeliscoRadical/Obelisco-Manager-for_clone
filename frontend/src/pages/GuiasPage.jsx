@@ -221,6 +221,18 @@ export default function GuiasPage() {
     }
   };
 
+  const handleReturnToStock = async (guideId) => {
+    if (!window.confirm('Devolver toda a sobra desta guia ao armazém? Os movimentos de stock serão criados.')) return;
+    try {
+      const { data } = await api.post(`/transport-guides/${guideId}/return-to-stock`, {});
+      setDetailGuide(data);
+      toast.success('Sobra devolvida ao armazém');
+      fetchAll();
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Erro a devolver sobra');
+    }
+  };
+
   const handleDownloadPDF = async (g) => {
     try {
       const { data: full } = await api.get(`/transport-guides/${g.id}`);
@@ -528,21 +540,34 @@ export default function GuiasPage() {
                     <thead className="bg-zinc-950/80 text-zinc-500 uppercase text-xs">
                       <tr>
                         <th className="text-left px-4 py-2 font-semibold">Material</th>
-                        <th className="text-right px-2 py-2 font-semibold">Qtd Prevista</th>
-                        <th className="text-right px-2 py-2 font-semibold">Qtd Recebida</th>
+                        <th className="text-right px-2 py-2 font-semibold">Previsto</th>
+                        <th className="text-right px-2 py-2 font-semibold">Recebido</th>
+                        <th className="text-right px-2 py-2 font-semibold">Utilizado</th>
+                        <th className="text-right px-2 py-2 font-semibold">Devolvido</th>
+                        <th className="text-right px-2 py-2 font-semibold">Sobra Obra</th>
                         <th className="text-right px-2 py-2 font-semibold">Danificado</th>
                         <th className="text-left px-2 py-2 font-semibold">Nota</th>
                       </tr>
                     </thead>
                     <tbody>
                       {(detailGuide.items || []).map(it => {
-                        const diff = it.qty_received != null && it.qty_received < it.qty_planned;
+                        const planned = Number(it.qty_planned || 0);
+                        const received = it.qty_received == null ? null : Number(it.qty_received);
+                        const used = Number(it.qty_used || 0);
+                        const returned = Number(it.qty_returned || 0);
+                        const surplus = received == null ? null : (received - used - returned);
+                        const diff = received != null && received < planned;
                         return (
                           <tr key={it.id} className="border-t border-zinc-800">
                             <td className="px-4 py-2 text-white">{it.name} <span className="text-zinc-500 text-xs">({it.unit})</span></td>
-                            <td className="px-2 py-2 text-right text-zinc-300">{it.qty_planned}</td>
-                            <td className={`px-2 py-2 text-right font-bold ${it.qty_received == null ? 'text-zinc-600' : diff ? 'text-orange-300' : 'text-green-400'}`}>
-                              {it.qty_received == null ? '—' : it.qty_received}
+                            <td className="px-2 py-2 text-right text-zinc-300">{planned}</td>
+                            <td className={`px-2 py-2 text-right font-bold ${received == null ? 'text-zinc-600' : diff ? 'text-orange-300' : 'text-green-400'}`}>
+                              {received == null ? '—' : received}
+                            </td>
+                            <td className="px-2 py-2 text-right text-blue-300 font-semibold">{used > 0 ? used : '—'}</td>
+                            <td className="px-2 py-2 text-right text-zinc-400">{returned > 0 ? returned : '—'}</td>
+                            <td className={`px-2 py-2 text-right font-bold ${surplus == null ? 'text-zinc-600' : surplus > 0 ? 'text-yellow-400' : 'text-zinc-500'}`}>
+                              {surplus == null ? '—' : surplus.toFixed(2).replace(/\.00$/, '')}
                             </td>
                             <td className={`px-2 py-2 text-right ${it.damaged_qty > 0 ? 'text-red-400 font-bold' : 'text-zinc-500'}`}>{it.damaged_qty || 0}</td>
                             <td className="px-2 py-2 text-zinc-400 text-xs">{it.notes || '—'}</td>
@@ -552,6 +577,34 @@ export default function GuiasPage() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Sobra na obra → botão devolver ao armazém */}
+                {(() => {
+                  const totalSurplus = (detailGuide.items || []).reduce((s, it) => {
+                    const received = Number(it.qty_received || 0);
+                    const used = Number(it.qty_used || 0);
+                    const returned = Number(it.qty_returned || 0);
+                    return s + Math.max(0, received - used - returned);
+                  }, 0);
+                  if (totalSurplus <= 0.0001) return null;
+                  return (
+                    <div data-testid="surplus-banner" className="bg-yellow-400/5 border border-yellow-400/30 rounded-2xl p-4 flex items-center justify-between gap-3 flex-wrap">
+                      <div>
+                        <div className="text-yellow-300 font-bold text-sm">Material em sobra na obra</div>
+                        <div className="text-zinc-400 text-xs mt-1">
+                          Total: <span className="text-white font-bold">{totalSurplus.toFixed(2).replace(/\.00$/, '')}</span> unidade(s) entre vários items. Quando o técnico voltar ao armazém, clica em devolver.
+                        </div>
+                      </div>
+                      <Button
+                        data-testid="return-to-stock-btn"
+                        onClick={() => handleReturnToStock(detailGuide.id)}
+                        className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 font-bold rounded-full"
+                      >
+                        <Package size={14} className="mr-2" /> Devolver sobra ao armazém
+                      </Button>
+                    </div>
+                  );
+                })()}
 
                 {detailGuide.reception && (
                   <div className="bg-green-500/5 border border-green-500/20 rounded-2xl p-4">

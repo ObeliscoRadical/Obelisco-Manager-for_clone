@@ -70,6 +70,7 @@ class TechLogin(BaseModel):
 
 
 class GuideItem(BaseModel):
+    id: Optional[str] = None
     material_id: Optional[str] = None
     name: str
     unit: str = "un"
@@ -77,7 +78,25 @@ class GuideItem(BaseModel):
     qty_planned: float = 0
     qty_received: Optional[float] = None
     damaged_qty: float = 0
+    qty_used: float = 0
     notes: str = ""
+
+
+class GuideUsageItem(BaseModel):
+    """Item parcial enviado quando técnico actualiza consumo."""
+    id: str
+    qty_used: float
+    notes: Optional[str] = None
+
+
+class GuideUsageUpdate(BaseModel):
+    items: List[GuideUsageItem]
+    note: Optional[str] = ""  # nota geral sobre esta atualização (ex: "fim do dia 3/abr")
+
+
+class GuideReturnInput(BaseModel):
+    item_ids: Optional[List[str]] = None  # None = todos os items com sobra > 0
+    note: Optional[str] = ""
 
 
 class GuideCreate(BaseModel):
@@ -264,6 +283,8 @@ def create_transport_guides_router(db, get_current_user: Callable):
                     "qty_planned": float(it.qty_planned or 0),
                     "qty_received": None,
                     "damaged_qty": float(it.damaged_qty or 0),
+                    "qty_used": 0.0,
+                    "qty_returned": 0.0,
                     "notes": it.notes or "",
                 }
                 for it in input.items
@@ -439,6 +460,8 @@ def create_transport_guides_router(db, get_current_user: Callable):
                 **base,
                 "qty_received": qty_received,
                 "damaged_qty": damaged,
+                "qty_used": float(inc_d.get("qty_used") or base.get("qty_used") or 0),
+                "qty_returned": float(base.get("qty_returned") or 0),
                 "notes": inc_d.get("notes") or base.get("notes", ""),
             }
             updated_items.append(new_it)
@@ -497,6 +520,116 @@ def create_transport_guides_router(db, get_current_user: Callable):
             {"loss_movements": len(loss_movements), "photos": len(reception["photos"])},
         )
         return await db.transport_guides.find_one({"id": guide_id, "assigned_employee_id": tech["id"]}, {"_id": 0})
+
+    # ============================================================
+    # USAGE updates (tech + admin) — quantidade utilizada na obra
+    # ============================================================
+
+    async def _apply_usage_update(guide_id: str, items_update: List[GuideUsageItem], actor_name: str, actor_id: str, note: str):
+        g = await db.transport_guides.find_one({"id": guide_id}, {"_id": 0})
+        if not g:
+            raise HTTPException(status_code=404, detail="Guia não encontrada")
+        if g.get("status") not in ("recebida", "recebida_com_diferencas", "emitida", "em_transito"):
+            raise HTTPException(status_code=400, detail=f"Não é possível registar utilização em guia com status '{g.get('status')}'")
+
+        by_id = {it["id"]: it for it in (g.get("items") or [])}
+        changes = []
+        for upd in items_update:
+            base = by_id.get(upd.id)
+            if not base:
+                continue
+            qty_received = float(base.get("qty_received") or 0)
+            qty_returned = float(base.get("qty_returned") or 0)
+            max_usable = qty_received - qty_returned
+            new_used = float(upd.qty_used or 0)
+            if new_used < 0:
+                raise HTTPException(status_code=400, detail=f"Quantidade utilizada não pode ser negativa em '{base.get('name')}'")
+            if new_used > max_usable + 0.0001:
+                raise HTTPException(status_code=400, detail=f"Quantidade utilizada ({new_used}) excede o recebido disponível ({max_usable}) em '{base.get('name')}'")
+            old_used = float(base.get("qty_used") or 0)
+            if abs(new_used - old_used) > 1e-9 or (upd.notes is not None and (upd.notes or "") != (base.get("notes") or "")):
+                base["qty_used"] = new_used
+                if upd.notes is not None:
+                    base["notes"] = upd.notes
+                changes.append({"item_id": base["id"], "name": base["name"], "from": old_used, "to": new_used})
+
+        if not changes:
+            return g
+
+        await db.transport_guides.update_one({"id": guide_id}, {"$set": {"items": list(by_id.values())}})
+        await _push_history(guide_id, "usage_updated", actor_name, {"changes": changes, "note": note or ""})
+        return await db.transport_guides.find_one({"id": guide_id}, {"_id": 0})
+
+    @router.post("/tech/transport-guides/{guide_id}/usage")
+    async def tech_update_usage(guide_id: str, input: GuideUsageUpdate, tech=Depends(_get_current_tech)):
+        """Técnico actualiza qty_used dos items (pode chamar várias vezes)."""
+        g = await db.transport_guides.find_one({"id": guide_id, "assigned_employee_id": tech["id"]}, {"_id": 0})
+        if not g:
+            raise HTTPException(status_code=404, detail="Guia não encontrada ou não atribuída a si")
+        return await _apply_usage_update(guide_id, input.items, tech.get("name", ""), tech.get("id", ""), input.note or "")
+
+    @router.post("/transport-guides/{guide_id}/usage")
+    async def admin_update_usage(guide_id: str, input: GuideUsageUpdate, user=Depends(get_current_user)):
+        """Admin também pode actualizar (correções)."""
+        return await _apply_usage_update(guide_id, input.items, user.get("name") or user.get("email", ""), user.get("id", ""), input.note or "")
+
+    @router.post("/transport-guides/{guide_id}/return-to-stock")
+    async def admin_return_to_stock(guide_id: str, input: GuideReturnInput, user=Depends(get_current_user)):
+        """Devolve ao armazém o material que sobrou (qty_received - qty_used - qty_returned).
+        Cria stock_movement type='entrada' para cada item com material_id.
+        Actualiza qty_returned no item."""
+        g = await db.transport_guides.find_one({"id": guide_id}, {"_id": 0})
+        if not g:
+            raise HTTPException(status_code=404, detail="Guia não encontrada")
+
+        target_ids = set(input.item_ids or [])
+        items = list(g.get("items") or [])
+        return_movements = []
+        any_returned = False
+
+        for it in items:
+            if target_ids and it["id"] not in target_ids:
+                continue
+            qty_received = float(it.get("qty_received") or 0)
+            qty_used = float(it.get("qty_used") or 0)
+            qty_returned_already = float(it.get("qty_returned") or 0)
+            surplus = qty_received - qty_used - qty_returned_already
+            if surplus <= 0.0001:
+                continue
+            mat_id = it.get("material_id")
+            if mat_id:
+                mat = await db.materials_db.find_one({"id": mat_id}, {"_id": 0})
+                if mat:
+                    new_stock = float(mat.get("stock_current", 0) or 0) + surplus
+                    await db.materials_db.update_one({"id": mat_id}, {"$set": {"stock_current": new_stock}})
+                    mov = {
+                        "id": str(uuid.uuid4()),
+                        "material_id": mat_id,
+                        "material_name": mat.get("description") or mat.get("name") or it.get("name"),
+                        "type": "entrada",
+                        "quantity": surplus,
+                        "balance_after": new_stock,
+                        "reason": f"Devolução de sobra da Guia {g.get('number')}",
+                        "guide_id": guide_id,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "created_by": user.get("id", ""),
+                    }
+                    await db.stock_movements.insert_one(mov)
+                    return_movements.append(mov["id"])
+            it["qty_returned"] = qty_returned_already + surplus
+            any_returned = True
+
+        if not any_returned:
+            raise HTTPException(status_code=400, detail="Não há sobra disponível para devolver")
+
+        await db.transport_guides.update_one({"id": guide_id}, {"$set": {"items": items}})
+        await _push_history(
+            guide_id,
+            "returned_to_stock",
+            user.get("name") or user.get("email", ""),
+            {"movements": len(return_movements), "note": input.note or "", "items_count": sum(1 for it in items if (it.get("qty_returned") or 0) > 0)},
+        )
+        return await db.transport_guides.find_one({"id": guide_id}, {"_id": 0})
 
     # ============================================================
     # Helpers para frontend (admin): materiais da obra

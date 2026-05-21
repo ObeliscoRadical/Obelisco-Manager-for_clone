@@ -34,6 +34,17 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 21, 2026 (v16) — Quantidade Utilizada na Obra + Devolução ao Armazém
+- **Backend `transport_guides.py`**:
+  - Novos campos no item da guia: `qty_used` (consumido na obra) e `qty_returned` (já devolvido). Cálculo `sobra = qty_received - qty_used - qty_returned`.
+  - `POST /api/tech/transport-guides/{id}/usage` (técnico) e `POST /api/transport-guides/{id}/usage` (admin) — actualiza `qty_used` de múltiplos items numa única chamada. Valida que `qty_used ≤ qty_received - qty_returned`. Cada alteração regista entrada no `history` (com `from→to` por item + nota opcional).
+  - `POST /api/transport-guides/{id}/return-to-stock` (admin) — devolve a sobra ao armazém: incrementa `stock_current` dos materiais e cria `stock_movements` type=`entrada`, actualiza `qty_returned` no item. Aceita opcionalmente `item_ids` para devolver apenas alguns.
+  - Aceita `qty_used` também no payload de `/receive` (preencher logo na confirmação inicial).
+- **Frontend GuiasPage (admin)**:
+  - Tabela de detalhe da guia passa de 5 para 8 colunas: Material, Previsto, Recebido, **Utilizado** (azul), **Devolvido**, **Sobra Obra** (amarelo), Danificado, Nota.
+  - Banner amarelo "Material em sobra na obra" aparece sempre que existe sobra > 0, com botão **"Devolver sobra ao armazém"** (data-testid `return-to-stock-btn`). Confirma e cria os movimentos de stock.
+- **Validado via curl**: criar guia → emitir → receber c/ diff → admin actualiza qty_used (30/40) → devolução cria stock_movement → re-tentativa de devolução devolve 400 ("Sem sobra") → qty_used acima do disponível devolve 400 com nome do item.
+
 ### Feb 21, 2026 (v15) — Guias de Transporte + Auth Técnico
 - **Backend `transport_guides.py` (novo módulo)**:
   - Auth técnico: `POST /api/employees/{id}/set-password` (admin define), `POST /api/tech/auth/login` (devolve JWT `type=tech` 12h), `GET /api/tech/auth/me`.
