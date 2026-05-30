@@ -3262,6 +3262,10 @@ app.include_router(create_fixed_costs_router(db, get_current_user))
 from transport_guides import create_transport_guides_router
 app.include_router(create_transport_guides_router(db, get_current_user))
 
+# Stock invoice import module (OCR de fatura → atualizar stock)
+from stock_invoice_import import create_stock_import_router
+app.include_router(create_stock_import_router(db, get_current_user))
+
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
     "https://tech-app-obelisco.emergent.host",

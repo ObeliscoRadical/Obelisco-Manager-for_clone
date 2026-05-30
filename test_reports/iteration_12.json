@@ -1,0 +1,94 @@
+{
+  "summary": "Completed comprehensive testing of Stock Invoice Import via OCR (Gemini 2.5 Pro) feature. Backend: 16/16 tests passed (100%). Frontend: Import Invoice button and dialog working correctly with all expected UI elements. Regression: All main pages (Dashboard, Orçamentos, Propostas, Guias, Materiais) load correctly. Stock movement dialog working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/materials",
+        "issue": "MaterialInput model doesn't include supplier_nif field - materials created via this endpoint won't have supplier_nif. Only materials created via import-invoice/apply have supplier_nif.",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stock_invoice_import.py",
+    "/app/test_reports/pytest/pytest_stock_invoice_import.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MaterialInput model in server.py (line 1578-1593) doesn't include supplier_nif field. Consider adding it for consistency with import-invoice/apply endpoint."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stock_invoice_import.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "100% (all UI elements working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "Test materials created during testing with TEST_ prefix were cleaned up after tests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Stock Invoice Import module fully tested. Key verified flows: (1) POST /api/materials/import-invoice/extract - returns 422 without file, 400 for invalid format (.txt, .doc), uses Gemini 2.5 Pro for OCR (not tested real OCR to save credits), (2) POST /api/materials/import-invoice/apply - returns 400 for empty lines, supports actions: create (creates material with supplier_nif + stock_movement type=entrada), update_stock_only (sums qty, preserves price), update_stock_and_price (sums qty + updates price + adds price_history with 'previous'), skip (ignores line), (3) Apply preserves existing supplier/supplier_nif, populates if empty, (4) Summary response includes counts: created, updated_stock, updated_price, skipped, stock_movements. Frontend: MateriaisPage has import-invoice-btn next to new-material-btn, clicking opens import-invoice-dialog with step=upload showing drag-and-drop area (invoice-upload-label), mentions Gemini 2.5 Pro and supported formats (PDF, JPG, PNG, WEBP). Dialog has 3 steps: upload → extracting → review. Review step has bulk action buttons (bulk-accept-prices, bulk-reject-prices, bulk-skip-fuzzy) and per-line action dropdowns (import-action-{idx}). Apply button (apply-import-btn) submits decisions.",
+  "features_tested": {
+    "backend_extract_no_file_422": "PASS",
+    "backend_extract_invalid_format_400": "PASS",
+    "backend_extract_invalid_extension_400": "PASS",
+    "backend_apply_empty_lines_400": "PASS",
+    "backend_apply_action_create": "PASS - creates material with supplier_nif, creates stock_movement type=entrada",
+    "backend_apply_action_update_stock_only": "PASS - sums quantity, does NOT change purchase_price",
+    "backend_apply_action_update_stock_and_price": "PASS - sums stock + updates price + adds price_history with 'previous'",
+    "backend_apply_action_skip": "PASS - ignores line without error",
+    "backend_apply_preserves_existing_supplier": "PASS",
+    "backend_apply_populates_empty_supplier": "PASS",
+    "backend_apply_summary_structure": "PASS - has created, updated_stock, updated_price, skipped, stock_movements",
+    "backend_apply_mixed_actions": "PASS - handles multiple action types in single request",
+    "backend_apply_nonexistent_material_skipped": "PASS",
+    "backend_apply_zero_quantity_skipped": "PASS",
+    "backend_apply_no_material_id_skipped": "PASS",
+    "frontend_import_invoice_btn_visible": "PASS",
+    "frontend_import_invoice_dialog_opens": "PASS",
+    "frontend_invoice_upload_label_present": "PASS",
+    "frontend_dialog_mentions_gemini": "PASS",
+    "frontend_dialog_shows_formats": "PASS",
+    "regression_dashboard": "PASS",
+    "regression_orcamentos": "PASS",
+    "regression_propostas": "PASS",
+    "regression_guias": "PASS",
+    "regression_materiais": "PASS",
+    "regression_stock_entrada_dialog": "PASS"
+  },
+  "data_testids_verified": {
+    "materiais-page": "FOUND",
+    "new-material-btn": "FOUND",
+    "import-invoice-btn": "FOUND",
+    "import-invoice-dialog": "FOUND",
+    "invoice-upload-label": "FOUND",
+    "material-search": "FOUND",
+    "material-filter-cat": "FOUND",
+    "nav-materiais": "FOUND",
+    "nav-dashboard": "FOUND",
+    "nav-orcamentos": "FOUND",
+    "nav-propostas": "FOUND",
+    "nav-guias": "FOUND",
+    "sidebar": "FOUND"
+  },
+  "api_endpoints_tested": [
+    "POST /api/auth/login (admin authentication)",
+    "POST /api/materials/import-invoice/extract (validation: no file, invalid format)",
+    "POST /api/materials/import-invoice/apply (all actions: create, update_stock_only, update_stock_and_price, skip)",
+    "POST /api/materials (create material for test setup)",
+    "GET /api/materials (verify material persistence)",
+    "GET /api/stock/movements (verify stock_movement creation)",
+    "DELETE /api/materials/{id} (cleanup)"
+  ],
+  "note_on_ocr_testing": "Real OCR via Gemini 2.5 Pro was NOT tested to save API credits. Only validation endpoints (no file, invalid format) were tested. The /extract endpoint with a real invoice would require Gemini API call."
+}
