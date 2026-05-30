@@ -34,6 +34,27 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Feb 21, 2026 (v17) — Importação de Fatura via IA → Stock
+- **Backend `stock_invoice_import.py` (novo módulo)**:
+  - `POST /api/materials/import-invoice/extract` — recebe imagem/PDF da fatura, usa **Gemini 2.5 Pro** via `emergentintegrations` para extrair fornecedor, NIF, número, data e linhas (descrição/qty/unidade/preço/IVA/categoria). Faz match contra `materials_db`:
+    - Match forte (similaridade ≥ 0.85): classifica como `matched_same_cost` ou `matched_cost_changed`.
+    - Match fraco (0.65–0.85): `fuzzy` — admin decide.
+    - Sem match: `new`.
+  - Match prioriza items com `supplier_nif` igual ao da fatura (bónus +10% na similaridade); fallback para mesmo nome de fornecedor.
+  - Devolve preview com summary + lines (cada linha tem `suggested_action`, `existing_material_id`, `price_diff`, `price_diff_pct`).
+  - `POST /api/materials/import-invoice/apply` — recebe decisões do admin, aplica:
+    - `create` → cria material novo com `supplier_nif`, `purchase_price`, `stock_current=qty`, `price_history`, e cria `stock_movement type=entrada`.
+    - `update_stock_only` → soma `quantity` ao `stock_current`, mantém preço.
+    - `update_stock_and_price` → soma stock + atualiza `purchase_price` + entrada em `price_history` com `previous`.
+    - `skip` → ignora.
+    - Popula `supplier`/`supplier_nif` em materiais existentes que não os tinham.
+  - `MaterialInput` ganhou campos `supplier_nif` e `vat_rate` para consistência.
+- **Frontend MateriaisPage**:
+  - Botão "Importar Fatura" (ScanLine icon) ao lado de "Novo Material".
+  - Dialog 3 fases: upload (drag-and-drop + camera mobile) → extracting (spinner) → review (tabela editável).
+  - Review: cabeçalho da fatura, 5 cards de summary (Total/Existem/Preço Mudou/Match Duvidoso/Novos), botões massa (Aceitar todos os preços novos / Manter preços antigos / Ignorar duvidosos), tabela com badge de match + descrição (mostra match), qty, preço fatura vs preço atual com % de variação (vermelho se ↑, verde se ↓), select de acção por linha.
+- **Testado E2E**: 16/16 backend (todos os cenários de action: create/update_stock_only/update_stock_and_price/skip + preservação supplier + zero qty + sem material_id) + frontend 100% + regressão Dashboard/Orçamentos/Propostas/Guias/Materiais.
+
 ### Feb 21, 2026 (v16) — Quantidade Utilizada na Obra + Devolução ao Armazém
 - **Backend `transport_guides.py`**:
   - Novos campos no item da guia: `qty_used` (consumido na obra) e `qty_returned` (já devolvido). Cálculo `sobra = qty_received - qty_used - qty_returned`.

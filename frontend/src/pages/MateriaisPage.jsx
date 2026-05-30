@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 
-const emptyForm = { code: '', description: '', category: '', subcategory: '', brand: '', supplier: '', unit: 'unidade', purchase_price: 0, market_price: 0, waste_pct: 5, stock_current: 0, stock_min: 0, notes: '', active: true };
+const emptyForm = { code: '', description: '', category: '', subcategory: '', brand: '', supplier: '', supplier_nif: '', unit: 'unidade', purchase_price: 0, market_price: 0, waste_pct: 5, stock_current: 0, stock_min: 0, vat_rate: 23, notes: '', active: true };
 
 export default function MateriaisPage() {
   const [materials, setMaterials] = useState([]);

@@ -1583,12 +1583,14 @@ class MaterialInput(BaseModel):
     subcategory: str = ""
     brand: str = ""
     supplier: str = ""
+    supplier_nif: str = ""
     unit: str = "un"
     purchase_price: float = 0
     market_price: float = 0
     waste_pct: float = 5
     stock_current: float = 0
     stock_min: float = 0
+    vat_rate: float = 23
     notes: str = ""
     active: bool = True
 
