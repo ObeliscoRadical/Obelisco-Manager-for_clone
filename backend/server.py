@@ -1265,6 +1265,50 @@ CATEGORIES_CATALOG = [
             {"name": "Hora de trabalho tecnico telecom (urgente/noturno)", "unit": "hora"},
         ]
     },
+    {
+        "id": "trabalhos_burocraticos",
+        "name": "Trabalhos Burocraticos",
+        "items": [
+            # Pedidos junto de distribuidoras
+            {"name": "Pedido de ramal novo (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de aumento de potencia contratada (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de reducao de potencia contratada (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de alteracao de tarifario (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de mudanca de contador para exterior (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de ligacao provisoria de obra (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de contagem trifasica (E-REDES)", "unit": "unidade"},
+            {"name": "Pedido de instalacao de posto de transformacao (PT)", "unit": "unidade"},
+            # ITED / ITUR / Certificacoes
+            {"name": "Emissao de Ficha Tecnica de Instalacao (FTI/ITED2)", "unit": "unidade"},
+            {"name": "Emissao de Termo de Responsabilidade ITED/ITUR", "unit": "unidade"},
+            {"name": "Certificacao de instalacao eletrica (CERTIEL)", "unit": "unidade"},
+            {"name": "Inspecao periodica CERTIEL", "unit": "unidade"},
+            {"name": "Renovacao de certificado energetico (ADENE)", "unit": "unidade"},
+            {"name": "Emissao de certificado energetico novo", "unit": "unidade"},
+            # Projetos e memorias
+            {"name": "Elaboracao de projeto eletrico (RITE)", "unit": "unidade"},
+            {"name": "Memoria descritiva e justificativa", "unit": "unidade"},
+            {"name": "Peca escrita e desenhada para camara municipal", "unit": "unidade"},
+            {"name": "Deposito de projeto na entidade competente", "unit": "unidade"},
+            # Camaras / Licenciamentos
+            {"name": "Pedido de licenca de obra na Camara Municipal", "unit": "unidade"},
+            {"name": "Pedido de ocupacao de via publica", "unit": "unidade"},
+            {"name": "Comunicacao previa de obras", "unit": "unidade"},
+            # Alteracoes de dados de cliente
+            {"name": "Alteracao de titularidade do contrato de fornecimento", "unit": "unidade"},
+            {"name": "Atualizacao de dados fiscais/morada junto do comercializador", "unit": "unidade"},
+            {"name": "Denuncia de contrato/mudanca de comercializador", "unit": "unidade"},
+            # Outros trabalhos administrativos
+            {"name": "Elaboracao de orcamento e apresentacao ao cliente", "unit": "unidade"},
+            {"name": "Reuniao tecnica presencial no local (deslocacao)", "unit": "unidade"},
+            {"name": "Reuniao tecnica online (Teams/Zoom)", "unit": "hora"},
+            {"name": "Acompanhamento de vistoria/fiscalizacao", "unit": "unidade"},
+            {"name": "Preparacao e submissao de documentacao a seguradora", "unit": "unidade"},
+            {"name": "Elaboracao de peritagem/relatorio tecnico", "unit": "unidade"},
+            {"name": "Traducao de documentacao tecnica", "unit": "unidade"},
+            {"name": "Hora de servico administrativo (backoffice)", "unit": "hora"},
+        ]
+    },
 ]
 
 
