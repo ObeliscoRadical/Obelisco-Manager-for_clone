@@ -484,6 +484,274 @@ async def public_sign_proposal(token: str, input: SignatureInput, request: Reque
 
 # --- Works Endpoints ---
 
+@api_router.get("/pipeline")
+async def get_pipeline(user=Depends(get_current_user)):
+    """Consolida ciclo de vida completo por obra: orçamento → proposta → aceite → execução → guias → fatura → pago → concluída."""
+    from datetime import datetime as _dt
+
+    budgets = await db.budgets.find({}, {"_id": 0}).to_list(2000)
+    proposals = await db.proposals.find({}, {"_id": 0}).to_list(5000)
+    works = await db.works.find({}, {"_id": 0}).to_list(2000)
+    guides = await db.transport_guides.find({}, {"_id": 0}).to_list(5000)
+    invoices = await db.invoices.find({}, {"_id": 0}).to_list(5000)
+
+    # Indexes for fast lookup
+    proposals_by_budget = {}
+    for p in proposals:
+        proposals_by_budget.setdefault(p.get("budget_id"), []).append(p)
+
+    guides_by_work = {}
+    for g in guides:
+        wid = g.get("work_id")
+        if wid:
+            guides_by_work.setdefault(wid, []).append(g)
+
+    invoices_by_client = {}
+    for i in invoices:
+        cn = (i.get("client_name") or "").strip().lower()
+        if cn:
+            invoices_by_client.setdefault(cn, []).append(i)
+
+    now = _dt.now(timezone.utc)
+
+    def _pick_best_proposal(bid: str):
+        """Escolhe a proposta mais avançada de um orçamento: signed > accepted > sent > draft."""
+        arr = proposals_by_budget.get(bid, [])
+        if not arr:
+            return None
+        rank = {"signed": 4, "accepted": 3, "aceite": 3, "sent": 2, "enviada": 2, "draft": 1, "rascunho": 1}
+        best = None
+        best_score = -1
+        for p in arr:
+            score = 0
+            if p.get("sign_status") == "signed" or p.get("signed_at"):
+                score = 4
+            else:
+                score = rank.get((p.get("status") or "").lower(), 1)
+            if score > best_score:
+                best = p
+                best_score = score
+        return best
+
+    def _find_invoices_for(work, budget):
+        """Encontra faturas relacionadas com esta obra por cliente + valor aproximado, ou por proposal_id se existir."""
+        cn = (work.get("client_name") or budget.get("client_name") or "").strip().lower()
+        if not cn:
+            return []
+        candidates = invoices_by_client.get(cn, [])
+        return candidates
+
+    pipeline_items = []
+    handled_budget_ids = set()
+
+    # 1) Iterar por obras (têm sempre o ciclo mais completo)
+    for w in works:
+        bid = w.get("budget_id") or ""
+        handled_budget_ids.add(bid)
+        budget = next((b for b in budgets if b.get("id") == bid), None) or {}
+        prop = _pick_best_proposal(bid) if bid else None
+        w_guides = guides_by_work.get(w["id"], [])
+        w_invoices = _find_invoices_for(w, budget)
+
+        # Milestones
+        milestones = _build_milestones(budget, prop, w, w_guides, w_invoices)
+        phase = _determine_phase(milestones, w)
+
+        # Valor total (venda) e valor recebido
+        sale_value = float((budget or {}).get("total_final", 0) or w.get("predicted_cost", 0) or 0)
+        invoiced = sum(float(i.get("value_total", 0) or 0) for i in w_invoices)
+        received = 0.0
+        for i in w_invoices:
+            for p in (i.get("payments") or []):
+                received += float(p.get("amount", 0) or 0)
+        pending = max(0.0, invoiced - received)
+
+        pipeline_items.append({
+            "id": w["id"],
+            "kind": "work",
+            "title": w.get("title") or budget.get("title") or "Obra sem título",
+            "client_name": w.get("client_name") or budget.get("client_name") or "",
+            "phase": phase,
+            "milestones": milestones,
+            "completed_count": sum(1 for m in milestones if m["done"]),
+            "total_count": len(milestones),
+            "sale_value": round(sale_value, 2),
+            "invoiced_value": round(invoiced, 2),
+            "received_value": round(received, 2),
+            "pending_value": round(pending, 2),
+            "budget_id": bid,
+            "proposal_id": (prop or {}).get("id"),
+            "invoices_count": len(w_invoices),
+            "guides_count": len(w_guides),
+            "created_at": w.get("created_at"),
+            "updated_at": w.get("emitted_at") or w.get("created_at"),
+        })
+
+    # 2) Orçamentos sem obra (ainda em fase inicial)
+    for b in budgets:
+        if b.get("id") in handled_budget_ids:
+            continue
+        prop = _pick_best_proposal(b["id"])
+        milestones = _build_milestones(b, prop, None, [], [])
+        phase = _determine_phase(milestones, None)
+        pipeline_items.append({
+            "id": f"budget-{b['id']}",
+            "kind": "budget",
+            "title": b.get("title") or "Orçamento sem título",
+            "client_name": b.get("client_name") or "",
+            "phase": phase,
+            "milestones": milestones,
+            "completed_count": sum(1 for m in milestones if m["done"]),
+            "total_count": len(milestones),
+            "sale_value": round(float(b.get("total_final", 0) or 0), 2),
+            "invoiced_value": 0.0,
+            "received_value": 0.0,
+            "pending_value": 0.0,
+            "budget_id": b["id"],
+            "proposal_id": (prop or {}).get("id"),
+            "invoices_count": 0,
+            "guides_count": 0,
+            "created_at": b.get("created_at"),
+            "updated_at": (prop or {}).get("created_at") or b.get("created_at"),
+        })
+
+    # Agrupar por fase
+    phase_order = ["orcamento", "proposta_enviada", "aceite", "em_execucao", "guias_emitidas", "faturada", "paga", "concluida"]
+    by_phase = {p: [] for p in phase_order}
+    for it in pipeline_items:
+        by_phase.setdefault(it["phase"], []).append(it)
+
+    # Ordenar cada coluna por updated_at desc
+    for phase in by_phase:
+        by_phase[phase].sort(key=lambda x: x.get("updated_at") or "", reverse=True)
+
+    # KPIs
+    total_pending = sum(it["pending_value"] for it in pipeline_items)
+    total_sale = sum(it["sale_value"] for it in pipeline_items)
+    total_received = sum(it["received_value"] for it in pipeline_items)
+
+    # Obras atrasadas: em execução há > 60 dias e sem fatura
+    overdue = 0
+    for it in pipeline_items:
+        if it["phase"] in ("em_execucao", "guias_emitidas"):
+            try:
+                d = _dt.fromisoformat(it["updated_at"].replace("Z", "+00:00")) if it.get("updated_at") else None
+                if d and (now - d).days > 60:
+                    overdue += 1
+            except Exception:
+                pass
+
+    counts_by_phase = {p: len(by_phase.get(p, [])) for p in phase_order}
+
+    return {
+        "phases": phase_order,
+        "items": pipeline_items,
+        "by_phase": by_phase,
+        "kpis": {
+            "total_items": len(pipeline_items),
+            "total_sale_value": round(total_sale, 2),
+            "total_pending_value": round(total_pending, 2),
+            "total_received_value": round(total_received, 2),
+            "overdue_count": overdue,
+            "counts_by_phase": counts_by_phase,
+        },
+    }
+
+
+def _build_milestones(budget, proposal, work, guides, invoices):
+    """Constrói lista de 8 marcos com {key, label, done, at, meta}."""
+    ms = []
+    # 1) Orçamento criado
+    ms.append({
+        "key": "budget_created", "label": "Orçamento criado",
+        "done": bool(budget and budget.get("id")),
+        "at": (budget or {}).get("created_at"),
+        "meta": None,
+    })
+    # 2) Proposta enviada
+    prop_created = proposal and proposal.get("created_at")
+    ms.append({
+        "key": "proposal_sent", "label": "Proposta enviada",
+        "done": bool(prop_created),
+        "at": prop_created,
+        "meta": (proposal or {}).get("label"),
+    })
+    # 3) Assinada/aceite
+    signed = (proposal or {}).get("signed_at") or ((proposal or {}).get("sign_status") == "signed")
+    accepted = (proposal or {}).get("status") in ("accepted", "aceite", "signed")
+    ms.append({
+        "key": "proposal_accepted", "label": "Proposta aceite/assinada",
+        "done": bool(signed or accepted),
+        "at": (proposal or {}).get("signed_at") or (proposal or {}).get("accepted_at"),
+        "meta": "assinada digital" if signed else ("aceite" if accepted else None),
+    })
+    # 4) Obra em execução
+    in_exec = bool(work and work.get("status") in ("em_execucao", "em_execução"))
+    ms.append({
+        "key": "work_in_progress", "label": "Obra em execução",
+        "done": in_exec or bool(work and work.get("start_date")),
+        "at": (work or {}).get("start_date") or (work or {}).get("created_at") if work else None,
+        "meta": None,
+    })
+    # 5) Guias emitidas
+    emitted_guides = [g for g in guides if g.get("status") in ("emitida", "em_transito", "recebida", "recebida_com_diferencas")]
+    ms.append({
+        "key": "guides_emitted", "label": "Guias emitidas",
+        "done": len(emitted_guides) > 0,
+        "at": max((g.get("emitted_at") or "" for g in emitted_guides), default=None) or None,
+        "meta": f"{len(emitted_guides)}/{len(guides)}" if guides else None,
+    })
+    # 6) Fatura emitida
+    ms.append({
+        "key": "invoice_emitted", "label": "Fatura emitida",
+        "done": len(invoices) > 0,
+        "at": min((i.get("issue_date") or "" for i in invoices), default=None) or None,
+        "meta": f"{len(invoices)} fatura(s)" if invoices else None,
+    })
+    # 7) Fatura paga (todas)
+    all_paid = False
+    if invoices:
+        all_paid = all(
+            (float(i.get("value_total", 0) or 0) - sum(float(p.get("amount", 0) or 0) for p in (i.get("payments") or []))) <= 0.01
+            for i in invoices
+        )
+    ms.append({
+        "key": "invoice_paid", "label": "Fatura paga",
+        "done": bool(all_paid and invoices),
+        "at": max((max((p.get("date") or "" for p in (i.get("payments") or [])), default="") for i in invoices), default=None) or None if all_paid else None,
+        "meta": None,
+    })
+    # 8) Obra concluída
+    concluded = bool(work and work.get("status") == "finalizado")
+    ms.append({
+        "key": "work_completed", "label": "Obra concluída",
+        "done": concluded,
+        "at": (work or {}).get("end_date") if concluded else None,
+        "meta": None,
+    })
+    return ms
+
+
+def _determine_phase(milestones, work):
+    """Retorna a fase actual baseada nos marcos concluídos."""
+    done_keys = {m["key"] for m in milestones if m["done"]}
+    if "work_completed" in done_keys or (work and work.get("status") == "finalizado"):
+        return "concluida"
+    if "invoice_paid" in done_keys:
+        return "paga"
+    if "invoice_emitted" in done_keys:
+        return "faturada"
+    if "guides_emitted" in done_keys:
+        return "guias_emitidas"
+    if "work_in_progress" in done_keys:
+        return "em_execucao"
+    if "proposal_accepted" in done_keys:
+        return "aceite"
+    if "proposal_sent" in done_keys:
+        return "proposta_enviada"
+    return "orcamento"
+
+
 @api_router.get("/works")
 async def get_works(user=Depends(get_current_user)):
     works = await db.works.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
