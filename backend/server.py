@@ -2276,6 +2276,211 @@ async def get_alerts(user=Depends(get_current_user)):
 
 # --- Enhanced Dashboard ---
 
+@api_router.get("/dashboard/overview")
+async def get_dashboard_overview(user=Depends(get_current_user)):
+    """Dashboard consolidado (financeiro + comercial + operacional + stock + alertas)."""
+    from datetime import date as _date_cls, timedelta as _td, datetime as _dt
+
+    now = _dt.now(timezone.utc)  # noqa: F841
+    today = _date_cls.today()
+    y = today.year
+    m = today.month
+    month_prefix = f"{y:04d}-{m:02d}"
+
+    # ---- Data
+    budgets = await db.budgets.find({}, {"_id": 0}).to_list(2000)
+    proposals = await db.proposals.find({}, {"_id": 0}).to_list(2000)
+    works = await db.works.find({}, {"_id": 0}).to_list(2000)
+    invoices = await db.invoices.find({}, {"_id": 0}).to_list(5000)
+    expenses = await db.expenses.find({}, {"_id": 0}).to_list(10000)
+    guides = await db.transport_guides.find({}, {"_id": 0}).to_list(5000)
+    materials = await db.materials_db.find({"active": True}, {"_id": 0}).to_list(5000)
+    payroll_runs = await db.payroll_runs.find({"year": y}, {"_id": 0}).to_list(500)
+    fixed_costs = await db.fixed_cost_instances.find({}, {"_id": 0}).to_list(2000) if "fixed_cost_instances" in await db.list_collection_names() else []
+    employee_loans = await db.employee_loans.find({}, {"_id": 0}).to_list(1000) if "employee_loans" in await db.list_collection_names() else []
+
+    # ---- CAIXA DO MÊS
+    month_received = 0.0
+    for inv in invoices:
+        for p in (inv.get("payments") or []):
+            d = (p.get("date") or "")[:7]
+            if d == month_prefix:
+                month_received += float(p.get("amount", 0) or 0)
+
+    month_expenses = 0.0
+    for e in expenses:
+        d = (e.get("date") or "")[:7]
+        if d == month_prefix:
+            month_expenses += float(e.get("value_gross", 0) or 0)
+
+    month_payroll = sum(float(r.get("total_custo_empresa", 0) or 0) for r in payroll_runs if r.get("month") == m)
+
+    month_saldo = month_received - month_expenses - month_payroll
+
+    # ---- A RECEBER
+    pending_amount = 0.0
+    pending_count = 0
+    overdue_amount = 0.0
+    overdue_count = 0
+    today_iso = today.isoformat()
+    for inv in invoices:
+        total = float(inv.get("value_total", 0) or 0)
+        paid = sum(float(p.get("amount", 0) or 0) for p in (inv.get("payments") or []))
+        balance = total - paid
+        if balance > 0.01:
+            pending_amount += balance
+            pending_count += 1
+            due = (inv.get("due_date") or "")[:10]
+            if due and due < today_iso:
+                overdue_amount += balance
+                overdue_count += 1
+
+    # ---- A PAGAR (despesas por pagar + próximos salários mês+1)
+    unpaid_expenses = 0.0
+    unpaid_expenses_count = 0
+    for e in expenses:
+        # heurística: expense com "paid"=false OR sem payment_status  E value_gross > 0 nos últimos 90 dias
+        status = (e.get("payment_status") or "").lower()
+        if status in ("pago", "paid"):
+            continue
+        try:
+            d = _date_cls.fromisoformat((e.get("date") or "")[:10])
+        except Exception:
+            continue
+        if (today - d).days <= 90:
+            unpaid_expenses += float(e.get("value_gross", 0) or 0)
+            unpaid_expenses_count += 1
+
+    # Custos fixos do mês corrente ainda por pagar
+    fixed_costs_pending = 0.0
+    for fc in fixed_costs:
+        d = (fc.get("date") or "")[:7]
+        if d == month_prefix and (fc.get("status") or "").lower() not in ("pago", "paid"):
+            fixed_costs_pending += float(fc.get("amount", 0) or 0)
+
+    to_pay = unpaid_expenses + fixed_costs_pending
+
+    # ---- COMERCIAL: propostas pendentes (enviadas mas não aceites/assinadas)
+    pending_proposals = [p for p in proposals if (p.get("status") or "").lower() in ("sent", "enviada", "draft", "rascunho") and not p.get("signed_at")]
+    pending_proposals_value = sum(float(p.get("final_value", 0) or 0) for p in pending_proposals)
+    # Últimas 5 propostas para mostrar
+    recent_proposals = sorted(proposals, key=lambda p: p.get("created_at") or "", reverse=True)[:5]
+
+    # ---- OPERACIONAL: obras em execução
+    active_works = [w for w in works if (w.get("status") or "").lower() in ("em_execucao", "em_execução")]
+    active_works_value = sum(float(w.get("predicted_cost", 0) or 0) for w in active_works)
+
+    # Obras atrasadas: em execução há > 60 dias sem fatura
+    invoices_by_client = {}
+    for i in invoices:
+        cn = (i.get("client_name") or "").strip().lower()
+        if cn:
+            invoices_by_client.setdefault(cn, []).append(i)
+    late_works = []
+    for w in active_works:
+        cn = (w.get("client_name") or "").strip().lower()
+        has_invoice = bool(invoices_by_client.get(cn))
+        try:
+            d = _date_cls.fromisoformat((w.get("start_date") or w.get("created_at") or "")[:10])
+            days = (today - d).days
+        except Exception:
+            days = 0
+        if not has_invoice and days > 60:
+            late_works.append({"id": w.get("id"), "title": w.get("title"), "days": days, "client": w.get("client_name")})
+
+    # Guias por receber (emitidas mas não recebidas)
+    pending_guides = [g for g in guides if g.get("status") in ("emitida", "em_transito")]
+    pending_guides_summary = [
+        {"id": g.get("id"), "number": g.get("number"), "obra_name": g.get("obra_name"), "assigned_employee_name": g.get("assigned_employee_name")}
+        for g in pending_guides[:5]
+    ]
+
+    # ---- STOCK BAIXO
+    low_stock = []
+    for m_ in materials:
+        cur = float(m_.get("stock_current", 0) or 0)
+        low = float(m_.get("stock_min", 0) or 0)
+        if low > 0 and cur < low:
+            low_stock.append({
+                "id": m_.get("id"),
+                "description": m_.get("description", ""),
+                "stock_current": cur,
+                "stock_min": low,
+                "unit": m_.get("unit", "un"),
+            })
+    low_stock.sort(key=lambda x: (x["stock_current"] - x["stock_min"]))
+    low_stock = low_stock[:10]
+
+    # ---- ALERTAS AGREGADOS
+    alerts = []
+    if overdue_count > 0:
+        alerts.append({"level": "danger", "icon": "invoice", "text": f"{overdue_count} fatura(s) vencida(s) — {overdue_amount:.2f} € por receber."})
+    if len(late_works) > 0:
+        alerts.append({"level": "warning", "icon": "work", "text": f"{len(late_works)} obra(s) em execução há mais de 60 dias sem fatura."})
+    if len(low_stock) > 0:
+        alerts.append({"level": "warning", "icon": "stock", "text": f"{len(low_stock)} material(is) em stock crítico."})
+    if len(pending_guides) > 3:
+        alerts.append({"level": "info", "icon": "truck", "text": f"{len(pending_guides)} guia(s) emitida(s) aguardam confirmação do técnico."})
+
+    # ---- Empréstimos activos
+    active_loans = [ln for ln in employee_loans if (ln.get("status") or "").lower() in ("active", "ativo", "aberto") and float(ln.get("outstanding", ln.get("original_amount", 0)) or 0) > 0]
+    loans_outstanding = sum(float(ln.get("outstanding", ln.get("original_amount", 0)) or 0) for ln in active_loans)
+
+    # ---- Recent activity (últimas 5 movimentações)
+    recent_activity = []
+    for inv in sorted(invoices, key=lambda x: x.get("issue_date") or "", reverse=True)[:3]:
+        recent_activity.append({"type": "invoice", "when": inv.get("issue_date"), "title": f"Fatura {inv.get('number')} · {inv.get('client_name')}", "amount": float(inv.get("value_total", 0) or 0)})
+    for e in sorted(expenses, key=lambda x: x.get("date") or "", reverse=True)[:3]:
+        recent_activity.append({"type": "expense", "when": e.get("date"), "title": f"Despesa · {e.get('supplier')}", "amount": -float(e.get("value_gross", 0) or 0)})
+    for g in sorted(guides, key=lambda x: x.get("created_at") or "", reverse=True)[:3]:
+        recent_activity.append({"type": "guide", "when": (g.get("created_at") or "")[:10], "title": f"Guia {g.get('number')} · {g.get('obra_name') or g.get('destination')}", "amount": None})
+    recent_activity.sort(key=lambda x: x.get("when") or "", reverse=True)
+    recent_activity = recent_activity[:8]
+
+    return {
+        "period": {"year": y, "month": m, "month_label": month_prefix},
+        "highlights": {
+            "cash_month": {
+                "amount": round(month_saldo, 2),
+                "received": round(month_received, 2),
+                "expenses": round(month_expenses, 2),
+                "payroll": round(month_payroll, 2),
+            },
+            "to_receive": {"amount": round(pending_amount, 2), "count": pending_count, "overdue_amount": round(overdue_amount, 2), "overdue_count": overdue_count},
+            "to_pay": {"amount": round(to_pay, 2), "expenses_count": unpaid_expenses_count, "fixed_costs": round(fixed_costs_pending, 2)},
+            "alerts": alerts,
+        },
+        "commercial": {
+            "budgets_count": len(budgets),
+            "proposals_count": len(proposals),
+            "pending_proposals_count": len(pending_proposals),
+            "pending_proposals_value": round(pending_proposals_value, 2),
+            "recent_proposals": [
+                {"id": p.get("id"), "title": p.get("title"), "client_name": p.get("client_name"), "final_value": float(p.get("final_value", 0) or 0), "status": p.get("status"), "signed_at": p.get("signed_at")}
+                for p in recent_proposals
+            ],
+        },
+        "operational": {
+            "works_count": len(works),
+            "active_works_count": len(active_works),
+            "active_works_value": round(active_works_value, 2),
+            "late_works": late_works[:5],
+            "pending_guides_count": len(pending_guides),
+            "pending_guides": pending_guides_summary,
+        },
+        "stock": {
+            "materials_count": len(materials),
+            "low_stock": low_stock,
+            "low_stock_count": len(low_stock),
+        },
+        "hr": {
+            "active_loans_count": len(active_loans),
+            "loans_outstanding": round(loans_outstanding, 2),
+        },
+        "recent_activity": recent_activity,
+    }
+
+
 @api_router.get("/dashboard/financial")
 async def get_financial_dashboard(user=Depends(get_current_user)):
     sys_settings = await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
