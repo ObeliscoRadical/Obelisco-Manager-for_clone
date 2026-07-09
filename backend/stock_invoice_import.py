@@ -98,7 +98,7 @@ async def _ocr_invoice_lines(file_path: Path, mime_type: str) -> dict:
             api_key=api_key,
             session_id=f"stock-invoice-{uuid.uuid4().hex[:8]}",
             system_message=system,
-        ).with_model("gemini", "gemini-2.5-pro")
+        ).with_model("gemini", "gemini-3.1-pro-preview")
 
         attach = FileContentWithMimeType(file_path=str(file_path), mime_type=mime_type)
         response = await chat.send_message(UserMessage(text=prompt, file_contents=[attach]))

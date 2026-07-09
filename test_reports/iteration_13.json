@@ -1,0 +1,46 @@
+{
+  "summary": "Verified OCR endpoints after Gemini model change from 'gemini-2.5-pro' to 'gemini-3.1-pro-preview'. All 3 OCR endpoints (invoices, expenses, stock invoice import) return 200 with successfully extracted data. No 'NotFoundError'/404 from Gemini. Manual invoice creation regression also passes. Backend: 6/6 tests passed (100%).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_ocr_gemini_model.py",
+    "/app/test_reports/pytest/pytest_ocr_gemini.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Docstrings in invoices.py, expenses.py, stock_invoice_import.py still say 'Gemini 2.5 Pro' but code uses 'gemini-3.1-pro-preview'. Cosmetic — update docstrings for consistency.",
+    "invoices.py extract_from_upload returns 200 with {'extracted': {'error': ...}} on Gemini failure (silent success). Consider returning 500 for consistency with stock_invoice_import.py which raises HTTPException(500)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ocr_gemini_model.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed)",
+    "frontend": "not tested (backend-only request)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "1 test invoice (TEST_Regression Client) created and cleaned up during regression test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Gemini model 'gemini-3.1-pro-preview' is confirmed working via LiteLLM through EMERGENT_LLM_KEY for image OCR (PNG). Tested endpoints: POST /api/invoices/extract, POST /api/expenses/extract, POST /api/materials/import-invoice/extract — all return 200 with extracted data (no error key). Backend logs show 'LiteLLM completion() model= gemini/gemini-3.1-pro-preview; provider = openai' successfully. Test image generated with PIL (typed text). Regression: POST /api/invoices manual creation still works.",
+  "api_endpoints_tested": [
+    "POST /api/auth/login",
+    "POST /api/invoices/extract (with PNG invoice image) — 200 with extracted fields",
+    "POST /api/invoices/extract (with .txt) — 400 invalid format",
+    "POST /api/expenses/extract (with PNG expense image) — 200 with extracted fields",
+    "POST /api/materials/import-invoice/extract (with PNG stock invoice image) — 200 with lines",
+    "POST /api/invoices (manual create) — 201, verified via GET /api/invoices",
+    "DELETE /api/invoices/{id} (cleanup)"
+  ],
+  "rca of the issue": "Root cause: The model 'models/gemini-2.5-pro' was deprecated/removed on Google's side, causing litellm.NotFoundError 404 when LiteLLM called the Gemini API. Main agent updated three files (invoices.py:64, expenses.py:117, stock_invoice_import.py:101) to 'gemini-3.1-pro-preview'. Verification: All three OCR endpoints now return 200 with extracted data; backend logs confirm 'LiteLLM completion() model= gemini/gemini-3.1-pro-preview' succeeds with no NotFoundError. Fix is confirmed working."
+}
