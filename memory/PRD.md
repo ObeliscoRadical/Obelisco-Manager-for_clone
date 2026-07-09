@@ -34,6 +34,17 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 09, 2026 (v18) — Fix: Gemini OCR Model Deprecated
+- **Bug**: Upload de fatura em `Faturas` falhava com erro `GeminiException 404 - This model models/gemini-2.5-pro is no longer available`. Também afetava Despesas e Stock Import (mesmo modelo).
+- **Root cause**: Google/LiteLLM descontinuou `gemini-2.5-pro`.
+- **Fix**: Atualizado o nome do modelo para `gemini-3.1-pro-preview` em 3 ficheiros:
+  - `/app/backend/invoices.py` (linha 64) — OCR de faturas emitidas.
+  - `/app/backend/expenses.py` (linha 117) — OCR de despesas.
+  - `/app/backend/stock_invoice_import.py` (linha 101) — OCR de faturas de stock.
+- **Testing**: `testing_agent_v3_fork` — 6/6 backend tests passed. Endpoints `/api/invoices/extract`, `/api/expenses/extract`, `/api/materials/import-invoice/extract` todos retornam 200 com dados extraídos. Regressão de criação manual de fatura também OK. Report: `/app/test_reports/iteration_13.json`.
+
+
+
 ### Feb 21, 2026 (v17) — Importação de Fatura via IA → Stock
 - **Backend `stock_invoice_import.py` (novo módulo)**:
   - `POST /api/materials/import-invoice/extract` — recebe imagem/PDF da fatura, usa **Gemini 2.5 Pro** via `emergentintegrations` para extrair fornecedor, NIF, número, data e linhas (descrição/qty/unidade/preço/IVA/categoria). Faz match contra `materials_db`:
