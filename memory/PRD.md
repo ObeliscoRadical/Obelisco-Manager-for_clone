@@ -34,6 +34,22 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 21, 2026 (v21) — Bug Fix: IRS aplicado incorretamente a trabalhador @ RMMG
+- **Bug reportado**: "na area de contabilista esta considerando irs para um trabalhador que ganha ordenado minimo e ate onde sei isso e proibido em portugal" — o simulador cobrava IRS a quem ganha o Salário Mínimo Nacional, violando o Art.º 70 CIRS (Mínimo de Existência).
+- **Root cause**: `MINIMO_EXISTENCIA` estava com valor de 2025 (12 180€ = 870€×14). Faltava também salvaguarda para garantir que o líquido nunca fica abaixo do mínimo.
+- **Fix aplicado** em `/app/frontend/src/lib/ptTax.js`:
+  - Nova constante `RMMG_2026 = 920` (Decreto-Lei 139/2025).
+  - `MINIMO_EXISTENCIA = RMMG_2026 × 14 = 12 880€`.
+  - `calcIRSAnual`: (a) retorna 0 quando rendimento anual ≤ mínimo existência; (b) salvaguarda Art.º 70 para casos-limite (líquido nunca abaixo do mínimo).
+- **UI melhorada** em `/app/frontend/src/pages/ContabilistaPage.jsx`:
+  - Badge verde `data-testid="badge-isento-irs"` — mostrada quando o trabalhador está isento (com referência ao Art.º 70 CIRS).
+  - Warning vermelho `data-testid="warning-abaixo-rmmg"` — quando utilizador insere bruto < 920€ (ilegal em Portugal).
+  - Badge de paridade também na Tab Bruto↔Líquido (`data-testid="lb-badge-isento"`).
+- **System prompt Chat IA** actualizado em `/app/backend/contabilista.py` com RMMG 920€ e Mínimo de Existência 12 880€ para respostas coerentes.
+- **Testing (`testing_agent_v3_fork`)**: 7/7 cenários passaram — bruto 920€ → IRS 0€ e badge visível; bruto 900€ → warning ilegal; bruto 950€ → IRS 420€; chat responde corretamente citando Art.º 70 CIRS. Report `/app/test_reports/iteration_16.json`.
+
+
+
 ### Jul 21, 2026 (v20) — Contabilista IA (Ano Fiscal PT 2026)
 - **Nova página** `/contabilista` (menu Sidebar "Contabilista IA") — 5 tabs com todos os cálculos que um contabilista faz + chat IA especializado.
 - **Backend novo**: `/app/backend/contabilista.py`

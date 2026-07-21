@@ -218,6 +218,14 @@ function LiquidoBruto() {
       <Card className="bg-zinc-900 border-zinc-800">
         <CardHeader><CardTitle className="text-base text-white">Resultado</CardTitle></CardHeader>
         <CardContent>
+          {res.irsAnual === 0 && res.brutoAnual > 0 && res.brutoAnual <= MINIMO_EXISTENCIA && (
+            <div className="mb-3 p-2 rounded bg-emerald-950/40 border border-emerald-800 flex items-start gap-2" data-testid="lb-badge-isento">
+              <Sparkles className="h-3.5 w-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-emerald-200">
+                <strong>ISENTO de IRS</strong> — Art.º 70 CIRS (Mínimo de Existência). Rendimento anual ≤ {fmt(MINIMO_EXISTENCIA)}.
+              </p>
+            </div>
+          )}
           <Row label="Bruto mensal" value={fmt(res.brutoMensal)} highlight={mode === 'liq2bruto'} />
           <Row label="Bruto anual (× 14)" value={fmt(res.brutoAnual)} />
           <Row label="TSU Trabalhador (11%)" value={fmt(res.tsuTrabalhadorAnual)} danger />
