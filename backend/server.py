@@ -3785,6 +3785,10 @@ app.include_router(create_transport_guides_router(db, get_current_user))
 from stock_invoice_import import create_stock_import_router
 app.include_router(create_stock_import_router(db, get_current_user))
 
+# Break-even / Faturamento Ideal
+from breakeven import create_breakeven_router
+app.include_router(create_breakeven_router(db, get_current_user))
+
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
     "https://tech-app-obelisco.emergent.host",

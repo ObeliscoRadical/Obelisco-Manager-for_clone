@@ -1,0 +1,45 @@
+{
+  "summary": "Tested new Ponto de Equilíbrio (Break-Even / Ideal Revenue) feature end-to-end. Backend: 6/6 pytest passed — GET /api/finance/breakeven/prefill requires Bearer auth, returns 200 with all required fields (fixed_costs_monthly=800, payroll_monthly_avg=3960, variable_expenses_monthly_avg=2971.2, current_month_revenue, working_days_month=23, working_days_elapsed=15, reference_months list of 3). Frontend: all data-testids present, KPIs calculate correctly (breakeven 11 894 €, meta 17 180 €), all tabs (var-percent/fixed/both, profit-percent/value), tax switches, per-period cards, progress bar, checklist accordion (5 categories) and sidebar 'Ponto Equilíbrio' menu item work. OCR regression endpoint still exists (no 404).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_breakeven.py",
+    "/app/test_reports/pytest/pytest_breakeven.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "breakeven.py:66,72 hardcodes TSU patronal factor 1.2375. If Portuguese social-security rate changes, single-source-of-truth would prevent drift; consider extracting to a constant or env var.",
+    "PontoEquilibrioPage.jsx uses new Intl.NumberFormat with maximumFractionDigits:0 for KPIs — losing cents may be intentional (dashboard style), fine.",
+    "breakeven.py:82 filters expenses via {'type': {'$in': ['variavel','obra']}}; confirm that all real expense docs use those exact type strings (case-sensitive) — otherwise averages under-count.",
+    "Reference months returned by prefill are the three calendar months preceding system now(); in this test env clock is set to July 2026 so results reference 2026-04/05/06. This is correct code behavior but be aware for demos.",
+    "prefill endpoint has no caching; each request iterates 3× find on 4 collections. Acceptable at admin volume, but consider adding a 60 s in-memory cache if the page is refreshed often."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_breakeven.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed)",
+    "frontend": "100% (all data-testids present, KPIs, tabs, switches, accordion, sidebar all working)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024"
+  },
+  "seed_data_creation": "None — used existing DB data (fixed_cost_instances, payroll_runs, employees, expenses, invoices).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Ponto de Equilíbrio feature is fully working. Backend endpoint: GET /api/finance/breakeven/prefill (requires Bearer). Frontend page: /ponto-equilibrio with data-testid='ponto-equilibrio-page'. Live sample values: fixed_costs=800, payroll=3960, var_expenses=2971.2, working_days=23, elapsed=15. Reusable pytest at /app/backend/tests/test_breakeven.py.",
+  "api_endpoints_tested": [
+    "POST /api/auth/login — 200",
+    "GET /api/finance/breakeven/prefill (no auth) — 401",
+    "GET /api/finance/breakeven/prefill (Bearer) — 200 with all expected fields",
+    "POST /api/invoices/extract (no file) — 422 (endpoint exists, not 404)"
+  ]
+}
