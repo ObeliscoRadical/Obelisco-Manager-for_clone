@@ -36,6 +36,9 @@ export const SUB_ALIM_DIAS_MES = 22;
 // Medicina do Trabalho — custo anual médio
 export const MEDICINA_TRABALHO_ANO = 120;
 
+// Retribuição Mínima Mensal Garantida (RMMG) 2026 — Decreto-Lei 139/2025
+export const RMMG_2026 = 920;
+
 // ============================================================
 // IRS 2026 — Escalões anuais (Continente)
 // Fonte: OE 2026 (valores aproximados)
@@ -52,8 +55,9 @@ export const IRS_ESCALOES_2026 = [
   { limit: Infinity, rate: 0.48, abater: 10540.16 },
 ];
 
-// Mínimo de existência 2026 (anual)
-export const MINIMO_EXISTENCIA = 12180;
+// Mínimo de existência 2026 — Art.º 70 CIRS
+// Garante que o rendimento líquido anual não fica abaixo da RMMG × 14
+export const MINIMO_EXISTENCIA = RMMG_2026 * 14; // 12 880€
 
 // ============================================================
 // FUNÇÕES
@@ -61,9 +65,11 @@ export const MINIMO_EXISTENCIA = 12180;
 
 /**
  * Calcula IRS anual a pagar dado o rendimento anual bruto de trabalho dependente.
- * Aplica escalões progressivos.
+ * Aplica Art.º 70 CIRS (Mínimo de Existência) + escalões progressivos.
+ * Trabalhadores à RMMG (920€/mês em 2026) ficam ISENTOS de IRS.
  */
 export function calcIRSAnual(rendimentoAnual, dependentes = 0) {
+  // Art.º 70 CIRS: isenção total até ao mínimo de existência (RMMG × 14)
   if (rendimentoAnual <= MINIMO_EXISTENCIA) return 0;
 
   let imposto = 0;
@@ -76,7 +82,15 @@ export function calcIRSAnual(rendimentoAnual, dependentes = 0) {
 
   // Dedução por dependente (aprox. 600 € cada em 2026)
   imposto -= dependentes * 600;
-  return Math.max(0, imposto);
+  imposto = Math.max(0, imposto);
+
+  // Salvaguarda Art.º 70: líquido nunca abaixo do mínimo de existência
+  const liquidoAposIRS = rendimentoAnual - imposto;
+  if (liquidoAposIRS < MINIMO_EXISTENCIA) {
+    imposto = Math.max(0, rendimentoAnual - MINIMO_EXISTENCIA);
+  }
+
+  return imposto;
 }
 
 /**

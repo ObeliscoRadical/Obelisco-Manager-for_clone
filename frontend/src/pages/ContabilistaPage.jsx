@@ -11,7 +11,7 @@ import { BrainCircuit, UserPlus, ArrowLeftRight, Users, TrendingUp, Scale, Build
 import { toast } from 'sonner';
 import {
   simulaContratacao, brutoParaLiquido, liquidoParaBruto, clteVsIndependente,
-  calcIRC, calcIndemnizacao, calcAumento,
+  calcIRC, calcIndemnizacao, calcAumento, RMMG_2026, MINIMO_EXISTENCIA,
 } from '../lib/ptTax';
 
 const fmt = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(Math.round(v || 0));
@@ -49,6 +49,9 @@ function SimuladorContratacao() {
     seguroATPct: (Number(seguroAT) || 0) / 100,
   }), [bruto, subAlim, subAlimCartao, premios, seguroAT]);
 
+  const isentoIRS = sim.irsAnual === 0 && Number(bruto) > 0;
+  const abaixoRMMG = Number(bruto) > 0 && Number(bruto) < RMMG_2026;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
       {/* Inputs */}
@@ -85,6 +88,22 @@ function SimuladorContratacao() {
 
       {/* Resultado principal */}
       <div className="lg:col-span-3 space-y-4">
+        {abaixoRMMG && (
+          <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 flex items-start gap-2" data-testid="warning-abaixo-rmmg">
+            <Info className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-red-200">
+              <strong>Atenção:</strong> {fmt(bruto)} está <strong>abaixo do Salário Mínimo Nacional 2026</strong> ({fmt(RMMG_2026)}). É ilegal pagar menos que a RMMG (Decreto-Lei 139/2025).
+            </p>
+          </div>
+        )}
+        {isentoIRS && !abaixoRMMG && (
+          <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800 flex items-start gap-2" data-testid="badge-isento-irs">
+            <Sparkles className="h-4 w-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-emerald-200">
+              <strong>ISENTO de IRS</strong> — este trabalhador está protegido pelo <strong>Art.º 70 CIRS (Mínimo de Existência)</strong>. O rendimento anual ({fmt(sim.salarioAnualBase + sim.subsidios + sim.premios)}) fica abaixo/no limite de {fmt(MINIMO_EXISTENCIA)} (RMMG × 14).
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Card className="bg-gradient-to-br from-zinc-900 to-zinc-900 border-zinc-700">
             <CardContent className="pt-6">

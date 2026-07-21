@@ -1,0 +1,36 @@
+{
+  "summary": "Frontend regression test of RMMG/IRS bug fix in Contabilista IA (/contabilista). All 7 scenarios PASSED. Art.º 70 CIRS logic correctly applied: workers at Portuguese minimum wage (RMMG 920€/2026) are now exempt from IRS. Badges + warnings render correctly. Chat IA integration also confirms new legal logic.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results_detail": {
+    "TEST1_bruto_920": "PASS — IRS anual (retido) = 0,00 € ; badge-isento-irs VISIBLE with 'Art.º 70 CIRS' text ; warning-abaixo-rmmg hidden ; hire-liquido = 951 € (matches expected ~951€).",
+    "TEST2_bruto_900": "PASS — warning-abaixo-rmmg VISIBLE with 'Salário Mínimo Nacional 2026' and '920' ; badge-isento-irs hidden (correctly suppressed while warning shown).",
+    "TEST3_bruto_950": "PASS — badge-isento-irs hidden ; warning-abaixo-rmmg hidden ; IRS anual = 420,00 € (matches expected 420€ from calcIRSAnual(950*14)).",
+    "TEST4_tab2_bruto2liq_920": "PASS — IRS anual row = '0 €' when lb-valor=920 (bruto→líquido mode).",
+    "TEST4b_tab2_bruto2liq_2000": "PASS — IRS anual = 5 930 € (non-zero, reasonable) when lb-valor=2000.",
+    "TEST5_other_tabs_sanity": "PASS — tab-cltrv, tab-extras, tab-chat, tab-contratacao all switch correctly.",
+    "TEST6_chat_rmmg_question": "PASS — chat response returned 200 and explicitly mentions '920€', 'Vencimento Anual: 12 880€', 'Art.º 70.º do CIRS', and states worker at RMMG is 'isento de retenção na fonte e do pagamento de IRS' — perfect alignment with new SYSTEM_PROMPT and Portuguese law."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ptTax.js RMMG_2026=920 and MINIMO_EXISTENCIA=920*14=12880 — matches Decreto-Lei 139/2025.",
+    "calcIRSAnual correctly returns 0 when rendimentoAnual <= MINIMO_EXISTENCIA (Art.º 70 CIRS full exemption), plus safeguard that líquido never falls below the minimum existence — mathematically sound.",
+    "ContabilistaPage.jsx SimuladorContratacao uses `sim.irsAnual === 0 && Number(bruto) > 0` for isentoIRS — this could also fire when calcIRSAnual returns 0 for very low income WITHOUT law reason. Since the exemption applies for ALL incomes ≤ MINIMO_EXISTENCIA that is legally correct here, but the badge text is only strictly true when Art.º 70 applies. Consider using explicit check `sim.salarioAnualBase + sim.subsidios + sim.premios <= MINIMO_EXISTENCIA` to future-proof. Non-blocking.",
+    "Tab 2 (LiquidoBruto) does NOT display any 'ISENTO/Art.º 70' badge when brutoAnual ≤ MINIMO_EXISTENCIA — for consistency with Tab 1, a similar badge would improve UX (users may not understand why IRS shows 0€). Non-blocking, but recommended for parity.",
+    "Warning threshold uses strict less-than (`Number(bruto) < RMMG_2026`) — 920 is not flagged (correct: 920 IS the RMMG). 919.99 would be flagged. OK.",
+    "hire-bruto Input type=number allows arbitrary values without max/step attributes — user can enter 0 or negative. Minor UX; validation on submit not needed since it's a simulator, but consider min='0'."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend only)", "frontend": "100% (7/7 scenarios)" },
+  "test_credentials": { "admin_email": "admin@obelisco.pt", "admin_password": "obelisco2024" },
+  "seed_data_creation": "None — pure client-side calc + one chat call.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Contabilista IA RMMG 2026 (920€) + Art.º 70 CIRS exemption is fully wired. Data-testids: hire-bruto, hire-liquido, badge-isento-irs, warning-abaixo-rmmg, lb-valor, tab-contratacao/liquidobruto/cltrv/extras/chat, chat-input, chat-send. Backend chat prompt updated with the correct legal reference and returns coherent responses.",
+  "rca of the issue": "Original bug: prior MINIMO_EXISTENCIA = 12 180€ (based on 2025 RMMG 870€), and calcIRSAnual immediately applied progressive brackets on all incomes. When bruto=920 → brutoAnual = 12 880€, that exceeded the outdated threshold and produced ~1500€ IRS — violating Art.º 70 CIRS. Fix: bumped RMMG_2026 to 920€ (DL 139/2025), MINIMO_EXISTENCIA to 920×14=12 880€, added early-return exemption + líquido-floor safeguard. Verified in UI: bruto=920 now yields IRS=0 and líquido ≈ 951€."
+}
