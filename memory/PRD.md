@@ -34,6 +34,18 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 21, 2026 (v19) — Ponto de Equilíbrio & Faturamento Ideal
+- **Nova página** `/ponto-equilibrio` (menu Sidebar "Ponto Equilíbrio"): calculadora que responde a "quanto tenho de faturar para ter lucro?".
+- **Backend novo**: `/app/backend/breakeven.py` — `GET /api/finance/breakeven/prefill`
+  - Retorna médias mensais dos últimos 3 meses: `fixed_costs_monthly` (de `fixed_cost_instances`), `payroll_monthly_avg` (de `payroll_runs` × 1.2375 TSU patronal), `variable_expenses_monthly_avg` (de `expenses` tipo variavel/obra), faturação do mês corrente (de `invoices`), `working_days_month` (dias úteis seg-sex) e `working_days_elapsed`.
+- **Frontend novo**: `/app/frontend/src/pages/PontoEquilibrioPage.jsx`
+  - **Inputs (esquerda)**: Custos Fixos, Salários (auto ×1.2375 TSU), Despesas variáveis, Outros. Modo de custos variáveis por obra: `% s/vendas` | `€ fixo/mês` | `Ambos`. Objectivo de lucro em `%` ou `€`. Switches para incluir IVA (23%) e IRC (21%).
+  - **Resultados (direita)**: KPI **Ponto de Equilíbrio** + KPI **Meta com Lucro**; barra de progresso do mês corrente vs meta (com ritmo esperado); repartição semanal / diária / horária; impacto fiscal (IVA a entregar, IRC devido, lucro líquido); accordion com checklist de **custos típicos de PME em Lisboa** (5 categorias, 30+ itens com ranges reais: Instalações, Comunicações, Fiscal, Frota, Operacional).
+  - Cálculo 100% client-side reactivo. Fórmula: `BE = F/(1−v%)`; `Meta = (F+Lucro)/(1−v%)` ou `F/(1−v%−lucro%)`.
+- **Testing (`testing_agent_v3_fork`)**: 6/6 backend + 100% frontend. Report: `/app/test_reports/iteration_14.json`. Zero issues.
+
+
+
 ### Jul 09, 2026 (v18) — Fix: Gemini OCR Model Deprecated
 - **Bug**: Upload de fatura em `Faturas` falhava com erro `GeminiException 404 - This model models/gemini-2.5-pro is no longer available`. Também afetava Despesas e Stock Import (mesmo modelo).
 - **Root cause**: Google/LiteLLM descontinuou `gemini-2.5-pro`.
