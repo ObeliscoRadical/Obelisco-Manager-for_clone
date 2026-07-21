@@ -29,6 +29,7 @@ import RelatoriosPage from "./pages/RelatoriosPage";
 import GuiasPage from "./pages/GuiasPage";
 import PipelinePage from "./pages/PipelinePage";
 import PontoEquilibrioPage from "./pages/PontoEquilibrioPage";
+import ContabilistaPage from "./pages/ContabilistaPage";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -96,6 +97,7 @@ function App() {
           <Route path="/guias" element={<ProtectedRoute><GuiasPage /></ProtectedRoute>} />
           <Route path="/pipeline" element={<ProtectedRoute><PipelinePage /></ProtectedRoute>} />
           <Route path="/ponto-equilibrio" element={<ProtectedRoute><PontoEquilibrioPage /></ProtectedRoute>} />
+          <Route path="/contabilista" element={<ProtectedRoute><ContabilistaPage /></ProtectedRoute>} />
           <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

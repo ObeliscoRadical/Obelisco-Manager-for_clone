@@ -34,6 +34,23 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 21, 2026 (v20) — Contabilista IA (Ano Fiscal PT 2026)
+- **Nova página** `/contabilista` (menu Sidebar "Contabilista IA") — 5 tabs com todos os cálculos que um contabilista faz + chat IA especializado.
+- **Backend novo**: `/app/backend/contabilista.py`
+  - `POST /api/contabilista/chat` — Gemini 3.1-pro-preview via `emergentintegrations`, system prompt especializado em fiscalidade PT 2026 (IRC, IRS, IVA, TSU, Código do Trabalho); persiste histórico em `contabilista_chats`.
+  - `GET /api/contabilista/history/{session_id}` — recupera histórico.
+- **Frontend**: `/app/frontend/src/pages/ContabilistaPage.jsx` + lib `/app/frontend/src/lib/ptTax.js` (todas as fórmulas fiscais PT 2026).
+  - **Tab 1 — Simulador de Contratação**: input bruto → output custo real empresa (TSU patronal 23.75% + Seguro AT 1.75% + FCT+FGCT 1% + Sub Natal + Sub Férias + Sub Alim + Medicina); mostra pirâmide Líquido / Bruto / Custo Empresa e custo por hora efectiva.
+  - **Tab 2 — Bruto ↔ Líquido**: conversor bidirecional com IRS 2026 escalões (13% a 48%) + TSU 11% + suporte a dependentes.
+  - **Tab 3 — CLT vs Recibo Verde**: para o mesmo custo empresa, calcula quanto o trabalhador recebe líquido em cada regime (com IRS retido 25%, TSU indep. 21.4%, regime simplificado 75%).
+  - **Tab 4 — Extras**: IRC (17%/21% + Derrama Lisboa 1.5%), Simulador de Aumento (custo/€ líquido), Indemnização (Art.º 366 CT — 14 dias/ano, teto 12 salários).
+  - **Tab 5 — Chat IA**: chat com sugestões pré-definidas, streaming visual (loading dots), respostas em PT com citação de artigos legais.
+- **Testing (`testing_agent_v3_fork`)**: 3/3 backend + 100% frontend (5 tabs) + regressão Ponto de Equilíbrio OK. Report `/app/test_reports/iteration_15.json`. Zero issues P0/P1.
+- **Novo teste pytest** criado: `/app/backend/tests/test_contabilista.py` (auth 403, chat, history).
+- **Nova collection Mongo**: `contabilista_chats` (session_id, user_id, message, response, created_at).
+
+
+
 ### Jul 21, 2026 (v19) — Ponto de Equilíbrio & Faturamento Ideal
 - **Nova página** `/ponto-equilibrio` (menu Sidebar "Ponto Equilíbrio"): calculadora que responde a "quanto tenho de faturar para ter lucro?".
 - **Backend novo**: `/app/backend/breakeven.py` — `GET /api/finance/breakeven/prefill`
