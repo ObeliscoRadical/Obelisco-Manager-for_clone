@@ -10,10 +10,16 @@ export function AuthProvider({ children }) {
   const checkAuth = useCallback(async () => {
     try {
       const { data } = await api.get('/auth/me');
-      setUser(data);
+      setUser({ ...data, __kind: 'admin' });
     } catch (err) {
-      console.error('Auth check failed:', err?.response?.status || err.message);
-      setUser(false);
+      // Se falhou admin, tenta tech (funcionários da equipa)
+      try {
+        const { data } = await api.get('/tech/auth/me');
+        setUser({ ...data, __kind: 'tech' });
+      } catch (err2) {
+        console.debug('Auth check failed:', err?.response?.status || err.message);
+        setUser(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -24,24 +30,46 @@ export function AuthProvider({ children }) {
   }, [checkAuth]);
 
   const login = useCallback(async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
-    // Save tokens for header-based auth (works in iframes where cookies are blocked)
-    if (data.access_token || data.refresh_token) {
-      tokenStore.set(data.access_token, data.refresh_token);
+    // 1) Tentar admin primeiro
+    try {
+      const { data } = await api.post('/auth/login', { email, password });
+      if (data.access_token || data.refresh_token) {
+        tokenStore.set(data.access_token, data.refresh_token);
+      }
+      const u = { ...data, __kind: 'admin' };
+      setUser(u);
+      return u;
+    } catch (adminErr) {
+      const status = adminErr?.response?.status;
+      // Se credenciais inválidas, tenta como técnico
+      if (status === 401 || status === 404 || status === 400) {
+        try {
+          const { data } = await api.post('/tech/auth/login', { email, password });
+          if (data.access_token) tokenStore.set(data.access_token, null);
+          const u = { ...(data.employee || {}), __kind: 'tech' };
+          setUser(u);
+          return u;
+        } catch (techErr) {
+          // Se ambos falham, lança o erro do admin (mais informativo geralmente)
+          throw techErr?.response?.status === 401 ? techErr : adminErr;
+        }
+      }
+      throw adminErr;
     }
-    setUser(data);
-    return data;
   }, []);
 
   const logout = useCallback(async () => {
     try {
-      await api.post('/auth/logout');
+      // Só chama logout admin se for admin — tech não tem endpoint logout
+      if (user && user.__kind !== 'tech') {
+        await api.post('/auth/logout');
+      }
     } catch (err) {
       console.error('Logout error:', err.message);
     }
     tokenStore.clear();
     setUser(false);
-  }, []);
+  }, [user]);
 
   const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
 

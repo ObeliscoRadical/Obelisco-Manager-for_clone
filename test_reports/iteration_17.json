@@ -1,0 +1,86 @@
+{
+  "summary": "Testing of tech-app-obelisco integration inside proposal hub. Backend auth + isolation (14 pytest cases) 100% PASS. Frontend admin login, admin regression, admin isolation from /tech, tech LOGIN, tech dashboard, filters, guide detail, receive dialog, back button and logout: PASS. However TWO CRITICAL frontend bugs found: (1) On page reload while logged as tech, session is destroyed and user is kicked to /login. (2) Consequently, when a logged-in tech user opens an admin URL (/, /despesas, /orcamentos) by direct navigation, they are redirected to /login instead of /tech. Root cause is the axios response interceptor in /app/frontend/src/lib/api.js: AuthContext.checkAuth() calls GET /auth/me (which 401s for a tech JWT). The interceptor then attempts /auth/refresh, fails, and calls tokenStore.clear() + forces window.location.href='/login' — wiping the tech's still-valid access_token before AuthContext can fall back to GET /tech/auth/me.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Tech session persistence on reload / direct URL navigation",
+        "issue": "AuthContext.checkAuth() -> GET /auth/me returns 401 for tech users. api.js response interceptor tries /auth/refresh, fails, then tokenStore.clear() wipes the tech token and force-redirects to /login. Tech user cannot reload the page and cannot be safely redirected from admin URLs to /tech — they end up on /login instead.",
+        "affected_selectors": ["localStorage.obelisco_access_token", "AuthContext.checkAuth"],
+        "priority": "CRITICAL"
+      },
+      {
+        "flow": "Tech isolation from admin URLs (/despesas, /orcamentos, /)",
+        "issue": "Direct navigation while logged in as tech dumps user on /login rather than redirecting to /tech (caused by the same interceptor bug above). SPA navigation (Link clicks) is untested for isolation since tech portal has no admin links, but any hard reload / new tab / manually typed URL breaks the session.",
+        "affected_selectors": [],
+        "priority": "CRITICAL"
+      }
+    ],
+    "design_issues": []
+  },
+  "test_results_detail": {
+    "wrong_creds_error": "PASS — data-testid='login-error' shows 'Credenciais inválidas'.",
+    "admin_login_to_dashboard": "PASS — lands on '/' with data-testid='dashboard-page'. NOTE: request expected data-testid='dashboard-admin' but the code uses 'dashboard-page' — acceptable per request wording ('or the existing admin dashboard').",
+    "admin_blocked_from_tech": "PASS — GET /tech as admin redirects to /.",
+    "admin_regression_/despesas_/orcamentos_/contabilista_/ponto-equilibrio": "PASS — all four routes render for admin, no unwanted redirects.",
+    "tech_login_to_tech": "PASS — d.oliveira1986@gmail.com/A24d22r04 lands on /tech with header 'Portal Técnico' and NO admin sidebar (no anchor to /orcamentos in DOM).",
+    "tech_isolation_via_direct_navigation": "FAIL — visiting /, /despesas, /orcamentos as tech redirects to /login (should be /tech). RCA: interceptor bug.",
+    "tech_reload_persists": "FAIL — reload on /tech clears token and lands on /login. RCA: interceptor bug.",
+    "tech_dashboard_filters": "PASS — 3 filter tabs (todas/pendentes/recebidas), guide card GT 2026/0007 shows for Daniel, counts visible.",
+    "tech_guide_detail": "PASS — /tech/guias/{id} loads with tech-guide-detail, status badge 'Emitida', 8 tech-item-* rows, columns 'Planeado / Recebido / Sobra' visible.",
+    "tech_open_receive_dialog": "PASS — tech-open-receive-btn visible on 'emitida' guide, dialog opens with 8 tech-receive-qty-* and 8 tech-receive-damaged-* inputs, tech-signed-by input, tech-receive-notes, tech-confirm-receive-btn present. NOT submitted (as instructed).",
+    "tech_back_btn": "PASS — tech-back-btn returns to /tech.",
+    "tech_logout": "PASS — tech-logout-btn clears token and lands on /login.",
+    "backend_pytest_14_cases": "PASS — /api/auth/login (admin), /api/auth/me, /api/tech/auth/login, /api/tech/auth/me, cross-token isolation (admin token cannot call /tech/auth/me; tech token cannot call /auth/me nor /api/transport-guides), tech guide list & detail, missing-token 401 — all 14 tests green."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tech_portal_auth.py",
+    "/app/test_reports/pytest/tech_portal_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Fix the auth interceptor / session bootstrap so tech users survive page reload and direct URL navigation. Recommended options (main agent's choice): (a) In /app/frontend/src/lib/api.js, extend isAuthEndpoint to also cover '/auth/me' and '/tech/auth/me' so those 401s DO NOT trigger the refresh-clear-redirect path; (b) OR make AuthContext.checkAuth() use a bare axios call (no interceptors) for the /auth/me probe; (c) OR persist user.__kind in localStorage and call the matching endpoint first ( /tech/auth/me for tech ) so /auth/me is never hit for tech users.",
+    "OPTIONAL: Add a persistent-cookie/localStorage flag so tech users don't lose session even on Safari (the current implementation depends entirely on localStorage). Cookies were considered but tech endpoint returns Bearer-only tokens.",
+    "OPTIONAL: Add data-testid='dashboard-admin' to DashboardPage top wrapper for parity with request naming (currently 'dashboard-page' works, but the request explicitly named 'dashboard-admin')."
+  ],
+  "critical_code_review_comments": [
+    "api.js interceptor is dangerous for any non-admin session — any endpoint that legitimately returns 401 (like /auth/me for a tech token) will silently destroy the user's access_token. It should either be scoped to admin-only endpoints or exempt /auth/me from the refresh flow.",
+    "AuthContext.checkAuth relies on API-error semantics to distinguish admin from tech — this is fragile. Persisting user.__kind in localStorage would be more robust and would also avoid an unnecessary /auth/me network round-trip for tech users.",
+    "AuthContext.logout() correctly skips /auth/logout for tech (no such endpoint) — good.",
+    "Tech backend endpoints correctly reject admin tokens (401) and admin endpoints correctly reject tech tokens (401). Isolation at API level is solid.",
+    "TechLayout uses Link to /tech and useLocation for active states — clean. But the bottom-nav is only shown on mobile (md:hidden); this is intentional and acceptable.",
+    "TechGuideDetailPage.handleReceive posts full items array by spreading `...it` — includes fields like `id`, `qty_planned`, `unit`, `category`, `name` and possibly _id if backend serialisation ever leaks it. Backend excludes _id via projection, so OK, but is fragile.",
+    "TechDashboardPage counts N items with `(g.items || []).length` — safe. Filter memoization correct."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tech_portal_auth.py (new file, 14 test cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (14/14 pytest)",
+    "frontend": "83% (10/12 UI flows) — 2 critical failures on reload/isolation both due to a single RCA (interceptor)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024",
+    "tech_email": "d.oliveira1986@gmail.com",
+    "tech_password": "A24d22r04",
+    "tech_seed_guide": "GT 2026/0007 (status=emitida, 8 items)"
+  },
+  "seed_data_creation": "None — used existing seed guide GT 2026/0007 (per instruction not to complete the receive). Backend pytest does not create/mutate any tech data.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend pytest suite for the tech portal lives at /app/backend/tests/test_tech_portal_auth.py — reuse it. If the interceptor bug is fixed, re-verify: (1) reload on /tech keeps user on /tech, (2) tech visiting /, /despesas, /orcamentos gets redirected to /tech (NOT /login), (3) tech's localStorage token is preserved across reload. Also verify admin flow still works (login + regression on /despesas /orcamentos /contabilista /ponto-equilibrio). Full receive submission on GT 2026/0007 was intentionally NOT executed — if a test-only tech guide is created (e.g. GT 2026/0099 via admin POST /api/transport-guides + emit + assign_employee_id=Daniel's employee id 4d357339-7b7e-40bb-91fe-93109060cbda), the full receive+usage cycle can be validated end-to-end.",
+  "rca of the issue": {
+    "symptom": "Tech user loses session on page reload and cannot navigate to admin URLs (they end up on /login instead of /tech).",
+    "root_cause": "In /app/frontend/src/lib/api.js the response interceptor treats any 401 (except /auth/refresh, /auth/login, /auth/logout) as an expired admin session: it POSTs /auth/refresh, fails, then calls tokenStore.clear() and does window.location.href='/login'. AuthContext.checkAuth() calls /auth/me on mount; for a tech JWT (type='tech') this endpoint returns 401 by design (JWT type mismatch), which triggers the interceptor and destroys the tech's valid access_token BEFORE the fallback GET /tech/auth/me is even attempted.",
+    "reproduction": "1) Login as tech (d.oliveira1986@gmail.com / A24d22r04) → land on /tech (works). 2) Reload the page → immediately redirected to /login and localStorage.obelisco_access_token is empty. 3) Alternatively, visit https://.../despesas as tech → same result, redirect to /login.",
+    "mitigation_options": [
+      "In api.js, add '/auth/me' (and optionally '/tech/auth/me') to the isAuthEndpoint check so 401 on those probes propagates directly to the caller without touching the token store.",
+      "In AuthContext.checkAuth(), use a plain axios request (not the shared `api` instance) or wrap the /auth/me call so that a 401 is caught silently without side effects.",
+      "Store user.__kind in localStorage on login; on checkAuth prefer /tech/auth/me first when kind==='tech' so /auth/me is never hit for tech users."
+    ]
+  }
+}

@@ -30,6 +30,9 @@ import GuiasPage from "./pages/GuiasPage";
 import PipelinePage from "./pages/PipelinePage";
 import PontoEquilibrioPage from "./pages/PontoEquilibrioPage";
 import ContabilistaPage from "./pages/ContabilistaPage";
+import TechDashboardPage from "./pages/TechDashboardPage";
+import TechGuideDetailPage from "./pages/TechGuideDetailPage";
+import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
   <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -55,14 +58,35 @@ function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
+  // Se for técnico, redireciona-o para o portal técnico
+  if (user.__kind === 'tech') return <Navigate to="/tech" replace />;
   return <Layout>{children}</Layout>;
+}
+
+function TechProtectedRoute({ children }) {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  // Se admin tentar aceder ao portal técnico, manda para o dashboard admin
+  if (user.__kind !== 'tech') return <Navigate to="/" replace />;
+  return <TechLayout>{children}</TechLayout>;
 }
 
 function LoginRoute() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (user) return <Navigate to="/" replace />;
+  if (user) {
+    // Redirect based on kind
+    return <Navigate to={user.__kind === 'tech' ? '/tech' : '/'} replace />;
+  }
   return <LoginPage />;
+}
+
+function CatchAllRoute() {
+  const { user, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  if (user?.__kind === 'tech') return <Navigate to="/tech" replace />;
+  return <Navigate to="/" replace />;
 }
 
 function App() {
@@ -99,7 +123,10 @@ function App() {
           <Route path="/ponto-equilibrio" element={<ProtectedRoute><PontoEquilibrioPage /></ProtectedRoute>} />
           <Route path="/contabilista" element={<ProtectedRoute><ContabilistaPage /></ProtectedRoute>} />
           <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* ===== Portal Técnico (isolado do admin) ===== */}
+          <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
+          <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
+          <Route path="*" element={<CatchAllRoute />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
