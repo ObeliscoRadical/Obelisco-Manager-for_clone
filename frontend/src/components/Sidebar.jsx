@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
@@ -30,6 +31,7 @@ const externalItems = [
 
 const salariosItems = [
   { path: '/funcionarios', label: 'Funcionários', icon: Wallet, mod: 'funcionarios' },
+  { path: '/mensagens-tecnicos', label: 'Mensagens Técnicos', icon: MessageSquare, mod: 'funcionarios' },
   { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2, mod: 'assiduidade' },
   { path: '/processamento-salarial', label: 'Processamento', icon: Calculator, mod: 'salarios' },
   { path: '/creditos', label: 'Créditos', icon: PiggyBank, mod: 'salarios' },
@@ -56,6 +58,7 @@ function canSee(user, mod) {
 export default function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const unreadAdmin = useUnreadAdminMessages();
 
   return (
     <aside data-testid="sidebar" className="fixed left-0 top-0 h-screen w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col z-50">
@@ -123,6 +126,7 @@ export default function Sidebar() {
         )}
         {salariosItems.filter(it => canSee(user, it.mod)).map(item => {
           const isActive = location.pathname === item.path;
+          const isMsgs = item.path === '/mensagens-tecnicos';
           return (
             <Link
               key={item.path}
@@ -135,7 +139,12 @@ export default function Sidebar() {
               }`}
             >
               <item.icon size={18} />
-              <span className="text-xs font-medium">{item.label}</span>
+              <span className="text-xs font-medium flex-1">{item.label}</span>
+              {isMsgs && unreadAdmin > 0 && (
+                <span className="min-w-[18px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center" data-testid="sidebar-unread-badge">
+                  {unreadAdmin}
+                </span>
+              )}
             </Link>
           );
         })}

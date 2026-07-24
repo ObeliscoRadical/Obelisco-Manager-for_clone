@@ -1,0 +1,30 @@
+{
+  "summary": "Full E2E test of new AdminMensagensTecnicosPage feature (backend + frontend). All 10 review scenarios verified successfully: sidebar entry with unread badge, page load, thread list, conversation view (admin right/yellow, tech left/grey), send reply, mark-as-read on open, tech->admin propagation, and permission gating via ProtectedRoute module='funcionarios'. Screenshot confirms clean two-column UI with correct data-testids.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/tmp/test_admin_msgs.sh"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Sidebar unread badge polls every 30s (useUnreadAdminMessages) — after admin opens a thread the badge still shows the old count until next poll (up to 30s). Consider triggering an immediate re-fetch or exposing a manual refresh from AdminMensagensTecnicosPage after fetchMessages() marks-as-read. Minor UX polish.",
+    "AdminMensagensTecnicosPage uses fixed height h-[calc(100vh-220px)] which may clip on short viewports/mobile; acceptable for desktop admin use.",
+    "useUnreadAdminMessages hook uses catch{} silently — fine, but if backend endpoint is broken there is no visible signal."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin admin@obelisco.pt/obelisco2024, Tech d.oliveira1986@gmail.com/A24d22r04 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Added 2 chat messages (tech->admin 'E2E test iteration 21 - tech->admin' + admin reply 'E2E reply from admin iteration 21') plus one backend curl round-trip. All harmless test data in daniel oliveira's thread.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature Mensagens Técnicos is live at /mensagens-tecnicos with data-testids: admin-tech-messages-page, thread-{empId}, conversation-list, admin-msg-{id}, admin-chat-input, admin-chat-send, nav-mensagens-tecnicos, sidebar-unread-badge. Backend endpoints under /api/tech/admin/messages/* work correctly (threads aggregate, GET marks read, POST reply).",
+  "verified_scenarios": [
+    "Backend threads endpoint returns list with unread count",
+    "Tech POST /api/tech/messages -> shows in admin threads with unread++",
+    "Admin GET /api/tech/admin/messages/{emp} marks tech msgs as read_by_admin",
+    "Admin POST /api/tech/admin/messages/{emp} -> from_role=admin, admin_name populated",
+    "Sidebar shows nav-mensagens-tecnicos + sidebar-unread-badge (value=1)",
+    "Page shows two-column layout, correct title, thread list count, avatars",
+    "Conversation renders admin (yellow, right) vs tech (grey, left) bubbles",
+    "Send from admin-chat-input via admin-chat-send appends message immediately",
+    "Route /mensagens-tecnicos wrapped in ProtectedRoute module='funcionarios'"
+  ]
+}
