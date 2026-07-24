@@ -8,18 +8,30 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
-    try {
+    // Se guardámos o kind na última sessão, tenta o endpoint correcto primeiro
+    let lastKind = null;
+    try { lastKind = localStorage.getItem('obelisco_user_kind'); } catch (e) {}
+
+    const tryTech = async () => {
+      const { data } = await api.get('/tech/auth/me');
+      setUser({ ...data, __kind: 'tech' });
+      try { localStorage.setItem('obelisco_user_kind', 'tech'); } catch (e) {}
+    };
+    const tryAdmin = async () => {
       const { data } = await api.get('/auth/me');
       setUser({ ...data, __kind: 'admin' });
-    } catch (err) {
-      // Se falhou admin, tenta tech (funcionários da equipa)
-      try {
-        const { data } = await api.get('/tech/auth/me');
-        setUser({ ...data, __kind: 'tech' });
-      } catch (err2) {
-        console.debug('Auth check failed:', err?.response?.status || err.message);
-        setUser(false);
+      try { localStorage.setItem('obelisco_user_kind', 'admin'); } catch (e) {}
+    };
+
+    try {
+      if (lastKind === 'tech') {
+        try { await tryTech(); } catch (e) { await tryAdmin(); }
+      } else {
+        try { await tryAdmin(); } catch (e) { await tryTech(); }
       }
+    } catch (err) {
+      console.debug('Auth check failed:', err?.response?.status || err.message);
+      setUser(false);
     } finally {
       setLoading(false);
     }
@@ -47,6 +59,7 @@ export function AuthProvider({ children }) {
           const { data } = await api.post('/tech/auth/login', { email, password });
           if (data.access_token) tokenStore.set(data.access_token, null);
           const u = { ...(data.employee || {}), __kind: 'tech' };
+          try { localStorage.setItem('obelisco_user_kind', 'tech'); } catch (e) {}
           setUser(u);
           return u;
         } catch (techErr) {
@@ -68,6 +81,7 @@ export function AuthProvider({ children }) {
       console.error('Logout error:', err.message);
     }
     tokenStore.clear();
+    try { localStorage.removeItem('obelisco_user_kind'); } catch (e) {}
     setUser(false);
   }, [user]);
 

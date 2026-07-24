@@ -3793,6 +3793,10 @@ app.include_router(create_breakeven_router(db, get_current_user))
 from contabilista import create_contabilista_router
 app.include_router(create_contabilista_router(db, get_current_user))
 
+# Portal Técnico — endpoints extra (ponto, chat, agenda, perfil, fotos)
+from tech_extras import create_tech_extras_router
+app.include_router(create_tech_extras_router(db, get_current_user))
+
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
     "https://tech-app-obelisco.emergent.host",

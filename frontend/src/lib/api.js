@@ -59,8 +59,12 @@ api.interceptors.response.use(
     const status = error.response?.status;
 
     const isAuthEndpoint = original?.url?.includes('/auth/refresh') || original?.url?.includes('/auth/login') || original?.url?.includes('/auth/logout');
+    // /auth/me e /tech/auth/me são probes de sessão — nunca devem accionar o refresh/clear/redirect
+    const isSessionProbe = original?.url?.endsWith('/auth/me') || original?.url?.endsWith('/tech/auth/me');
+    // Endpoints do portal técnico não usam refresh token — deixa a UI decidir
+    const isTechEndpoint = original?.url?.includes('/tech/');
 
-    if (status === 401 && !original._retry && !isAuthEndpoint) {
+    if (status === 401 && !original._retry && !isAuthEndpoint && !isSessionProbe && !isTechEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           pendingQueue.push({ resolve: () => resolve(api(original)), reject });

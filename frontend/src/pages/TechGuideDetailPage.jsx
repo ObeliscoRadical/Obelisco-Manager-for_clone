@@ -8,8 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { ArrowLeft, Package, MapPin, Calendar, CheckCircle2, AlertTriangle, Save, Truck, Clock, FileText } from 'lucide-react';
+import { ArrowLeft, Package, MapPin, Calendar, CheckCircle2, AlertTriangle, Save, Truck, Clock, FileText, Camera, X, Image } from 'lucide-react';
 import { toast } from 'sonner';
+import SignaturePad from '../components/SignaturePad';
 
 const STATUS_MAP = {
   emitida:        { label: 'Emitida',        color: 'bg-blue-500/20 text-blue-300 border-blue-500/40' },
@@ -30,12 +31,43 @@ export default function TechGuideDetailPage() {
   const [saving, setSaving] = useState(false);
   const [usageEdit, setUsageEdit] = useState({});
   const [usageNote, setUsageNote] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [signature, setSignature] = useState('');
+
+  const handlePhotoUpload = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('guide_id', id);
+        const { data } = await api.post('/tech/upload/photo', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        setPhotos(prev => [data, ...prev]);
+      }
+      toast.success(`${files.length} foto(s) enviada(s)`);
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || 'Erro ao enviar foto');
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/tech/transport-guides/${id}`);
+      const [guideRes, photoRes] = await Promise.all([
+        api.get(`/tech/transport-guides/${id}`),
+        api.get(`/tech/photos?guide_id=${id}`).catch(() => ({ data: [] })),
+      ]);
+      const data = guideRes.data;
       setGuide(data);
+      setPhotos(photoRes.data || []);
       // pré-preencher formulários com valores actuais
       const initReceive = {};
       const initUsage = {};
@@ -68,8 +100,8 @@ export default function TechGuideDetailPage() {
         })),
         signed_by_name: signedByName,
         reception_notes: receiveNotes,
-        photos: [],
-        signature_data: '',
+        photos: photos.map(p => p.url),
+        signature_data: signature || '',
       };
       await api.post(`/tech/transport-guides/${id}/receive`, payload);
       toast.success('Guia recebida com sucesso!');
@@ -142,6 +174,42 @@ export default function TechGuideDetailPage() {
                 <p className="text-xs text-zinc-400">{guide.notes}</p>
               </div>
             )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Fotos da obra / material */}
+      <Card className="bg-zinc-900 border-zinc-800">
+        <CardHeader className="pb-3 flex-row items-center justify-between">
+          <CardTitle className="text-sm text-white flex items-center gap-2">
+            <Camera className="h-4 w-4 text-yellow-400" /> Fotos ({photos.length})
+          </CardTitle>
+          <label className="cursor-pointer">
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={handlePhotoUpload}
+              className="hidden"
+              data-testid="photo-upload-input"
+            />
+            <span className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500 text-zinc-900 font-semibold hover:bg-yellow-400 inline-flex items-center gap-1">
+              <Camera className="h-3 w-3" />
+              {uploading ? 'A carregar…' : 'Adicionar'}
+            </span>
+          </label>
+        </CardHeader>
+        <CardContent>
+          {photos.length === 0 && (
+            <p className="text-xs text-zinc-500 italic py-2">Nenhuma foto ainda. Use o botão "Adicionar" para tirar/enviar fotos da obra ou dos materiais.</p>
+          )}
+          <div className="grid grid-cols-3 gap-2">
+            {photos.map(p => (
+              <a key={p.id} href={p.url} target="_blank" rel="noreferrer" className="block relative aspect-square rounded overflow-hidden bg-zinc-950 border border-zinc-800" data-testid={`photo-${p.id}`}>
+                <img src={p.url} alt={p.caption || 'Foto'} className="w-full h-full object-cover" />
+              </a>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -285,6 +353,10 @@ export default function TechGuideDetailPage() {
                 placeholder="Nome completo"
                 className="mt-1 bg-zinc-950 border-zinc-700 h-10"
               />
+            </div>
+            <div>
+              <Label className="text-xs text-zinc-400">Assinatura digital *</Label>
+              <SignaturePad onChange={setSignature} height={140} className="mt-1" />
             </div>
             <div>
               <Label className="text-xs text-zinc-400">Notas de receção</Label>

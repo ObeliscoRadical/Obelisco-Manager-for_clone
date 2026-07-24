@@ -32,6 +32,10 @@ import PontoEquilibrioPage from "./pages/PontoEquilibrioPage";
 import ContabilistaPage from "./pages/ContabilistaPage";
 import TechDashboardPage from "./pages/TechDashboardPage";
 import TechGuideDetailPage from "./pages/TechGuideDetailPage";
+import TechAgendaPage from "./pages/TechAgendaPage";
+import TechPontoPage from "./pages/TechPontoPage";
+import TechChatPage from "./pages/TechChatPage";
+import TechPerfilPage from "./pages/TechPerfilPage";
 import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
@@ -126,6 +130,10 @@ function App() {
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
           <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
+          <Route path="/tech/agenda" element={<TechProtectedRoute><TechAgendaPage /></TechProtectedRoute>} />
+          <Route path="/tech/ponto" element={<TechProtectedRoute><TechPontoPage /></TechProtectedRoute>} />
+          <Route path="/tech/chat" element={<TechProtectedRoute><TechChatPage /></TechProtectedRoute>} />
+          <Route path="/tech/perfil" element={<TechProtectedRoute><TechPerfilPage /></TechProtectedRoute>} />
           <Route path="*" element={<CatchAllRoute />} />
         </Routes>
       </BrowserRouter>
