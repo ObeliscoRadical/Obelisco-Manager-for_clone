@@ -1,0 +1,61 @@
+{
+  "summary": "P0 bug fix validation: users-collection user with role='tecnico' + only module_permissions.tech_portal=true can now access Portal Técnico. Backend: 13/13 pytest cases pass in test_tech_portal_perm_bugfix.py (create user, login, tech guides 200, profile 200, timesheet 200, security regression consulta blocked 403, admin regression 200, real tech regression 200, cleanup). Frontend: E2E playwright flow confirmed — testtec_ui@obelisco.pt logs in, sidebar shows ONLY Portal Técnico (nav-dashboard/nav-orcamentos absent), clicking Portal Técnico navigates to /tech which renders [data-testid=tech-dashboard] with 7 guides in supervisor mode (NOT the 'Sem permissão' error). ADMIN badge and 'Voltar ao Admin' button correctly ABSENT (since role='tecnico', not 'admin'). Logout redirects fully to /login. All test users cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results_detail": {
+    "backend_create_tec_only_tech_portal": "PASS — POST /api/users role=tecnico + module_permissions={tech_portal:true} persists correctly (dashboard=false)",
+    "backend_login_returns_perms": "PASS — /api/auth/login returns access_token + module_permissions.tech_portal=true",
+    "backend_tec_transport_guides_200": "PASS — GET /api/tech/transport-guides returns 200 (was 403 before fix). Returns >=1 guides (supervisor mode, all guides).",
+    "backend_tec_profile_200": "PASS — GET /api/tech/profile returns 200 with user identity",
+    "backend_tec_timesheet_today_200": "PASS — GET /api/tech/timesheet/today returns 200",
+    "backend_tec_auth_me_perms": "PASS — /api/auth/me returns module_permissions.tech_portal=true",
+    "security_consulta_blocked_guides": "PASS — consulta user (no tech_portal) → GET /api/tech/transport-guides returns 403",
+    "security_consulta_blocked_profile": "PASS — GET /api/tech/profile returns 403 for consulta user",
+    "regression_admin_tech_guides": "PASS — Admin GET /api/tech/transport-guides returns 200",
+    "regression_admin_profile_is_admin_view": "PASS — Admin /api/tech/profile returns _is_admin_view=true",
+    "regression_real_tech_login": "PASS — Daniel (employees) can still login via /api/tech/auth/login and access guides + timesheet",
+    "cleanup_delete_users": "PASS — DELETE /api/users/{id} for both test users returned 200; verified absent from list",
+    "frontend_login_tec_user": "PASS — testtec_ui@obelisco.pt login successful, redirected to / (dashboard root)",
+    "frontend_sidebar_filtered_only_tech": "PASS — [data-testid=nav-tech] present; nav-dashboard, nav-orcamentos NOT present",
+    "frontend_tech_dashboard_renders": "PASS — /tech renders [data-testid=tech-dashboard]; [data-testid=no-permission-msg] NOT present",
+    "frontend_no_admin_badge": "PASS — [data-testid=tech-admin-badge] and [data-testid=tech-back-to-admin] both NOT present for role=tecnico",
+    "frontend_guides_visible": "PASS — 7 unique GT guides rendered (GT 2026/0001..0007); GT 2026/0007 shows '8 items' as expected (supervisor mode)",
+    "frontend_logout_to_login": "PASS — Clicking [data-testid=tech-logout-btn] redirects to /login (full logout, not just /)"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tech_portal_perm_bugfix.py",
+    "/app/test_reports/pytest/iter20_bugfix.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "get_tech_user in tech_extras.py and _get_current_tech in transport_guides.py duplicate the same auth logic (~30 LOC each). Consider extracting into a shared helper module (e.g., backend/auth_helpers.py) to avoid drift between the two implementations.",
+    "For users with role='tecnico' + tech_portal=true who are NOT in the employees collection, they get supervisor mode (_is_admin=True → see all guides). This may be intentional but is a subtle privilege escalation: a 'tecnico' user with only tech_portal can now view ALL transport guides company-wide. If the intent is to isolate them, they should be linked to an employee record or receive a stricter mode. Consider adding a filter (only see guides where tech_email=user.email or similar) or documenting this as expected supervisor behaviour.",
+    "Frontend TechProtectedRoute (App.js:80-90) correctly checks hasTechPerm but does NOT show a specific message when a users-collection user without tech_portal reaches /tech — they get redirected to '/'. Consider adding a toast/flash message ('Sem permissão para Portal Técnico') on redirect for better UX.",
+    "TechLayout.jsx isAdminViewing check uses only user?.role === 'admin' — good. Note: a users-collection user with tech_portal=true but role != 'admin' will see the normal Portal Técnico UI without any badge, but they still see ALL guides (supervisor mode from backend). This UX mismatch (backend treats them as supervisor, frontend shows them as normal tech) could confuse users."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tech_portal_perm_bugfix.py (NEW - 13 test cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 pytest)",
+    "frontend": "100% (all 7 UI verification steps pass)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024",
+    "tech_email": "d.oliveira1986@gmail.com",
+    "tech_password": "A24d22r04"
+  },
+  "seed_data_creation": "Created and DELETED during test: (1) testtec_<ts>@obelisco.pt (pytest), (2) testconsulta_<ts>@obelisco.pt (pytest), (3) testtec_ui@obelisco.pt (frontend UI test — deleted via curl). No seed data mutated. GT 2026/0007 preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "P0 bug fix validated end-to-end. Backend accepts any users-collection user with module_permissions.tech_portal=true and treats them as supervisor (_is_admin=True → sees all guides). Frontend TechProtectedRoute accepts hasTechPerm. Regression clean: consulta users still blocked 403; admin still gets ADMIN badge; real tech via /tech/auth/login still isolated to own guides. Test file /app/backend/tests/test_tech_portal_perm_bugfix.py is idempotent (timestamped emails, self-cleaning). One design concern raised in code review: supervisor mode for non-employee users with tech_portal may be over-privileged; main agent should confirm intent.",
+  "rca_of_the_issue": "BUG: Admin creates user with role='tecnico' + only module_permissions.tech_portal=true → user logs in → clicks Portal Técnico → 'Sem permissão'. ROOT CAUSE: (1) Frontend App.js TechProtectedRoute only allowed __kind='tech' (employee login) OR role='admin' — did not check module_permissions.tech_portal for users-collection users. (2) Backend tech_extras.py:get_tech_user + transport_guides.py:_get_current_tech rejected any users-collection user unless role='admin'. FIX APPLIED (verified in files): (a) App.js line 87 added hasTechPerm = user.module_permissions?.tech_portal === true; check. (b) Both backend files now accept users where role='admin' OR perms.get('tech_portal')=True, treating both as _is_admin=True (supervisor mode). REPRODUCTION: prior to fix, POST /api/users with tecnico + tech_portal=true → POST /api/auth/login → GET /api/tech/transport-guides would return 403. Post-fix: returns 200 with all guides. Validated by 13 pytest cases + full playwright E2E."
+}

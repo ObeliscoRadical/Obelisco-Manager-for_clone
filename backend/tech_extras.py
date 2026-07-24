@@ -68,17 +68,21 @@ def create_tech_extras_router(db, get_current_user):
                     raise HTTPException(status_code=401, detail="Funcionário inactivo")
                 return {**emp, "_is_admin": False}
             elif ttype == "access":
-                # Admin token — pode aceder ao portal técnico em modo supervisor
+                # Utilizador da collection `users` — admin OU qualquer user com tech_portal=True
                 from bson import ObjectId as _OID
                 u = await db.users.find_one({"_id": _OID(payload["sub"])})
-                if not u or u.get("role") != "admin":
-                    raise HTTPException(status_code=403, detail="Só admin pode ver o portal técnico como supervisor")
+                if not u:
+                    raise HTTPException(status_code=403, detail="Utilizador não encontrado")
+                is_admin = u.get("role") == "admin"
+                perms = u.get("module_permissions") or {}
+                if not is_admin and not perms.get("tech_portal"):
+                    raise HTTPException(status_code=403, detail="Sem permissão para o portal técnico")
                 return {
                     "id": str(u["_id"]),
                     "name": u.get("name"),
                     "email": u.get("email"),
                     "role": u.get("role"),
-                    "_is_admin": True,
+                    "_is_admin": True,   # trata como supervisor (vê tudo, não filtra por employee_id)
                 }
             raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:

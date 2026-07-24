@@ -81,8 +81,11 @@ function TechProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
-  // Admin também pode aceder ao portal técnico (modo supervisor)
-  if (user.__kind !== 'tech' && user.role !== 'admin') return <Navigate to="/" replace />;
+  // Permite: técnico (employees), admin (supervisor), OU user com permissão tech_portal
+  const isTech = user.__kind === 'tech';
+  const isAdmin = user.role === 'admin';
+  const hasTechPerm = user.module_permissions?.tech_portal === true;
+  if (!isTech && !isAdmin && !hasTechPerm) return <Navigate to="/" replace />;
   return <TechLayout>{children}</TechLayout>;
 }
 
