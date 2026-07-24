@@ -34,6 +34,32 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 24, 2026 (v22) — Portal Técnico Consolidado (2 apps → 1 domínio)
+- **Feature completa**: consolidação do tech-app-obelisco externo dentro do Obelisco Manager. Login unificado — detecta admin vs técnico e redireciona para o portal correcto.
+- **Bug crítico corrigido (P0 do iter17)**: axios interceptor destruía a sessão tech no reload por chamar refresh no 401 de /auth/me. Fix: interceptor exclui `/auth/me`, `/tech/auth/me` e qualquer `/tech/*`; AuthContext persiste `obelisco_user_kind` em localStorage.
+- **Novo backend**: `/app/backend/tech_extras.py` — router `/api/tech/*` com JWT tech próprio:
+  - **Ponto**: `GET /timesheet/today`, `POST /timesheet/punch` (Literal in|out|break_start|break_end), `GET /timesheet/week` → collection `attendance`
+  - **Agenda**: `GET /works/my`, `GET /appointments/my` (próximos 30 dias)
+  - **Chat**: `GET /messages`, `POST /messages` + `GET /admin/messages/threads` (aggregate), `GET /admin/messages/{emp_id}`, `POST /admin/messages/{emp_id}` → collection `tech_messages`
+  - **Perfil**: `GET /profile` (password_hash excluído)
+  - **Fotos**: `POST /upload/photo` (multipart, max 10MB, ext validada), `GET /photos/{filename}` (FileResponse), `GET /photos?guide_id=X` → collection `tech_photos` + `/app/backend/uploads/tech_photos/`
+- **Novo frontend**:
+  - `TechLayout.jsx` refeito: header + 5 nav tabs (Guias/Agenda/Ponto/Chat/Perfil) com desktop side-tabs e mobile bottom-nav + badge de mensagens não-lidas.
+  - `SignaturePad.jsx` — canvas de assinatura toque/rato com devicePixelRatio + botão limpar.
+  - `TechDashboardPage.jsx` — lista de guias com filtros (todas/pendentes/recebidas).
+  - `TechGuideDetailPage.jsx` — detalhe + secção Fotos (upload direto do telemóvel via `capture=environment`) + Diálogo de receção com SignaturePad obrigatório + registo de uso (`qty_used`).
+  - `TechAgendaPage.jsx` — obras atribuídas + compromissos, com badge HOJE.
+  - `TechPontoPage.jsx` — 4 botões grandes (Entrada/Saída/Pausa) com máquina de estados canIn/canOut/canBreakStart/canBreakEnd, total do dia e histórico 7 dias.
+  - `TechChatPage.jsx` — chat com escritório com polling 15s.
+  - `TechPerfilPage.jsx` — dados pessoais, contrato, remuneração (salário, sub. alim.), dados fiscais (NIF, NISS, IBAN).
+  - `useUnreadTechMessages.js` hook — badge vermelho no nav Chat.
+- **Cross-role isolation**: tech tentar acedar /despesas → redirect /tech; admin tentar /tech → redirect /. Persistente no reload.
+- **Testing (`testing_agent_v3_fork`)**: 29/29 pytest backend + 100% frontend (8 fluxos, 5 páginas). Report `/app/test_reports/iteration_18.json`. Novos testes pytest: `/app/backend/tests/test_tech_extras.py` (15 casos) + `test_tech_portal_auth.py` (14 casos).
+- **Security hardening extra**: `ClockPunch.action` agora Literal (não aceita qualquer string) — HTTP 422 para valores inválidos. Validação de extensão de ficheiro robusta.
+- **Novas collections Mongo**: `attendance`, `tech_messages`, `tech_photos`.
+
+
+
 ### Jul 21, 2026 (v21) — Bug Fix: IRS aplicado incorretamente a trabalhador @ RMMG
 - **Bug reportado**: "na area de contabilista esta considerando irs para um trabalhador que ganha ordenado minimo e ate onde sei isso e proibido em portugal" — o simulador cobrava IRS a quem ganha o Salário Mínimo Nacional, violando o Art.º 70 CIRS (Mínimo de Existência).
 - **Root cause**: `MINIMO_EXISTENCIA` estava com valor de 2025 (12 180€ = 870€×14). Faltava também salvaguarda para garantir que o líquido nunca fica abaixo do mínimo.

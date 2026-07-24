@@ -1,6 +1,7 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, Package, User, Calendar, Clock, MessageSquare } from 'lucide-react';
+import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
@@ -16,6 +17,7 @@ export default function TechLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const unread = useUnreadTechMessages();
 
   const handleLogout = async () => {
     await logout();
@@ -62,12 +64,13 @@ export default function TechLayout({ children }) {
           {NAV_ITEMS.map(it => {
             const Icon = it.icon;
             const active = isActive(it.path);
+            const showBadge = it.path === '/tech/chat' && unread > 0;
             return (
               <Link
                 key={it.path}
                 to={it.path}
                 data-testid={it.testid}
-                className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium border-b-2 transition-colors relative ${
                   active
                     ? 'border-yellow-500 text-yellow-400'
                     : 'border-transparent text-zinc-400 hover:text-zinc-200'
@@ -75,6 +78,11 @@ export default function TechLayout({ children }) {
               >
                 <Icon className="h-4 w-4" />
                 {it.label}
+                {showBadge && (
+                  <span className="ml-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center" data-testid="chat-unread-badge">
+                    {unread}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -91,17 +99,23 @@ export default function TechLayout({ children }) {
           {NAV_ITEMS.map(it => {
             const Icon = it.icon;
             const active = isActive(it.path);
+            const showBadge = it.path === '/tech/chat' && unread > 0;
             return (
               <Link
                 key={it.path}
                 to={it.path}
                 data-testid={`${it.testid}-mobile`}
-                className={`flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors ${
+                className={`flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors relative ${
                   active ? 'text-yellow-400' : 'text-zinc-500'
                 }`}
               >
                 <Icon className="h-5 w-5" />
                 <span className="text-[9px] font-medium uppercase tracking-wide">{it.label}</span>
+                {showBadge && (
+                  <span className="absolute top-0 right-3 min-w-[16px] h-[16px] px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {unread}
+                  </span>
+                )}
               </Link>
             );
           })}

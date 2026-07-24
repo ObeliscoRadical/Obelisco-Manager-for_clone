@@ -8,7 +8,7 @@ Endpoints extra do Portal Técnico:
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime, timezone, date as date_cls
 from pathlib import Path
 import os
@@ -28,7 +28,7 @@ MAX_FILE_MB = 10
 
 # ------------ Modelos ------------
 class ClockPunch(BaseModel):
-    action: str          # 'in' | 'out' | 'break_start' | 'break_end'
+    action: Literal['in', 'out', 'break_start', 'break_end']
     work_id: Optional[str] = None
     note: Optional[str] = None
 
@@ -282,7 +282,9 @@ def create_tech_extras_router(db, get_current_user):
         user=Depends(get_tech_user),
     ):
         emp_id = user.get("id")
-        ext = (file.filename.rsplit(".", 1)[-1] or "").lower()
+        if '.' not in (file.filename or ''):
+            raise HTTPException(status_code=400, detail="Ficheiro sem extensão")
+        ext = file.filename.rsplit(".", 1)[-1].lower()
         if ext not in ALLOWED_EXT:
             raise HTTPException(status_code=400, detail=f"Formato não suportado. Use: {', '.join(ALLOWED_EXT)}")
 
