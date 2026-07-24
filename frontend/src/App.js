@@ -58,12 +58,22 @@ function Layout({ children }) {
   );
 }
 
-function ProtectedRoute({ children }) {
+function ProtectedRoute({ children, module: moduleKey }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
   // Se for técnico, redireciona-o para o portal técnico
   if (user.__kind === 'tech') return <Navigate to="/tech" replace />;
+  // Verificação granular de módulo (se o Route especificou uma chave)
+  if (moduleKey && user.role !== 'admin') {
+    const perms = user.module_permissions;
+    if (perms && perms[moduleKey] !== true) {
+      return <Layout><div className="p-8 text-center text-zinc-400" data-testid="no-permission-msg">
+        <p className="text-2xl font-bold text-yellow-400 mb-2">Sem permissão</p>
+        <p className="text-sm">Não tem acesso a este módulo. Contacte o administrador.</p>
+      </div></Layout>;
+    }
+  }
   return <Layout>{children}</Layout>;
 }
 
@@ -71,8 +81,8 @@ function TechProtectedRoute({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
-  // Se admin tentar aceder ao portal técnico, manda para o dashboard admin
-  if (user.__kind !== 'tech') return <Navigate to="/" replace />;
+  // Admin também pode aceder ao portal técnico (modo supervisor)
+  if (user.__kind !== 'tech' && user.role !== 'admin') return <Navigate to="/" replace />;
   return <TechLayout>{children}</TechLayout>;
 }
 
@@ -101,32 +111,32 @@ function App() {
         <Routes>
           <Route path="/login" element={<LoginRoute />} />
           <Route path="/p/:token" element={<PublicSignPage />} />
-          <Route path="/" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
-          <Route path="/orcamentos" element={<ProtectedRoute><OrcamentosPage /></ProtectedRoute>} />
-          <Route path="/propostas" element={<ProtectedRoute><PropostasPage /></ProtectedRoute>} />
-          <Route path="/negociacao" element={<ProtectedRoute><NegociacaoPage /></ProtectedRoute>} />
-          <Route path="/obras" element={<ProtectedRoute><ObrasPage /></ProtectedRoute>} />
-          <Route path="/agenda" element={<ProtectedRoute><AgendaPage /></ProtectedRoute>} />
-          <Route path="/materiais" element={<ProtectedRoute><MateriaisPage /></ProtectedRoute>} />
-          <Route path="/mao-de-obra" element={<ProtectedRoute><MaoDeObraPage /></ProtectedRoute>} />
-          <Route path="/produtividades" element={<ProtectedRoute><ProdutividadesPage /></ProtectedRoute>} />
-          <Route path="/utilizadores" element={<ProtectedRoute><UtilizadoresPage /></ProtectedRoute>} />
-          <Route path="/biblioteca" element={<ProtectedRoute><BibliotecaPage /></ProtectedRoute>} />
-          <Route path="/funcionarios" element={<ProtectedRoute><FuncionariosPage /></ProtectedRoute>} />
-          <Route path="/assiduidade" element={<ProtectedRoute><AssiduidadePage /></ProtectedRoute>} />
-          <Route path="/processamento-salarial" element={<ProtectedRoute><ProcessamentoSalarialPage /></ProtectedRoute>} />
-          <Route path="/creditos" element={<ProtectedRoute><CreditosPage /></ProtectedRoute>} />
-          <Route path="/custos-fixos" element={<ProtectedRoute><CustosFixosPage /></ProtectedRoute>} />
-          <Route path="/config-salariais" element={<ProtectedRoute><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
-          <Route path="/despesas" element={<ProtectedRoute><DespesasPage /></ProtectedRoute>} />
-          <Route path="/faturas" element={<ProtectedRoute><FaturasPage /></ProtectedRoute>} />
-          <Route path="/financeiro" element={<ProtectedRoute><DashboardFinanceiroPage /></ProtectedRoute>} />
-          <Route path="/relatorios" element={<ProtectedRoute><RelatoriosPage /></ProtectedRoute>} />
-          <Route path="/guias" element={<ProtectedRoute><GuiasPage /></ProtectedRoute>} />
-          <Route path="/pipeline" element={<ProtectedRoute><PipelinePage /></ProtectedRoute>} />
-          <Route path="/ponto-equilibrio" element={<ProtectedRoute><PontoEquilibrioPage /></ProtectedRoute>} />
-          <Route path="/contabilista" element={<ProtectedRoute><ContabilistaPage /></ProtectedRoute>} />
-          <Route path="/definicoes" element={<ProtectedRoute><DefinicoesPage /></ProtectedRoute>} />
+          <Route path="/" element={<ProtectedRoute module="dashboard"><DashboardPage /></ProtectedRoute>} />
+          <Route path="/orcamentos" element={<ProtectedRoute module="orcamentos"><OrcamentosPage /></ProtectedRoute>} />
+          <Route path="/propostas" element={<ProtectedRoute module="propostas"><PropostasPage /></ProtectedRoute>} />
+          <Route path="/negociacao" element={<ProtectedRoute module="propostas"><NegociacaoPage /></ProtectedRoute>} />
+          <Route path="/obras" element={<ProtectedRoute module="obras"><ObrasPage /></ProtectedRoute>} />
+          <Route path="/agenda" element={<ProtectedRoute module="agenda"><AgendaPage /></ProtectedRoute>} />
+          <Route path="/materiais" element={<ProtectedRoute module="materiais"><MateriaisPage /></ProtectedRoute>} />
+          <Route path="/mao-de-obra" element={<ProtectedRoute module="materiais"><MaoDeObraPage /></ProtectedRoute>} />
+          <Route path="/produtividades" element={<ProtectedRoute module="materiais"><ProdutividadesPage /></ProtectedRoute>} />
+          <Route path="/utilizadores" element={<ProtectedRoute module="utilizadores"><UtilizadoresPage /></ProtectedRoute>} />
+          <Route path="/biblioteca" element={<ProtectedRoute module="biblioteca"><BibliotecaPage /></ProtectedRoute>} />
+          <Route path="/funcionarios" element={<ProtectedRoute module="funcionarios"><FuncionariosPage /></ProtectedRoute>} />
+          <Route path="/assiduidade" element={<ProtectedRoute module="assiduidade"><AssiduidadePage /></ProtectedRoute>} />
+          <Route path="/processamento-salarial" element={<ProtectedRoute module="salarios"><ProcessamentoSalarialPage /></ProtectedRoute>} />
+          <Route path="/creditos" element={<ProtectedRoute module="salarios"><CreditosPage /></ProtectedRoute>} />
+          <Route path="/custos-fixos" element={<ProtectedRoute module="custos_fixos"><CustosFixosPage /></ProtectedRoute>} />
+          <Route path="/config-salariais" element={<ProtectedRoute module="salarios"><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
+          <Route path="/despesas" element={<ProtectedRoute module="despesas"><DespesasPage /></ProtectedRoute>} />
+          <Route path="/faturas" element={<ProtectedRoute module="faturas"><FaturasPage /></ProtectedRoute>} />
+          <Route path="/financeiro" element={<ProtectedRoute module="financeiro"><DashboardFinanceiroPage /></ProtectedRoute>} />
+          <Route path="/relatorios" element={<ProtectedRoute module="relatorios"><RelatoriosPage /></ProtectedRoute>} />
+          <Route path="/guias" element={<ProtectedRoute module="transporte_guias"><GuiasPage /></ProtectedRoute>} />
+          <Route path="/pipeline" element={<ProtectedRoute module="obras"><PipelinePage /></ProtectedRoute>} />
+          <Route path="/ponto-equilibrio" element={<ProtectedRoute module="ponto_equilibrio"><PontoEquilibrioPage /></ProtectedRoute>} />
+          <Route path="/contabilista" element={<ProtectedRoute module="contabilista"><ContabilistaPage /></ProtectedRoute>} />
+          <Route path="/definicoes" element={<ProtectedRoute module="configuracoes"><DefinicoesPage /></ProtectedRoute>} />
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
           <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />

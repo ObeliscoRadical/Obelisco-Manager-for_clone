@@ -55,17 +55,32 @@ def create_tech_extras_router(db, get_current_user):
     JWT_ALGO = "HS256"
 
     async def get_tech_user(request: Request):
+        """Aceita JWT tech OU admin. Admin fica com _is_admin=True para as views decidirem."""
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Não autenticado")
         try:
             payload = jwt.decode(auth[7:], JWT_SECRET, algorithms=[JWT_ALGO])
-            if payload.get("type") != "tech":
-                raise HTTPException(status_code=401, detail="Token inválido")
-            emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
-            if not emp or not emp.get("active", True):
-                raise HTTPException(status_code=401, detail="Funcionário inactivo")
-            return emp
+            ttype = payload.get("type")
+            if ttype == "tech":
+                emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
+                if not emp or not emp.get("active", True):
+                    raise HTTPException(status_code=401, detail="Funcionário inactivo")
+                return {**emp, "_is_admin": False}
+            elif ttype == "access":
+                # Admin token — pode aceder ao portal técnico em modo supervisor
+                from bson import ObjectId as _OID
+                u = await db.users.find_one({"_id": _OID(payload["sub"])})
+                if not u or u.get("role") != "admin":
+                    raise HTTPException(status_code=403, detail="Só admin pode ver o portal técnico como supervisor")
+                return {
+                    "id": str(u["_id"]),
+                    "name": u.get("name"),
+                    "email": u.get("email"),
+                    "role": u.get("role"),
+                    "_is_admin": True,
+                }
+            raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
 
@@ -265,6 +280,16 @@ def create_tech_extras_router(db, get_current_user):
     # ============================================================
     @tech_extra_router.get("/profile")
     async def get_profile(user=Depends(get_tech_user)):
+        if user.get("_is_admin"):
+            # Admin em modo supervisor — devolve os próprios dados de admin
+            return {
+                "id": user.get("id"),
+                "name": user.get("name"),
+                "email": user.get("email"),
+                "role": user.get("role"),
+                "active": True,
+                "_is_admin_view": True,
+            }
         emp = await db.employees.find_one({"id": user.get("id")}, {"_id": 0, "password_hash": 0})
         if not emp:
             raise HTTPException(status_code=404, detail="Funcionário não encontrado")

@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Package, User, Calendar, Clock, MessageSquare } from 'lucide-react';
+import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
@@ -17,9 +17,14 @@ export default function TechLayout({ children }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const isAdminViewing = user?.role === 'admin';
   const unread = useUnreadTechMessages();
 
   const handleLogout = async () => {
+    if (isAdminViewing) {
+      navigate('/', { replace: true });
+      return;
+    }
     await logout();
     navigate('/login', { replace: true });
   };
@@ -42,9 +47,23 @@ export default function TechLayout({ children }) {
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            {isAdminViewing && (
+              <button
+                onClick={() => navigate('/')}
+                data-testid="tech-back-to-admin"
+                className="hidden sm:flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 hover:bg-yellow-500/30 text-xs font-semibold"
+              >
+                <ArrowLeft className="h-3 w-3" /> Voltar ao Admin
+              </button>
+            )}
             <div className="hidden sm:flex items-center gap-2 text-xs text-zinc-400 px-2">
               <User className="h-3.5 w-3.5" />
               <span data-testid="tech-user-name">{user?.name || user?.email}</span>
+              {isAdminViewing && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500 text-zinc-900 font-bold flex items-center gap-1" data-testid="tech-admin-badge">
+                  <Shield className="h-2.5 w-2.5" /> ADMIN
+                </span>
+              )}
             </div>
             <button
               onClick={handleLogout}

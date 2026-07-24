@@ -1,0 +1,74 @@
+{
+  "summary": "Iteration 19 — Full E2E validation of the granular per-module permissions feature + Admin access to Tech Portal. Backend: 15/15 pytest cases pass in test_module_permissions.py. Frontend: all 20 UI verification steps pass. Admin can now see and access ALL modules including Portal Técnico (with visible ADMIN badge + 'Voltar ao Admin' button); admin sees 7 tech guides in tech portal (vs 1 for the assigned tech). UtilizadoresPage rewrite works: 6 module groups render, per-module checkboxes toggle correctly, role change repopulates defaults (tecnico → only tech_portal; admin → warning banner), grupo Todos/Nenhum buttons work per group. Created UI test user with granular perms, logged in as that user — sidebar correctly filtered to only Dashboard+Propostas+Negociação (propostas group), and manual navigation to /despesas triggered [data-testid='no-permission-msg'] as expected. Regression OK: real tech (Daniel) still lands on /tech without admin badge and cannot reach /despesas or /.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results_detail": {
+    "backend_get_roles": "PASS — /api/roles returns roles[], permissions{}, all_modules[] with exactly 22 keys (matches spec), default_modules_per_role{} with correct defaults per role (admin=all True, tecnico=only tech_portal, consulta=dashboard+propostas)",
+    "backend_auth_me_module_perms": "PASS — /api/auth/me returns module_permissions field (None acceptable for admin)",
+    "backend_login_response_perms": "PASS — /api/auth/login response body includes module_permissions",
+    "backend_admin_tech_guides": "PASS — Admin JWT to GET /api/tech/transport-guides returns 7 guides (all)",
+    "backend_tech_only_own": "PASS — Tech JWT sees fewer/equal guides than admin (correct isolation)",
+    "backend_admin_tech_profile": "PASS — GET /api/tech/profile with admin JWT returns _is_admin_view=true + role=admin",
+    "backend_tech_profile_no_admin_flag": "PASS — tech's own profile does not have _is_admin_view",
+    "backend_create_user_granular_perms": "PASS — POST /api/users with module_permissions body correctly persists dashboard=true, orcamentos=true, others=false",
+    "backend_list_users_shows_perms": "PASS — GET /api/users shows module_permissions per user",
+    "backend_new_user_login_perms": "PASS — Newly created user can login; token's /auth/me returns module_permissions",
+    "backend_update_user_perms": "PASS — PUT /api/users/{id} updates module_permissions; verified via GET",
+    "backend_update_user_password_optional": "PASS — PUT with password field updates hash; user can login with new password",
+    "backend_non_admin_cannot_list_users": "PASS — consulta role gets 403 on GET /users",
+    "backend_delete_user": "PASS — DELETE cleans up user",
+    "backend_role_defaults_tecnico": "PASS — Creating user with role=tecnico without module_permissions body → gets tech_portal=true, dashboard=false",
+    "frontend_admin_sidebar_portal_tec": "PASS — [data-testid='nav-tech'] present in admin sidebar",
+    "frontend_admin_tech_portal_badge": "PASS — [data-testid='tech-admin-badge'] + [data-testid='tech-back-to-admin'] both visible when admin visits /tech; 7 guide cards render",
+    "frontend_voltar_to_admin": "PASS — Clicking 'Voltar ao Admin' returns to /",
+    "frontend_utilizadores_page": "PASS — [data-testid='utilizadores-page'] loads, [data-testid='new-user-btn'] opens dialog with form-name/form-email/form-password/form-role and all 22 perm-* checkboxes",
+    "frontend_role_change_repopulates_defaults": "PASS — Selecting form-role=tecnico → dashboard checkbox becomes unchecked, tech_portal becomes checked (via data-state='checked' attribute check)",
+    "frontend_admin_warning": "PASS — Selecting form-role=admin shows the 'Administrador tem acesso total' warning banner",
+    "frontend_grp_all_toggle": "PASS — Clicking [data-testid='grp-all-Financeiro'] checks all Financeiro checkboxes (verified perm-faturas becomes checked)",
+    "frontend_create_test_user": "PASS — Created teste_ui_<ts>@obelisco.pt with role=consulta via UI; toast + card appears in list",
+    "frontend_sidebar_respects_perms": "PASS — Logged in as new consulta user, sidebar shows ONLY Dashboard + Propostas + Negociação (propostas group); despesas/utilizadores/tech nav NOT rendered",
+    "frontend_route_guard": "PASS — Manually navigating to /despesas as consulta shows [data-testid='no-permission-msg']",
+    "regression_tech_login": "PASS — Daniel logs in and lands on /tech, does NOT see tech-admin-badge",
+    "regression_tech_cannot_reach_admin_routes": "PASS — /despesas and / both redirect back to /tech for real tech user"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_module_permissions.py",
+    "/app/test_reports/pytest/iter19_perms.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Sidebar.jsx canSee() has a fallback for legacy users without module_permissions that returns TRUE for every module — reasonable for migration but means any freshly-migrated non-admin user with a NULL module_permissions field will silently see everything. Consider running a one-time backfill script or defaulting to default_modules_for_role(role) on read (server already does this in GET /users but /auth/me does not fill it, so the frontend receives null and falls back to 'show all'). Suggest: /auth/me should return default_modules_for_role(role) when the user document has no module_permissions.",
+    "server.py get_current_user returns user['module_permissions'] which may be None; frontend Sidebar.canSee treats None as 'show all' (line 52). If an admin creates a user via API without body, module_permissions gets defaulted, but existing users predating this feature are still null in DB. Minor migration concern.",
+    "UtilizadoresPage grp-all/grp-none testids use raw label strings including accents (e.g. 'grp-all-Financeiro', 'grp-all-RH & Salários'). The '&' and spaces are technically valid in data-testid but selectors need escaping. Consider using slugified keys (grp-all-financeiro, grp-all-rh-salarios).",
+    "UtilizadoresPage does not validate email format on client side — backend does normalise/lowercase, but a UX hint would help.",
+    "TechProtectedRoute (App.js:80) permits admin (role==='admin') into /tech — good. But there's no visible signal to the admin that logout from tech portal returns to /admin rather than login (handled in TechLayout.handleLogout with an isAdminViewing branch — nice).",
+    "Backend create_user filters modules to only valid ALL_MODULES keys — good defensive coding. But there's no minimum-length password validation (accepts test1234, or even '1'). Consider adding a length check on UserCreate.password.",
+    "get_users skips password_hash via projection (good), but users list is capped at 100 with .to_list(100) — reasonable for now.",
+    "The consulta role default includes 'propostas: True' (line 3237 server.py) but not 'orcamentos'. Verified via UI — the newly-created consulta user sees Propostas + Negociação (both mapped to propostas mod) in sidebar. Design choice, no bug."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_module_permissions.py (NEW — 15 test cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 pytest)",
+    "frontend": "100% (all 20 UI steps pass including cross-user permission validation)"
+  },
+  "test_credentials": {
+    "admin_email": "admin@obelisco.pt",
+    "admin_password": "obelisco2024",
+    "tech_email": "d.oliveira1986@gmail.com",
+    "tech_password": "A24d22r04"
+  },
+  "seed_data_creation": "Created and deleted throughout the tests: (1) pytest created teste_consulta_<ts>@obelisco.pt (deleted at end via test), (2) pytest created TEST_tecnico_<ts>@obelisco.pt (deleted immediately), (3) UI test created teste_ui_<ts>@obelisco.pt (deleted via post-test cleanup curl). No seed data mutated. GT 2026/0007 preserved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iter19 backend endpoints (module permissions + admin-in-tech) fully validated. Test file /app/backend/tests/test_module_permissions.py is idempotent and re-run safe (uses timestamped test emails, cleans up own users). Frontend granular-perm flow verified end-to-end including sidebar filtering + route guard. No open issues on this feature. Minor recommendation to code-review: server.py /auth/me should populate module_permissions with default_modules_for_role(role) if null, to eliminate the 'legacy null → show all' fallback in Sidebar.canSee.",
+  "rca_of_the_issue": "N/A — no bugs found this iteration."
+}

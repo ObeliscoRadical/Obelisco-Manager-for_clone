@@ -1,25 +1,27 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
+// module_key mapeia para a chave em user.module_permissions
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/orcamentos', label: 'Orçamentos', icon: FileText },
-  { path: '/propostas', label: 'Propostas', icon: ClipboardList },
-  { path: '/negociacao', label: 'Negociação', icon: HandCoins },
-  { path: '/obras', label: 'Obras', icon: HardHat },
-  { path: '/agenda', label: 'Agenda', icon: CalendarDays },
-  { path: '/despesas', label: 'Despesas', icon: Receipt },
-  { path: '/custos-fixos', label: 'Custos Fixos', icon: Repeat },
-  { path: '/faturas', label: 'Faturas', icon: FileCheck },
-  { path: '/financeiro', label: 'Financeiro', icon: LineChart },
-  { path: '/ponto-equilibrio', label: 'Ponto Equilíbrio', icon: Target },
-  { path: '/contabilista', label: 'Contabilista IA', icon: BrainCircuit },
-  { path: '/relatorios', label: 'Relatórios', icon: FileBarChart },
-  { path: '/guias', label: 'Guias Transporte', icon: Truck },
-  { path: '/pipeline', label: 'Pipeline', icon: GitBranch },
+  { path: '/', label: 'Dashboard', icon: LayoutDashboard, mod: 'dashboard' },
+  { path: '/orcamentos', label: 'Orçamentos', icon: FileText, mod: 'orcamentos' },
+  { path: '/propostas', label: 'Propostas', icon: ClipboardList, mod: 'propostas' },
+  { path: '/negociacao', label: 'Negociação', icon: HandCoins, mod: 'propostas' },
+  { path: '/obras', label: 'Obras', icon: HardHat, mod: 'obras' },
+  { path: '/agenda', label: 'Agenda', icon: CalendarDays, mod: 'agenda' },
+  { path: '/despesas', label: 'Despesas', icon: Receipt, mod: 'despesas' },
+  { path: '/custos-fixos', label: 'Custos Fixos', icon: Repeat, mod: 'custos_fixos' },
+  { path: '/faturas', label: 'Faturas', icon: FileCheck, mod: 'faturas' },
+  { path: '/financeiro', label: 'Financeiro', icon: LineChart, mod: 'financeiro' },
+  { path: '/ponto-equilibrio', label: 'Ponto Equilíbrio', icon: Target, mod: 'ponto_equilibrio' },
+  { path: '/contabilista', label: 'Contabilista IA', icon: BrainCircuit, mod: 'contabilista' },
+  { path: '/relatorios', label: 'Relatórios', icon: FileBarChart, mod: 'relatorios' },
+  { path: '/guias', label: 'Guias Transporte', icon: Truck, mod: 'transporte_guias' },
+  { path: '/pipeline', label: 'Pipeline', icon: GitBranch, mod: 'obras' },
+  { path: '/tech', label: 'Portal Técnico', icon: Wrench, mod: 'tech_portal' },
 ];
 
 const externalItems = [
@@ -27,21 +29,29 @@ const externalItems = [
 ];
 
 const salariosItems = [
-  { path: '/funcionarios', label: 'Funcionários', icon: Wallet },
-  { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2 },
-  { path: '/processamento-salarial', label: 'Processamento', icon: Calculator },
-  { path: '/creditos', label: 'Créditos', icon: PiggyBank },
-  { path: '/config-salariais', label: 'Config. Salariais', icon: Coins },
+  { path: '/funcionarios', label: 'Funcionários', icon: Wallet, mod: 'funcionarios' },
+  { path: '/assiduidade', label: 'Assiduidade', icon: CalendarCheck2, mod: 'assiduidade' },
+  { path: '/processamento-salarial', label: 'Processamento', icon: Calculator, mod: 'salarios' },
+  { path: '/creditos', label: 'Créditos', icon: PiggyBank, mod: 'salarios' },
+  { path: '/config-salariais', label: 'Config. Salariais', icon: Coins, mod: 'salarios' },
 ];
 
 const adminItems = [
-  { path: '/materiais', label: 'Materiais', icon: Package },
-  { path: '/mao-de-obra', label: 'Mão de Obra', icon: Users },
-  { path: '/produtividades', label: 'Produtividades', icon: Timer },
-  { path: '/utilizadores', label: 'Utilizadores', icon: UserCog },
-  { path: '/biblioteca', label: 'Biblioteca', icon: BookOpen },
-  { path: '/definicoes', label: 'Definições', icon: Settings },
+  { path: '/materiais', label: 'Materiais', icon: Package, mod: 'materiais' },
+  { path: '/mao-de-obra', label: 'Mão de Obra', icon: Users, mod: 'materiais' },
+  { path: '/produtividades', label: 'Produtividades', icon: Timer, mod: 'materiais' },
+  { path: '/utilizadores', label: 'Utilizadores', icon: UserCog, mod: 'utilizadores' },
+  { path: '/biblioteca', label: 'Biblioteca', icon: BookOpen, mod: 'biblioteca' },
+  { path: '/definicoes', label: 'Definições', icon: Settings, mod: 'configuracoes' },
 ];
+
+function canSee(user, mod) {
+  if (!user) return false;
+  if (user.role === 'admin') return true;
+  const perms = user.module_permissions;
+  if (!perms) return true; // legacy user without perms → mostra tudo (fallback)
+  return perms[mod] === true;
+}
 
 export default function Sidebar() {
   const location = useLocation();
@@ -72,7 +82,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-        {navItems.map(item => {
+        {navItems.filter(it => canSee(user, it.mod)).map(item => {
           const isActive = location.pathname === item.path;
           return (
             <Link
@@ -106,10 +116,12 @@ export default function Sidebar() {
           </a>
         ))}
 
-        <div className="pt-3 mt-3 border-t border-zinc-800">
-          <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salários</p>
-        </div>
-        {salariosItems.map(item => {
+        {salariosItems.filter(it => canSee(user, it.mod)).length > 0 && (
+          <div className="pt-3 mt-3 border-t border-zinc-800">
+            <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Salários</p>
+          </div>
+        )}
+        {salariosItems.filter(it => canSee(user, it.mod)).map(item => {
           const isActive = location.pathname === item.path;
           return (
             <Link
@@ -128,10 +140,12 @@ export default function Sidebar() {
           );
         })}
 
-        <div className="pt-3 mt-3 border-t border-zinc-800">
-          <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Admin</p>
-        </div>
-        {adminItems.map(item => {
+        {adminItems.filter(it => canSee(user, it.mod)).length > 0 && (
+          <div className="pt-3 mt-3 border-t border-zinc-800">
+            <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Admin</p>
+          </div>
+        )}
+        {adminItems.filter(it => canSee(user, it.mod)).map(item => {
           const isActive = location.pathname === item.path;
           return (
             <Link

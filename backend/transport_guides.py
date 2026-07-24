@@ -142,13 +142,22 @@ def create_transport_guides_router(db, get_current_user: Callable):
             raise HTTPException(status_code=401, detail="Não autenticado")
         try:
             payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
-            if payload.get("type") != "tech":
-                raise HTTPException(status_code=401, detail="Token inválido")
-            emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0})
-            if not emp or not emp.get("active", True):
-                raise HTTPException(status_code=401, detail="Funcionário inativo ou inexistente")
-            emp.pop("password_hash", None)
-            return emp
+            ttype = payload.get("type")
+            if ttype == "tech":
+                emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0})
+                if not emp or not emp.get("active", True):
+                    raise HTTPException(status_code=401, detail="Funcionário inativo ou inexistente")
+                emp.pop("password_hash", None)
+                emp["_is_admin"] = False
+                return emp
+            elif ttype == "access":
+                # Admin em modo supervisor
+                from bson import ObjectId as _OID
+                u = await db.users.find_one({"_id": _OID(payload["sub"])})
+                if not u or u.get("role") != "admin":
+                    raise HTTPException(status_code=403, detail="Sem permissão")
+                return {"id": str(u["_id"]), "name": u.get("name"), "email": u.get("email"), "role": u.get("role"), "_is_admin": True, "active": True}
+            raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
 
@@ -405,8 +414,12 @@ def create_transport_guides_router(db, get_current_user: Callable):
 
     @router.get("/tech/transport-guides")
     async def tech_list_my_guides(tech=Depends(_get_current_tech)):
-        """Lista guias atribuídas ao técnico autenticado (não rascunho)."""
-        q = {"assigned_employee_id": tech["id"], "status": {"$in": ["emitida", "em_transito", "recebida", "recebida_com_diferencas"]}}
+        """Lista guias atribuídas ao técnico autenticado (não rascunho). Admin vê TODAS."""
+        base_q = {"status": {"$in": ["emitida", "em_transito", "recebida", "recebida_com_diferencas"]}}
+        if tech.get("_is_admin"):
+            q = base_q
+        else:
+            q = {**base_q, "assigned_employee_id": tech["id"]}
         guides = await db.transport_guides.find(q, {"_id": 0}).sort("emitted_at", -1).to_list(500)
         return guides
 

@@ -76,7 +76,8 @@ async def get_current_user(request: Request):
             "id": str(user["_id"]),
             "email": user["email"],
             "name": user["name"],
-            "role": user.get("role", "user")
+            "role": user.get("role", "user"),
+            "module_permissions": user.get("module_permissions"),
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
@@ -182,6 +183,7 @@ async def login(input: LoginInput, response: Response):
         "email": user["email"],
         "name": user["name"],
         "role": user.get("role", "user"),
+        "module_permissions": user.get("module_permissions"),
         "access_token": access_token,
         "refresh_token": refresh_token,
     }
@@ -3174,18 +3176,65 @@ async def get_all_works_comparison(user=Depends(get_current_user)):
 
 # --- User Management ---
 
+# Lista completa de módulos disponíveis na app (usados para permissões granulares)
+ALL_MODULES = [
+    "dashboard",       # /
+    "orcamentos",      # /orcamentos
+    "propostas",       # /propostas
+    "obras",           # /obras
+    "pipeline",        # /pipeline
+    "materiais",       # /materiais
+    "transporte_guias",# /guias-transporte
+    "faturas",         # /faturas
+    "despesas",        # /despesas
+    "custos_fixos",    # /custos-fixos
+    "financeiro",      # /financeiro
+    "ponto_equilibrio",# /ponto-equilibrio
+    "contabilista",    # /contabilista
+    "salarios",        # /salarios
+    "funcionarios",    # /funcionarios
+    "assiduidade",     # /assiduidade
+    "agenda",          # /agenda
+    "biblioteca",      # /biblioteca
+    "relatorios",      # /relatorios
+    "tech_portal",     # /tech (portal do técnico)
+    "configuracoes",   # /definicoes, /config-*
+    "utilizadores",    # /utilizadores (só admin real)
+]
+
+
 class UserCreate(BaseModel):
     email: str
     password: str
     name: str
     role: str = "consulta"
+    module_permissions: Optional[dict] = None   # {module_key: bool}
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
     role: Optional[str] = None
     email: Optional[str] = None
+    module_permissions: Optional[dict] = None
+    password: Optional[str] = None   # opcional — só se admin quiser resetar
 
 VALID_ROLES = ["admin", "orcamentista", "comercial", "tecnico", "consulta"]
+
+# Defaults por role (usado se admin não especificar módulos)
+def default_modules_for_role(role: str) -> dict:
+    all_true = {m: True for m in ALL_MODULES}
+    if role == "admin":
+        return all_true
+    if role == "orcamentista":
+        return {**{m: False for m in ALL_MODULES},
+                "dashboard": True, "orcamentos": True, "propostas": True, "obras": True,
+                "materiais": True, "pipeline": True, "agenda": True, "biblioteca": True}
+    if role == "comercial":
+        return {**{m: False for m in ALL_MODULES},
+                "dashboard": True, "propostas": True, "obras": True, "pipeline": True, "agenda": True}
+    if role == "tecnico":
+        return {**{m: False for m in ALL_MODULES}, "tech_portal": True}
+    # consulta
+    return {**{m: False for m in ALL_MODULES}, "dashboard": True, "propostas": True}
 
 ROLE_PERMISSIONS = {
     "admin": {"view_costs": True, "view_margins": True, "view_prices": True, "edit_budgets": True, "edit_settings": True, "manage_users": True},
@@ -3200,7 +3249,14 @@ async def get_users(user=Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Sem permissao")
     users = await db.users.find({}, {"password_hash": 0}).to_list(100)
-    return [{"id": str(u["_id"]), "email": u["email"], "name": u["name"], "role": u.get("role", "consulta"), "created_at": u.get("created_at", "")} for u in users]
+    return [{
+        "id": str(u["_id"]),
+        "email": u["email"],
+        "name": u["name"],
+        "role": u.get("role", "consulta"),
+        "module_permissions": u.get("module_permissions") or default_modules_for_role(u.get("role", "consulta")),
+        "created_at": u.get("created_at", "")
+    } for u in users]
 
 @api_router.post("/users")
 async def create_user(input: UserCreate, user=Depends(get_current_user)):
@@ -3211,15 +3267,20 @@ async def create_user(input: UserCreate, user=Depends(get_current_user)):
     existing = await db.users.find_one({"email": input.email.lower().strip()})
     if existing:
         raise HTTPException(status_code=400, detail="Email já existe")
+    # Se não vier módulos, usa default do role
+    modules = input.module_permissions or default_modules_for_role(input.role)
+    # Garante que só chaves válidas ficam
+    modules = {k: bool(v) for k, v in modules.items() if k in ALL_MODULES}
     doc = {
         "email": input.email.lower().strip(),
         "password_hash": hash_password(input.password),
         "name": input.name,
         "role": input.role,
+        "module_permissions": modules,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     result = await db.users.insert_one(doc)
-    return {"id": str(result.inserted_id), "email": doc["email"], "name": doc["name"], "role": doc["role"]}
+    return {"id": str(result.inserted_id), "email": doc["email"], "name": doc["name"], "role": doc["role"], "module_permissions": modules}
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_user)):
@@ -3228,6 +3289,12 @@ async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_
     data = {k: v for k, v in input.model_dump().items() if v is not None}
     if "role" in data and data["role"] not in VALID_ROLES:
         raise HTTPException(status_code=400, detail=f"Role invalido. Usar: {VALID_ROLES}")
+    if "module_permissions" in data:
+        data["module_permissions"] = {k: bool(v) for k, v in data["module_permissions"].items() if k in ALL_MODULES}
+    if "password" in data and data["password"]:
+        data["password_hash"] = hash_password(data.pop("password"))
+    else:
+        data.pop("password", None)
     result = await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Utilizador não encontrado")
@@ -3246,7 +3313,12 @@ async def delete_user(user_id: str, user=Depends(get_current_user)):
 
 @api_router.get("/roles")
 async def get_roles(user=Depends(get_current_user)):
-    return {"roles": VALID_ROLES, "permissions": ROLE_PERMISSIONS}
+    return {
+        "roles": VALID_ROLES,
+        "permissions": ROLE_PERMISSIONS,
+        "all_modules": ALL_MODULES,
+        "default_modules_per_role": {r: default_modules_for_role(r) for r in VALID_ROLES},
+    }
 
 
 # ============================================================
