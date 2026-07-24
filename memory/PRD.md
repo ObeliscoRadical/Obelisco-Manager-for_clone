@@ -34,6 +34,21 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 24, 2026 (v25) — UI Admin do Chat com Técnicos
+- **Bug reportado**: técnicos enviavam mensagens mas o admin não tinha onde vê-las nem responder. Backend estava pronto, faltava a UI.
+- **Nova página** `/mensagens-tecnicos` (`AdminMensagensTecnicosPage.jsx`):
+  - Layout 2-colunas: lista de conversas (threads) à esquerda + conversa activa à direita
+  - Cada thread mostra avatar com iniciais, nome, preview da última mensagem, timestamp e badge vermelho com nº de não-lidas
+  - Conversa: bolhas amarelas do admin (direita) vs cinzentas do técnico (esquerda), timestamp em cada mensagem
+  - Input "Responder ao técnico…" com Enter para enviar
+  - Polling: 20s para threads, 10s para conversa activa
+  - Ao abrir uma thread → marca como lida (backend actualiza `read_by_admin: true`) → refresca contador imediatamente
+- **Sidebar**: entrada "Mensagens Técnicos" (ícone MessageSquare) na secção **Salários**, com badge vermelho de não-lidas (data-testid='sidebar-unread-badge'). Hook `useUnreadAdminMessages` faz polling a 30s.
+- **Permissões**: gated on module `funcionarios` — quem não tem essa permissão vê "Sem permissão".
+- **Testing (`testing_agent`)**: 10/10 cenários. Backend 100%, Frontend 100%. Report `/app/test_reports/iteration_21.json`.
+
+
+
 ### Jul 24, 2026 (v24) — Bug Fix: user com tech_portal permission ficava bloqueado
 - **Bug reportado**: Admin cria um user em `Utilizadores` com role='tecnico' + só `tech_portal=true` → user faz login → clica Portal Técnico → **"Sem permissão"**.
 - **Root cause**: (a) `App.js:TechProtectedRoute` só aceitava `__kind='tech'` (funcionário) OU `role='admin'`; não olhava para `module_permissions.tech_portal`. (b) Backend `get_tech_user` (em `tech_extras.py`) e `_get_current_tech` (em `transport_guides.py`) rejeitavam qualquer user da collection `users` que não tivesse `role='admin'`.

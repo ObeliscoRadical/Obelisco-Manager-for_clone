@@ -31,8 +31,10 @@ export default function AdminMensagensTecnicosPage() {
     try {
       const { data } = await api.get(`/tech/admin/messages/${empId}`);
       setMessages(data || []);
+      // Após marcar como lido, refresh à lista de threads para actualizar contadores
+      fetchThreads();
     } catch (err) { toast.error('Erro ao carregar conversa'); }
-  }, []);
+  }, [fetchThreads]);
 
   useEffect(() => {
     fetchThreads();
