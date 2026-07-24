@@ -34,6 +34,17 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 24, 2026 (v24) — Bug Fix: user com tech_portal permission ficava bloqueado
+- **Bug reportado**: Admin cria um user em `Utilizadores` com role='tecnico' + só `tech_portal=true` → user faz login → clica Portal Técnico → **"Sem permissão"**.
+- **Root cause**: (a) `App.js:TechProtectedRoute` só aceitava `__kind='tech'` (funcionário) OU `role='admin'`; não olhava para `module_permissions.tech_portal`. (b) Backend `get_tech_user` (em `tech_extras.py`) e `_get_current_tech` (em `transport_guides.py`) rejeitavam qualquer user da collection `users` que não tivesse `role='admin'`.
+- **Fix aplicado**:
+  - Frontend: `TechProtectedRoute` aceita agora `hasTechPerm = user.module_permissions?.tech_portal === true`.
+  - Backend: ambos os dependencies aceitam users-collection user com `tech_portal=true` (não só admin) e tratam-no como supervisor (`_is_admin=True` → vê todas as guias).
+- **Testing (`testing_agent_v3_fork`)**: 13/13 pytest + 7/7 UI E2E. Report `/app/test_reports/iteration_20.json`. Novo teste: `/app/backend/tests/test_tech_portal_perm_bugfix.py`.
+- **Nota importante para o utilizador**: quando cria um user em `Utilizadores` com `tech_portal=true`, ele vê **todas as guias** (modo supervisor). Para técnicos reais que devem ver **apenas as próprias guias**, use antes o módulo `Funcionários` (collection `employees`).
+
+
+
 ### Jul 24, 2026 (v23) — Permissões Granulares por Módulo + Admin no Portal Técnico
 - **Feature**: admin cria utilizadores escolhendo exactamente que módulos cada um pode ver.
 - **Backend**:
