@@ -34,6 +34,28 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 24, 2026 (v23) — Permissões Granulares por Módulo + Admin no Portal Técnico
+- **Feature**: admin cria utilizadores escolhendo exactamente que módulos cada um pode ver.
+- **Backend**:
+  - `ALL_MODULES` (22 chaves): dashboard, orcamentos, propostas, obras, pipeline, materiais, transporte_guias, faturas, despesas, custos_fixos, financeiro, ponto_equilibrio, contabilista, salarios, funcionarios, assiduidade, agenda, biblioteca, relatorios, tech_portal, configuracoes, utilizadores.
+  - `default_modules_for_role(role)` — pré-definidos por perfil (admin=todos, tecnico=só tech_portal, etc.).
+  - `UserCreate/Update` aceita `module_permissions: dict`; se ausente usa defaults do role.
+  - `/api/users` GET/POST/PUT devolve/aceita `module_permissions`.
+  - `/api/roles` devolve também `all_modules` e `default_modules_per_role`.
+  - `/api/auth/me` e login response incluem `module_permissions` (com fallback aos defaults do role — evita "legacy null → show all").
+  - `tech_extras.get_tech_user` e `transport_guides._get_current_tech` aceitam token **admin** (type=access) em modo supervisor com `_is_admin=True`.
+  - `tech_list_my_guides` devolve TODAS as guias para admin (visão global) e só as suas para o técnico.
+- **Frontend**:
+  - `UtilizadoresPage.jsx` REFEITA: dialog com 6 grupos de checkboxes (Operacional / Financeiro / RH & Salários / Materiais & Biblioteca / Portal Técnico / Admin sensível), botões "Todos"/"Nenhum" por grupo, aviso quando role=admin (acesso total), pré-população de defaults ao mudar role.
+  - `Sidebar.jsx` com `canSee(user, mod)` que filtra items + esconde headers de secção vazios + entrada nova "Portal Técnico" (ícone Wrench).
+  - `App.js`: `<ProtectedRoute module="X">` verifica `user.module_permissions[X]` e mostra ecrã "Sem permissão" (data-testid='no-permission-msg') quando não autorizado. `TechProtectedRoute` agora aceita admin.
+  - `TechLayout.jsx`: badge amarelo **ADMIN** + botão "Voltar ao Admin" quando admin visita /tech; logout do admin volta a `/` (não faz logout).
+  - `hooks/usePermissions.js`: hook `useHasPermission(mod)` para uso futuro.
+- **Testing (`testing_agent_v3_fork`)**: 15/15 pytest backend + 20/20 UI + regressão OK. Report `/app/test_reports/iteration_19.json`. Novo teste: `test_module_permissions.py`.
+- Fluxo confirmado: admin cria user "consulta" com só Dashboard+Propostas → user faz login → Sidebar mostra só esses 2 → tentar /despesas → ecrã "Sem permissão".
+
+
+
 ### Jul 24, 2026 (v22) — Portal Técnico Consolidado (2 apps → 1 domínio)
 - **Feature completa**: consolidação do tech-app-obelisco externo dentro do Obelisco Manager. Login unificado — detecta admin vs técnico e redireciona para o portal correcto.
 - **Bug crítico corrigido (P0 do iter17)**: axios interceptor destruía a sessão tech no reload por chamar refresh no 401 de /auth/me. Fix: interceptor exclui `/auth/me`, `/tech/auth/me` e qualquer `/tech/*`; AuthContext persiste `obelisco_user_kind` em localStorage.

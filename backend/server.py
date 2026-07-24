@@ -77,7 +77,7 @@ async def get_current_user(request: Request):
             "email": user["email"],
             "name": user["name"],
             "role": user.get("role", "user"),
-            "module_permissions": user.get("module_permissions"),
+            "module_permissions": user.get("module_permissions") or default_modules_for_role(user.get("role", "consulta")),
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
@@ -183,7 +183,7 @@ async def login(input: LoginInput, response: Response):
         "email": user["email"],
         "name": user["name"],
         "role": user.get("role", "user"),
-        "module_permissions": user.get("module_permissions"),
+        "module_permissions": user.get("module_permissions") or default_modules_for_role(user.get("role", "consulta")),
         "access_token": access_token,
         "refresh_token": refresh_token,
     }
