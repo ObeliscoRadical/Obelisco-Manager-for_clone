@@ -34,6 +34,26 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v27) — Caixa da Obra (Cash-flow por Obra)
+- **Pedido**: dashboard financeiro por obra — recebido, a receber, pago, a pagar, margem prevista vs real, saldo de caixa.
+- **Backend novo**: `GET /api/works/{id}/caixa` agrega:
+  - Valor venda (soma dos items do orçamento aprovado)
+  - Facturas emitidas + `payments[].amount` → `total_received`; `to_receive = invoiced - received`; `to_invoice = sale - invoiced`
+  - Despesas linked por `obra_id` (pagas vs por pagar)
+  - Custo real (items + expenses), margem prevista, margem real
+  - `cash_balance = received - expenses_paid` (dinheiro efectivo hoje)
+  - `projected_cash_balance = sale - real_cost` (se tudo cobrado e pago)
+- **Frontend novo**: `/caixa-obra` (`CaixaObraPage.jsx`)
+  - Selector de obra no topo; 4 KPIs principais (Venda / Recebido / A Receber / Caixa Efectiva)
+  - 2 barras de progresso (cobrança + custo)
+  - 3 cards de margem (Prevista / Real / Caixa Projectada)
+  - Warning banner vermelho quando margem real < 70% da prevista
+  - Listas Facturas (com "Falta X€") e Despesas (com badges PAGA / POR PAGAR) lado a lado + botões "Ver todas →"
+- **Sidebar**: entrada "Caixa da Obra" (ícone Wallet) logo abaixo de "Obras", gated on module `obras`.
+- **Testing (`testing_agent`)**: 7/7 backend pytest + 100% UI. Report `/app/test_reports/iteration_23.json`. Novo teste: `test_caixa_obra.py`. Math consistente: `cash = received - paid`, `to_receive = invoiced - received`.
+
+
+
 ### Jul 25, 2026 (v26) — Agenda: atribuição de compromissos a técnicos
 - **Pedido**: só admin cria/edita compromissos e seleciona os técnicos. Portal Técnico > Agenda passa a mostrar apenas as marcações do próprio.
 - **Backend**:
