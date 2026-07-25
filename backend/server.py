@@ -1046,15 +1046,29 @@ async def get_appointments(user=Depends(get_current_user)):
     appointments = await db.appointments.find({}, {"_id": 0}).sort("date", 1).to_list(1000)
     return appointments
 
+def _require_admin(user):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Só o administrador pode gerir agendamentos")
+
+def _overlap_query(appt, exclude_id=None):
+    """Devolve query Mongo que detecta conflitos apenas quando os employee_ids se sobrepõem."""
+    q = {
+        "date": appt.date,
+        "time_start": {"$lt": appt.time_end},
+        "time_end": {"$gt": appt.time_start},
+    }
+    if exclude_id:
+        q["id"] = {"$ne": exclude_id}
+    if appt.employee_ids:
+        q["employee_ids"] = {"$in": appt.employee_ids}
+    return q
+
 @api_router.post("/appointments")
 async def create_appointment(input: AppointmentCreate, user=Depends(get_current_user)):
-    existing = await db.appointments.find_one({
-        "date": input.date,
-        "time_start": {"$lt": input.time_end},
-        "time_end": {"$gt": input.time_start}
-    })
+    _require_admin(user)
+    existing = await db.appointments.find_one(_overlap_query(input))
     if existing:
-        raise HTTPException(status_code=400, detail="Já existe um agendamento nesse horario. Escolha outro horario.")
+        raise HTTPException(status_code=400, detail="Conflito: o(s) técnico(s) atribuído(s) já têm marcação nesse horário.")
     doc = {
         "id": str(uuid.uuid4()),
         **input.model_dump(),
@@ -1066,14 +1080,10 @@ async def create_appointment(input: AppointmentCreate, user=Depends(get_current_
 
 @api_router.put("/appointments/{appointment_id}")
 async def update_appointment(appointment_id: str, input: AppointmentCreate, user=Depends(get_current_user)):
-    existing = await db.appointments.find_one({
-        "id": {"$ne": appointment_id},
-        "date": input.date,
-        "time_start": {"$lt": input.time_end},
-        "time_end": {"$gt": input.time_start}
-    })
+    _require_admin(user)
+    existing = await db.appointments.find_one(_overlap_query(input, exclude_id=appointment_id))
     if existing:
-        raise HTTPException(status_code=400, detail="Conflito de horario com outro agendamento.")
+        raise HTTPException(status_code=400, detail="Conflito: o(s) técnico(s) atribuído(s) já têm marcação nesse horário.")
     result = await db.appointments.update_one({"id": appointment_id}, {"$set": input.model_dump()})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")
@@ -1082,6 +1092,7 @@ async def update_appointment(appointment_id: str, input: AppointmentCreate, user
 
 @api_router.delete("/appointments/{appointment_id}")
 async def delete_appointment(appointment_id: str, user=Depends(get_current_user)):
+    _require_admin(user)
     result = await db.appointments.delete_one({"id": appointment_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")

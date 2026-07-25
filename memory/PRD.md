@@ -34,6 +34,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v26) — Agenda: atribuição de compromissos a técnicos
+- **Pedido**: só admin cria/edita compromissos e seleciona os técnicos. Portal Técnico > Agenda passa a mostrar apenas as marcações do próprio.
+- **Backend**:
+  - `AppointmentCreate` estendido: `employee_ids: List[str]` + `location: str`.
+  - POST/PUT/DELETE `/api/appointments` agora exigem `role='admin'` (**403 caso contrário**).
+  - Verificação de conflito de horário agora só bloqueia se houver **sobreposição de técnicos** (`employee_ids` intersetam) — dois técnicos podem ter marcações paralelas.
+  - `GET /api/tech/appointments/my` filtra por `employee_ids: user.id` (ou tudo se admin em modo supervisor).
+- **Frontend**:
+  - `AgendaPage.jsx` refeita: checkboxes multi-select dos funcionários activos (fetch `/api/payroll/employees`), campo Local, diálogo Edit (pencil), badges amarelas nas cards a mostrar quem está atribuído.
+  - `TechAgendaPage.jsx` mostra hora início–fim + local + notas.
+- **Testing (`testing_agent`)**: 6/6 backend + 10/10 UI. Report `/app/test_reports/iteration_22.json`. Confirmado E2E: admin cria → Daniel vê no seu portal; consulta recebe 403 ao tentar criar; conflito por técnico correcto.
+
+
+
 ### Jul 24, 2026 (v25) — UI Admin do Chat com Técnicos
 - **Bug reportado**: técnicos enviavam mensagens mas o admin não tinha onde vê-las nem responder. Backend estava pronto, faltava a UI.
 - **Nova página** `/mensagens-tecnicos` (`AdminMensagensTecnicosPage.jsx`):
