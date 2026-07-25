@@ -34,6 +34,21 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v28) — Caixa da Obra: Associar Faturas & Despesas existentes
+- **Pedido**: dentro da Caixa da Obra, permitir vincular a uma obra faturas já lançadas no módulo Faturas e despesas já lançadas no módulo Despesas.
+- **Backend novo (server.py)**:
+  - `PUT /api/invoices/{id}/link-work` body `{obra_id: string|null}`
+  - `PUT /api/expenses/{id}/link-work` body `{obra_id: string|null}` (força `type="obra"` e preenche `obra_name` ao associar; limpa ao desassociar)
+  - Helper `_require_finance_module(user, "faturas"|"despesas")` — admin OU permissão do módulo
+  - 404 para obra/registo inexistente; 403 sem permissão
+- **Frontend (`CaixaObraPage.jsx`)**:
+  - Botões **+ Associar** em cada coluna (Facturas / Despesas)
+  - `LinkPickerDialog` com pesquisa, toggle "Só sem obra" ↔ "A mostrar todas"
+  - Confirmação explícita ao mover registo que já pertence a outra obra
+  - Botão de unlink por linha + confirmação
+  - Refresh automático da caixa após cada mutação
+- **Testado**: iteration_24.json — backend 9/9 pytest + frontend fluxo E2E OK.
+
 ### Jul 25, 2026 (v27) — Caixa da Obra (Cash-flow por Obra)
 - **Pedido**: dashboard financeiro por obra — recebido, a receber, pago, a pagar, margem prevista vs real, saldo de caixa.
 - **Backend novo**: `GET /api/works/{id}/caixa` agrega:

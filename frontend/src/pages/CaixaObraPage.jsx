@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HardHat,
@@ -111,7 +111,9 @@ function LinkPickerDialog({ open, onClose, kind, currentWorkId, currentWorkTitle
             {kind === 'invoice' ? <FileCheck className="h-5 w-5 text-emerald-400" /> : <Receipt className="h-5 w-5 text-red-400" />}
             {titleLabel}
           </DialogTitle>
-          <p className="text-xs text-zinc-400 mt-1">Obra: <span className="text-yellow-400">{currentWorkTitle}</span></p>
+          <DialogDescription className="text-xs text-zinc-400">
+            Obra: <span className="text-yellow-400">{currentWorkTitle}</span>
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex items-center gap-2">
@@ -158,9 +160,9 @@ function LinkPickerDialog({ open, onClose, kind, currentWorkId, currentWorkTitle
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-white font-medium truncate">{primary}</p>
                   <p className="text-[11px] text-zinc-500 truncate">{secondary}</p>
-                  {otherObra && (
+                  {it.obra_id && (
                     <Badge className="mt-1 bg-amber-500/15 text-amber-300 border-amber-500/40 text-[9px]">
-                      Actualmente em: {otherObra.title}
+                      Actualmente em: {otherObra?.title || '(obra desconhecida)'}
                     </Badge>
                   )}
                 </div>
@@ -184,13 +186,12 @@ function LinkPickerDialog({ open, onClose, kind, currentWorkId, currentWorkTitle
                 <DialogTitle className="text-white flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-amber-400" /> Trocar de obra?
                 </DialogTitle>
+                <DialogDescription className="text-sm text-zinc-300">
+                  Esta {label.toLowerCase()} já está associada à obra <span className="text-amber-300 font-medium">
+                    “{worksById[confirming.obra_id]?.title || '(obra desconhecida)'}”
+                  </span>. Confirma que quer <strong>movê-la</strong> para <span className="text-yellow-400 font-medium">“{currentWorkTitle}”</span>?
+                </DialogDescription>
               </DialogHeader>
-              <p className="text-sm text-zinc-300">
-                Esta {label.toLowerCase()} já está associada à obra <span className="text-amber-300 font-medium">
-                  “{worksById[confirming.obra_id]?.title || confirming.obra_id}”
-                </span>.<br />
-                Confirma que quer <strong>movê-la</strong> para <span className="text-yellow-400 font-medium">“{currentWorkTitle}”</span>?
-              </p>
               <DialogFooter className="gap-2">
                 <Button variant="ghost" onClick={() => setConfirming(null)} data-testid={`link-${kind}-confirm-cancel`}>Cancelar</Button>
                 <Button
@@ -460,13 +461,11 @@ export default function CaixaObraPage() {
                 <DialogTitle className="text-white flex items-center gap-2">
                   <X className="h-5 w-5 text-red-400" /> Remover associação
                 </DialogTitle>
+                <DialogDescription className="text-sm text-zinc-300">
+                  Tem a certeza que quer desassociar a {unlinking?.kind === 'invoice' ? 'fatura' : 'despesa'}{' '}
+                  <span className="text-white font-medium">“{unlinking?.name}”</span> desta obra? O registo continua no módulo respectivo, apenas fica sem obra.
+                </DialogDescription>
               </DialogHeader>
-              <p className="text-sm text-zinc-300">
-                Tem a certeza que quer desassociar a {unlinking?.kind === 'invoice' ? 'fatura' : 'despesa'}{' '}
-                <span className="text-white font-medium">“{unlinking?.name}”</span> desta obra?
-                <br />
-                <span className="text-xs text-zinc-500">O registo continua no módulo respectivo, apenas fica sem obra.</span>
-              </p>
               <DialogFooter className="gap-2">
                 <Button variant="ghost" onClick={() => setUnlinking(null)} data-testid="unlink-cancel">Cancelar</Button>
                 <Button
