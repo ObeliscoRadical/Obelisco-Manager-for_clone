@@ -953,6 +953,127 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
     cash_balance = round(total_received - expenses_paid, 2)  # dinheiro efectivo
     projected_cash_balance = round(sale_total - real_total_cost, 2)  # se tudo for cobrado/pago
 
+    # ---- ALERTAS por obra ----
+    today = datetime.now(timezone.utc).date()
+    alerts = []
+
+    # (a) Margem real muito abaixo da prevista
+    if margin_predicted_pct > 0 and margin_real_pct < margin_predicted_pct * 0.7:
+        gap = round(margin_predicted_pct - margin_real_pct, 1)
+        alerts.append({
+            "code": "margem_baixa",
+            "severity": "high" if margin_real_pct < margin_predicted_pct * 0.5 else "medium",
+            "title": "Margem real abaixo do previsto",
+            "message": f"Margem real {margin_real_pct}% vs {margin_predicted_pct}% prevista ({gap}pp abaixo).",
+            "meta": {"margin_real_pct": margin_real_pct, "margin_predicted_pct": margin_predicted_pct},
+        })
+
+    # (b) Custo real ultrapassa o previsto
+    if predicted_total > 0 and real_total_cost > predicted_total:
+        overrun_pct = round((real_total_cost / predicted_total - 1) * 100, 1)
+        alerts.append({
+            "code": "custo_excedido",
+            "severity": "high" if overrun_pct > 20 else "medium",
+            "title": "Custo real acima do previsto",
+            "message": f"Custo real {round(real_total_cost, 2)}€ excede o previsto em {overrun_pct}% (+{round(real_total_cost - predicted_total, 2)}€).",
+            "meta": {"real_total_cost": real_total_cost, "predicted_total": predicted_total, "overrun_pct": overrun_pct},
+        })
+
+    # (c) Facturas vencidas
+    overdue_inv = []
+    for inv in invoices:
+        total_i = float(inv.get("value_total") or 0)
+        paid_i = sum(float(p.get("amount") or 0) for p in (inv.get("payments") or []))
+        balance_i = round(total_i - paid_i, 2)
+        due = inv.get("due_date") or ""
+        if balance_i > 0.01 and due:
+            try:
+                due_d = datetime.fromisoformat(due).date() if "T" in due else datetime.strptime(due[:10], "%Y-%m-%d").date()
+                if due_d < today:
+                    overdue_inv.append({
+                        "id": inv.get("id"), "number": inv.get("number"),
+                        "balance": balance_i, "days_overdue": (today - due_d).days,
+                    })
+            except Exception:
+                pass
+    if overdue_inv:
+        total_owed = round(sum(x["balance"] for x in overdue_inv), 2)
+        max_days = max(x["days_overdue"] for x in overdue_inv)
+        alerts.append({
+            "code": "faturas_vencidas",
+            "severity": "high" if max_days > 30 else "medium",
+            "title": f"{len(overdue_inv)} fatura(s) vencida(s)",
+            "message": f"{total_owed}€ em dívida · atraso máx. {max_days} dia(s).",
+            "meta": {"count": len(overdue_inv), "total_owed": total_owed, "max_days_overdue": max_days, "invoices": overdue_inv},
+        })
+
+    # (d) Despesas por pagar em atraso (>30 dias após data da despesa e não pagas)
+    def _exp_paid(e):
+        if e.get("paid") is True:
+            return True
+        st = (e.get("payment_status") or "").lower()
+        return st in ("pago", "paid")
+
+    overdue_exp = []
+    for e in expenses:
+        if _exp_paid(e):
+            continue
+        d = e.get("date") or ""
+        if not d:
+            continue
+        try:
+            ed = datetime.strptime(d[:10], "%Y-%m-%d").date()
+            days_since = (today - ed).days
+            if days_since > 30:
+                overdue_exp.append({
+                    "id": e.get("id"),
+                    "supplier": e.get("supplier"),
+                    "value_gross": float(e.get("value_gross") or 0),
+                    "days_since": days_since,
+                })
+        except Exception:
+            pass
+    if overdue_exp:
+        total_exp_owed = round(sum(x["value_gross"] for x in overdue_exp), 2)
+        alerts.append({
+            "code": "despesas_atraso",
+            "severity": "medium",
+            "title": f"{len(overdue_exp)} despesa(s) por pagar >30 dias",
+            "message": f"{total_exp_owed}€ em despesas por regularizar.",
+            "meta": {"count": len(overdue_exp), "total": total_exp_owed, "expenses": overdue_exp},
+        })
+
+    # (e) Obra em curso há >30 dias sem qualquer factura emitida
+    status_l = (work.get("status") or "").lower()
+    is_active = status_l not in ("finalizado", "concluida", "concluída", "cancelada", "cancelado", "")
+    start = work.get("start_date") or ""
+    if is_active and start and len(invoices) == 0:
+        try:
+            sd = datetime.strptime(start[:10], "%Y-%m-%d").date()
+            days_running = (today - sd).days
+            if days_running > 30:
+                alerts.append({
+                    "code": "sem_faturacao",
+                    "severity": "medium",
+                    "title": "Obra em curso sem faturação",
+                    "message": f"Obra iniciada há {days_running} dias e ainda sem faturas emitidas.",
+                    "meta": {"days_running": days_running, "start_date": start},
+                })
+        except Exception:
+            pass
+
+    # (f) Grande % em dívida do que foi facturado (>50%)
+    if total_invoiced > 0:
+        debt_ratio = to_receive / total_invoiced
+        if debt_ratio > 0.5:
+            alerts.append({
+                "code": "recebimento_lento",
+                "severity": "medium",
+                "title": "Recebimento lento",
+                "message": f"{round(debt_ratio * 100, 1)}% do valor facturado ainda por receber ({round(to_receive, 2)}€ de {round(total_invoiced, 2)}€).",
+                "meta": {"debt_ratio_pct": round(debt_ratio * 100, 1), "to_receive": to_receive, "total_invoiced": total_invoiced},
+            })
+
     return {
         "work": {
             "id": work.get("id"),
@@ -1002,6 +1123,7 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
             "receipts_progress_pct": round((total_received / sale_total * 100) if sale_total > 0 else 0, 1),
             "cost_progress_pct": round((real_total_cost / predicted_total * 100) if predicted_total > 0 else 0, 1),
         },
+        "alerts": alerts,
     }
 
 

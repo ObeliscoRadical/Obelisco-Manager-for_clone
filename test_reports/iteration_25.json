@@ -1,0 +1,34 @@
+{
+  "summary": "Testing completo do novo P1 'Alertas contextuais na Caixa da Obra'. Backend: 11 test cases criados em /app/backend/tests/test_caixa_obra_alerts.py (6 passed, 5 skipped por ausencia de dados naturais que disparassem alertas). O teste E2E semeado (TestAlertsSeededE2E) cria factura vencida com pagamento parcial + despesa antiga por pagar, associa a uma obra, e valida que 5 alertas aparecem: margem_baixa, custo_excedido, faturas_vencidas (severity=high, max_days>30), despesas_atraso, recebimento_lento. Verifica tambem que apos cleanup a obra volta a alerts=[]. Frontend: end-to-end com Playwright — login admin, navegacao para /caixa-obra via sidebar, selecao de obra, verificacao de data-testid='alerts-panel' + os 5 data-testid individuais (alert-margem_baixa, alert-custo_excedido, alert-faturas_vencidas, alert-despesas_atraso, alert-recebimento_lento) com titulo+message correctos, cabecalho a mostrar '3 critico(s) 2 atenção', bordas red/amber conforme severidade. warning-margem antigo confirmado com className='hidden' e is_visible()=False. Bloco alerts-none confirmado a nao aparecer quando ha alertas. Nao regressao: test_caixa_obra_link.py (associar/desassociar) continua 9/9 verde.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_caixa_obra_alerts.py",
+    "/app/backend/tests/test_caixa_obra_link.py",
+    "/app/test_reports/pytest/caixa_alerts.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py get_work_caixa (linha 907-1127) — logica de alertas esta bem isolada antes do return e devolve schema consistente {code, severity, title, message, meta}. Boa pratica.",
+    "Alerta 'sem_faturacao' so verifica start_date com formato ISO 'YYYY-MM-DD' via strptime(start[:10]); caso start_date venha em outro formato o try/except silencia. Aceitavel para MVP.",
+    "AlertsPanel (CaixaObraPage.jsx L214-262): SEVERITY_STYLE cobre high/medium/low e faz fallback para medium se severidade desconhecida — resiliente. Uso correcto de data-testid dinamico alert-{code}.",
+    "Dashboard mantem o seu proprio bloco 'ALERTAS' (get_dashboard endpoint) — nao regride. Requisito do utilizador de mostrar novos alertas 'apenas na Caixa da Obra' foi respeitado."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_caixa_obra_alerts.py (novo, 11 test cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 passed, 5 skipped por ausencia de dados naturais — coberto pelo E2E semeado)",
+    "frontend": "100% flows criticos (alerts-panel, 5 codigos individuais, cabecalho de contadores, cleanup->alerts-none)"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Test semeia 1 factura (TEST_UI_ALERT / TEST_ALERT_CLIENT) 1230€ com pagamento parcial 500€ e due_date -45 dias + 1 despesa (TEST_UI_EXP / TEST_ALERT_EXPENSE) 300€ com date -60 dias, ambos associados a works[0]. Cleanup completo (unlink + delete) executado em bloco finally e verificado — apos teste alerts volta a [].",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_caixa_obra_alerts.py e reutilizavel — inclui: (a) TestAlertsSchema valida shape em todas as obras existentes, (b) TestAlertsSemantic — testes semanticos que fazem skip se nao ha alertas naturais, (c) TestAlertsSeededE2E — teste que semeia e verifica os 5 codigos + cleanup, (d) TestAlertsErrorPaths 404, (e) TestAlertsGlobalStats — puramente informativo. O alerta sem_faturacao requer work com start_date preenchido + status activo (nao 'finalizado'/'concluida'/'cancelada') + 0 facturas + >30 dias desde start; nenhuma obra actual satisfaz simultaneamente start_date preenchido e status activo diferente de 'orcamento' — nao foi testado com dados reais.",
+  "rca of the issue": "N/A — feature funciona conforme especificado. Zero bugs bloqueantes."
+}

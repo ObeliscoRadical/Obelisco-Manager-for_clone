@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HardHat,
   Receipt, FileCheck, Clock, PiggyBank, Target, Plus, Unlink, Search, X,
+  Siren, BellRing,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -210,6 +211,58 @@ function LinkPickerDialog({ open, onClose, kind, currentWorkId, currentWorkTitle
   );
 }
 
+const SEVERITY_STYLE = {
+  high:   { border: 'border-red-800',    bg: 'bg-red-950/50',    text: 'text-red-200',    dot: 'text-red-400',    Icon: Siren        },
+  medium: { border: 'border-amber-800',  bg: 'bg-amber-950/40',  text: 'text-amber-100',  dot: 'text-amber-400',  Icon: AlertTriangle},
+  low:    { border: 'border-blue-800',   bg: 'bg-blue-950/40',   text: 'text-blue-100',   dot: 'text-blue-400',   Icon: BellRing     },
+};
+
+function AlertsPanel({ alerts }) {
+  if (!alerts || alerts.length === 0) {
+    return (
+      <div className="p-3 rounded-lg bg-emerald-950/30 border border-emerald-900/60 flex items-center gap-2" data-testid="alerts-none">
+        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <p className="text-xs text-emerald-200">Sem alertas nesta obra — tudo sob controlo.</p>
+      </div>
+    );
+  }
+  const counts = alerts.reduce((acc, a) => { acc[a.severity] = (acc[a.severity] || 0) + 1; return acc; }, {});
+  return (
+    <Card className="bg-zinc-900 border-zinc-800" data-testid="alerts-panel">
+      <CardHeader className="pb-2 flex-row items-center justify-between">
+        <CardTitle className="text-sm text-white flex items-center gap-2">
+          <Siren className="h-4 w-4 text-red-400" /> Alertas da Obra
+          <Badge className="bg-zinc-800 text-zinc-300 text-[10px] ml-1">{alerts.length}</Badge>
+        </CardTitle>
+        <div className="text-[10px] text-zinc-500 flex gap-2">
+          {counts.high   && <span className="text-red-400">● {counts.high} crítico(s)</span>}
+          {counts.medium && <span className="text-amber-400">● {counts.medium} atenção</span>}
+          {counts.low    && <span className="text-blue-400">● {counts.low} info</span>}
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-2">
+        {alerts.map((a, i) => {
+          const s = SEVERITY_STYLE[a.severity] || SEVERITY_STYLE.medium;
+          const Icon = s.Icon;
+          return (
+            <div
+              key={`${a.code}-${i}`}
+              data-testid={`alert-${a.code}`}
+              className={`p-3 rounded-lg border ${s.border} ${s.bg} flex items-start gap-3`}
+            >
+              <Icon className={`h-4 w-4 flex-shrink-0 mt-0.5 ${s.dot}`} />
+              <div className="min-w-0 flex-1">
+                <p className={`text-sm font-semibold ${s.text}`}>{a.title}</p>
+                <p className="text-xs text-zinc-400 mt-0.5">{a.message}</p>
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function CaixaObraPage() {
   const nav = useNavigate();
   const [works, setWorks] = useState([]);
@@ -296,6 +349,8 @@ export default function CaixaObraPage() {
             <KPI testid="kpi-cash-balance" label="Caixa Efectiva" value={fmt0(caixa.caixa.cash_balance)} icon={PiggyBank} color={cashColor} hint="recebido − pago" />
           </div>
 
+          <AlertsPanel alerts={caixa.alerts || []} />
+
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-white">Progresso Financeiro</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -325,12 +380,7 @@ export default function CaixaObraPage() {
           </div>
 
           {caixa.resumo.margin_real_pct < caixa.resumo.margin_predicted_pct * 0.7 && caixa.resumo.margin_predicted_pct > 0 && (
-            <div className="p-3 rounded-lg bg-red-950/40 border border-red-800 flex items-start gap-2" data-testid="warning-margem">
-              <AlertTriangle className="h-4 w-4 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-red-200">
-                <strong>Atenção:</strong> a margem real está a {pct(caixa.resumo.margin_real_pct)} vs {pct(caixa.resumo.margin_predicted_pct)} prevista — {pct(caixa.resumo.margin_predicted_pct - caixa.resumo.margin_real_pct)} abaixo do orçamentado.
-              </p>
-            </div>
+            <div className="hidden" data-testid="warning-margem" />
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
