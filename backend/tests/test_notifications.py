@@ -181,12 +181,12 @@ class TestAppointmentHooks:
 
     def test_update_appt_notifies_alterada(self, created_appt, admin_h, tech_h):
         # Altera título/horário → deve gerar 'Marcação alterada'
-        new_start = datetime.fromisoformat(created_appt["start_at"]) + timedelta(hours=1)
+        # AppointmentCreate usa date+time_start+time_end (não start_at/end_at)
+        base_dt = datetime.fromisoformat(f"{created_appt['date']}T{created_appt['time_start']}")
+        new_start = base_dt + timedelta(hours=1)
         new_end = new_start + timedelta(hours=2)
         payload = {
             "title": "TEST_notif_appt (alterada)",
-            "start_at": new_start.isoformat(),
-            "end_at": new_end.isoformat(),
             "date": new_start.date().isoformat(),
             "time_start": new_start.strftime("%H:%M"),
             "time_end": new_end.strftime("%H:%M"),

@@ -1414,11 +1414,12 @@ async def create_appointment(input: AppointmentCreate, user=Depends(get_current_
     await db.appointments.insert_one(doc)
     doc.pop("_id", None)
     # Notificar os técnicos atribuídos
+    when_label = f"{input.date} {input.time_start}"
     for emp_id in (input.employee_ids or []):
         await create_notification(
             db, user_id=emp_id, user_kind="employee", type="agenda",
             title="Nova marcação atribuída",
-            message=f"{input.title} — {input.start_at[:16].replace('T', ' ')}",
+            message=f"{input.title} — {when_label}",
             link="/tech/agenda",
             meta={"appointment_id": doc["id"]},
         )
@@ -1435,20 +1436,26 @@ async def update_appointment(appointment_id: str, input: AppointmentCreate, user
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")
     updated = await db.appointments.find_one({"id": appointment_id}, {"_id": 0})
-    # Notificar: (1) novos técnicos atribuídos -> "nova marcação"; (2) mantidos com alterações -> "alterada"
+    # Notificar
     old_ids = set(before.get("employee_ids") or [])
     new_ids = set(input.employee_ids or [])
+    when_label = f"{input.date} {input.time_start}"
+    changed = (
+        before.get("date") != input.date
+        or before.get("time_start") != input.time_start
+        or before.get("time_end") != input.time_end
+        or before.get("title") != input.title
+    )
     for emp_id in (new_ids - old_ids):
         await create_notification(db, user_id=emp_id, user_kind="employee", type="agenda",
             title="Nova marcação atribuída",
-            message=f"{input.title} — {input.start_at[:16].replace('T', ' ')}",
+            message=f"{input.title} — {when_label}",
             link="/tech/agenda", meta={"appointment_id": appointment_id})
     for emp_id in (new_ids & old_ids):
-        # Só notificar se algo relevante mudou (horário/título)
-        if before.get("start_at") != input.start_at or before.get("end_at") != input.end_at or before.get("title") != input.title:
+        if changed:
             await create_notification(db, user_id=emp_id, user_kind="employee", type="agenda",
                 title="Marcação alterada",
-                message=f"{input.title} — {input.start_at[:16].replace('T', ' ')}",
+                message=f"{input.title} — {when_label}",
                 link="/tech/agenda", meta={"appointment_id": appointment_id})
     for emp_id in (old_ids - new_ids):
         await create_notification(db, user_id=emp_id, user_kind="employee", type="agenda",
@@ -1464,10 +1471,11 @@ async def delete_appointment(appointment_id: str, user=Depends(get_current_user)
     result = await db.appointments.delete_one({"id": appointment_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Agendamento não encontrado")
+    when_label = f"{before.get('date', '')} {before.get('time_start', '')}".strip()
     for emp_id in (before.get("employee_ids") or []):
         await create_notification(db, user_id=emp_id, user_kind="employee", type="agenda",
             title="Marcação cancelada",
-            message=f"{before.get('title', 'Marcação')} — {(before.get('start_at') or '')[:16].replace('T', ' ')}",
+            message=f"{before.get('title', 'Marcação')} — {when_label}",
             link="/tech/agenda", meta={"appointment_id": appointment_id})
     return {"message": "Agendamento eliminado"}
 
@@ -4237,7 +4245,8 @@ from notifications import create_notifications_router, create_notification, noti
 from tech_extras import _get_tech_user_dep  # já usado internamente
 
 async def _get_admin_users():
-    return await db.users.find({"role": "admin"}, {"_id": 0, "id": 1, "name": 1}).to_list(100)
+    admins = await db.users.find({"role": "admin"}, {"password_hash": 0}).to_list(100)
+    return [{"id": str(a.get("_id") or a.get("id") or ""), "name": a.get("name")} for a in admins if (a.get("_id") or a.get("id"))]
 
 _notif_router, _notif_tech_router = create_notifications_router(db, get_current_user, _get_tech_user_dep(db))
 app.include_router(_notif_router)

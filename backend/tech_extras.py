@@ -228,18 +228,22 @@ def create_tech_extras_router(db, get_current_user):
         # Notificar todos os admins
         try:
             from notifications import create_notification
-            admins = await db.users.find({"role": "admin"}, {"_id": 0, "id": 1}).to_list(50)
+            admins = await db.users.find({"role": "admin"}, {"password_hash": 0}).to_list(50)
             preview = (input.text or "")[:80]
             for a in admins:
+                admin_id = str(a.get("_id") or a.get("id") or "")
+                if not admin_id:
+                    continue
                 await create_notification(
-                    db, user_id=a["id"], user_kind="user", type="chat",
+                    db, user_id=admin_id, user_kind="user", type="chat",
                     title=f"Nova mensagem de {user.get('name', 'técnico')}",
                     message=preview,
                     link="/mensagens-tecnicos",
                     meta={"employee_id": emp_id, "message_id": doc["id"]},
                 )
-        except Exception:
-            pass
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"notify admins on tech message failed: {e}")
         return doc
 
     # Admin: ver todas as threads
@@ -304,8 +308,9 @@ def create_tech_extras_router(db, get_current_user):
                 link="/tech/chat",
                 meta={"message_id": doc["id"]},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"notify tech on admin message failed: {e}")
         return doc
 
     # ============================================================

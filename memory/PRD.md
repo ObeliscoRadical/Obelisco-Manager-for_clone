@@ -34,6 +34,16 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v32) — Bug Fix: Notificações agenda + chat
+- **Bug 1 CRITICAL** (`server.py`): POST/PUT `/api/appointments` davam HTTP 500 (`AttributeError: start_at`). O hook de notificações assumia `AppointmentCreate.start_at/end_at` mas o model usa `date+time_start+time_end`. Corrigido para construir label `f"{date} {time_start}"` e comparar `date/time_start/time_end` no PUT.
+- **Bug 2 HIGH** (`tech_extras.py`): chat técnico → admin nunca notificava admins. A query projetava `{_id:0, id:1}` mas `users` só tem `_id` (ObjectId). Corrigido para `str(u['_id'])`. Aplicado o mesmo fix em `_get_admin_users` (`server.py`).
+- Também substituídos `except Exception: pass` silenciosos por `logger.warning`.
+- **Testado**: 17/17 pytest verde (`backend/tests/test_notifications.py`). E2E via curl: POST/PUT/DELETE appointments 200; tech→admin gera notificação chat visível no bell do admin.
+
+### Jul 25, 2026 (v31) — Bug Fix: Caixa da Obra não assumia valores da proposta
+- Obra criada a partir de proposta ficava sem `items[]` → `sale_total=0` na Caixa.
+- Fix em `create_work_from_proposal` (auto-popula items do budget na criação) + auto-sync em `get_work_caixa` (repara obras antigas). Testado ponta-a-ponta.
+
 ### Jul 25, 2026 (v30) — Importar Proposta Antiga (PDF) com IA
 - **Pedido**: importar propostas antigas em PDF e o IA converte para o formato atual (Orçamento + 3 Propostas).
 - **Backend novo (`/app/backend/proposal_import.py`)**:
