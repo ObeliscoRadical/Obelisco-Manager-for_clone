@@ -160,6 +160,8 @@ class AppointmentCreate(BaseModel):
     time_start: str
     time_end: str
     notes: str = ""
+    employee_ids: List[str] = []      # Técnicos atribuídos a este compromisso
+    location: str = ""
 
 
 # --- Auth Endpoints ---

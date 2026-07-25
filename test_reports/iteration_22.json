@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 22: Full E2E test of Agenda employee_ids + location feature. Backend (6/6 pytest passing) + Frontend (all 10 review scenarios verified via Playwright). Admin creates appointment with Daniel assigned + location → card shows yellow Daniel Oliveira badge + location. Edit dialog pre-fills, time change persists. Tech portal (Daniel) sees ONLY his appointment via /api/tech/appointments/my with time_start—time_end + location. Non-Daniel appts filtered out. Admin sees ALL on tech endpoint. Backward compat (missing employee_ids) OK. Cleanup executed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_agenda_employee_ids.py",
+    "/app/test_reports/pytest/agenda_emp.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py create_appointment: model_dump() inserts all fields but there is no admin/role check — any authenticated user (including techs via JWT) could POST /api/appointments. User story says 'somente o adm pode agendar'. Add role guard (require admin/supervisor) on POST/PUT/DELETE /api/appointments.",
+    "AppointmentCreate has no validation that employee_ids exist as real employees; invalid IDs are silently accepted. Consider validating existence to avoid orphan assignments.",
+    "Conflict check in create_appointment blocks ANY same-slot appointment globally, even if assigned to different techs. Two techs can legitimately have parallel appointments — consider scoping the overlap check by employee_ids intersection.",
+    "PUT /api/appointments/{id} uses same global overlap check — will reject valid parallel assignments across different techs.",
+    "TechAgendaPage does not show a badge or field indicating who else is assigned (multi-tech visibility). Minor UX gap.",
+    "AgendaPage employees list uses /api/payroll/employees which may include inactive; filter e.active !== false is already applied (good). Consider also filtering by role/tech flag."
+  ],
+  "updated_files": ["/app/backend/tests/test_agenda_employee_ids.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Admin admin@obelisco.pt / obelisco2024; Tech d.oliveira1986@gmail.com / A24d22r04 (Daniel emp_id=4d357339-7b7e-40bb-91fe-93109060cbda). Sourced from /app/memory/test_credentials.md.",
+  "seed_data_creation": "None persisted — all test appointments were deleted at end of tests (99_cleanup + Playwright fetch DELETE).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Agenda now supports employee_ids: List[str] + location: str. Backend endpoints: POST/PUT/DELETE /api/appointments (admin JWT), GET /api/tech/appointments/my filters by employee_ids containing user.id (or all for _is_admin). Frontend data-testids: agenda-page, new-appointment-btn, appointment-title-input, appointment-start-time, appointment-end-time, save-appointment-btn, assign-emp-{empId}, appt-card-{id}, edit-appt-{id}, delete-appointment-{id}, tech-agenda-page, tech-appt-{id}. NOTE: POST/PUT /appointments currently has NO role check — any authenticated user could create. Recommend main agent add admin role guard.",
+  "verified_scenarios": [
+    "POST /api/appointments with employee_ids + location returns 200 and persists both",
+    "PUT /api/appointments/{id} updates employee_ids + location + time",
+    "GET /api/tech/appointments/my as Daniel returns only appts where his id in employee_ids",
+    "GET /api/tech/appointments/my as admin returns ALL 30-day appts",
+    "Admin /agenda page loads with 'Novo Agendamento' button",
+    "New appointment dialog shows Daniel Oliveira as assign-emp checkbox",
+    "Saved appointment card shows yellow Daniel Oliveira badge + location (Av Testing UI 42)",
+    "Edit dialog pre-fills title + location + times, changes persist",
+    "Tech portal /tech/agenda shows admin-created appt with time_start—time_end and location",
+    "Backward compat GET /api/appointments returns list without crashing on missing employee_ids",
+    "Cleanup deleted all TEST_ appointments"
+  ]
+}

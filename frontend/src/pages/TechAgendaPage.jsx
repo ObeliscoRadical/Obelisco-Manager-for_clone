@@ -59,9 +59,15 @@ export default function TechAgendaPage() {
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <p className="text-sm font-medium text-white">{a.title || 'Compromisso'}</p>
-                  <p className="text-xs text-zinc-400 mt-0.5">{a.description}</p>
-                  <div className="flex items-center gap-3 mt-1.5 text-[11px] text-zinc-500">
-                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(a.date).toLocaleDateString('pt-PT')} {a.time || ''}</span>
+                  {a.client_name && <p className="text-xs text-zinc-400">{a.client_name}</p>}
+                  {a.notes && <p className="text-xs text-zinc-400 mt-0.5">{a.notes}</p>}
+                  <div className="flex flex-wrap items-center gap-3 mt-1.5 text-[11px] text-zinc-500">
+                    <span className="flex items-center gap-1"><Calendar className="h-3 w-3" /> {new Date(a.date).toLocaleDateString('pt-PT')}</span>
+                    {(a.time_start || a.time_end) && (
+                      <span className="flex items-center gap-1 text-yellow-400 font-mono">
+                        {a.time_start || ''}{a.time_end ? ` — ${a.time_end}` : ''}
+                      </span>
+                    )}
                     {a.location && <span className="flex items-center gap-1"><MapPin className="h-3 w-3" /> {a.location}</span>}
                   </div>
                 </div>

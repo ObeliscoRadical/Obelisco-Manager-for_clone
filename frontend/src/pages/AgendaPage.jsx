@@ -4,77 +4,116 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Trash2, Clock, CalendarDays } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+const emptyForm = { title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '', employee_ids: [], location: '' };
+
 export default function AgendaPage() {
   const [appointments, setAppointments] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '' });
+  const [editingId, setEditingId] = useState(null);
+  const [form, setForm] = useState(emptyForm);
 
-  const fetchAppointments = useCallback(async () => {
-    try { const { data } = await api.get('/appointments'); setAppointments(data); }
-    catch (err) {
-      console.error('Appointments fetch error:', err.message);
-      toast.error('Erro ao carregar agenda');
-    }
+  const fetchAll = useCallback(async () => {
+    try {
+      const [apts, emps] = await Promise.all([
+        api.get('/appointments'),
+        api.get('/payroll/employees').catch(() => ({ data: [] })),
+      ]);
+      setAppointments(apts.data);
+      setEmployees((emps.data || []).filter(e => e.active !== false));
+    } catch (err) { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
-  const dayAppointments = appointments.filter(a => a.date === selectedDateStr);
+  const dayAppointments = appointments.filter(a => a.date === selectedDateStr)
+    .sort((a, b) => (a.time_start || '').localeCompare(b.time_start || ''));
 
-  // Dates that have appointments
   const appointmentDates = [...new Set(appointments.map(a => a.date))];
-
   const calendarModifiers = useMemo(() => ({
     hasAppointment: appointmentDates.map(d => new Date(d + 'T00:00:00')),
   }), [appointmentDates]);
-
   const calendarModifiersStyles = useMemo(() => ({
     hasAppointment: { fontWeight: 'bold', textDecoration: 'underline', textDecorationColor: '#FACC15' },
   }), []);
 
+  const empName = (id) => employees.find(e => e.id === id)?.name || 'Funcionário';
+
   const openNew = () => {
-    setForm({ title: '', client_name: '', date: selectedDateStr, time_start: '09:00', time_end: '10:00', notes: '' });
+    setEditingId(null);
+    setForm({ ...emptyForm, date: selectedDateStr });
     setDialogOpen(true);
+  };
+
+  const openEdit = (a) => {
+    setEditingId(a.id);
+    setForm({
+      title: a.title || '',
+      client_name: a.client_name || '',
+      date: a.date,
+      time_start: a.time_start || '09:00',
+      time_end: a.time_end || '10:00',
+      notes: a.notes || '',
+      employee_ids: a.employee_ids || [],
+      location: a.location || '',
+    });
+    setDialogOpen(true);
+  };
+
+  const toggleEmp = (id) => {
+    setForm(prev => ({
+      ...prev,
+      employee_ids: prev.employee_ids.includes(id)
+        ? prev.employee_ids.filter(x => x !== id)
+        : [...prev.employee_ids, id],
+    }));
   };
 
   const handleSave = async () => {
     if (!form.title || !form.date || !form.time_start || !form.time_end) {
-      toast.error('Preencha todos os campos obrigatorios');
+      toast.error('Preencha título, data e horas');
       return;
     }
     try {
-      await api.post('/appointments', form);
-      toast.success('Agendamento criado');
+      if (editingId) {
+        await api.put(`/appointments/${editingId}`, form);
+        toast.success('Agendamento actualizado');
+      } else {
+        await api.post('/appointments', form);
+        toast.success('Agendamento criado');
+      }
       setDialogOpen(false);
-      fetchAppointments();
+      fetchAll();
     } catch (err) {
       const detail = err.response?.data?.detail;
-      toast.error(typeof detail === 'string' ? detail : 'Erro ao criar agendamento');
+      toast.error(typeof detail === 'string' ? detail : 'Erro ao guardar agendamento');
     }
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Eliminar este agendamento?')) return;
-    try { await api.delete(`/appointments/${id}`); toast.success('Agendamento eliminado'); fetchAppointments(); }
+    try { await api.delete(`/appointments/${id}`); toast.success('Eliminado'); fetchAll(); }
     catch { toast.error('Erro ao eliminar'); }
   };
 
   return (
     <div data-testid="agenda-page" className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Agenda</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Gerencie os seus compromissos</p>
+          <p className="text-zinc-400 mt-1 font-medium">Marcações da equipa. Os técnicos vêem os seus compromissos no Portal Técnico → Agenda.</p>
         </div>
         <Button data-testid="new-appointment-btn" onClick={openNew} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
           <Plus size={18} className="mr-2" /> Novo Agendamento
@@ -84,29 +123,19 @@ export default function AgendaPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
         <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
           <CardContent className="p-4">
-            <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={(d) => d && setSelectedDate(d)}
-              className="rounded-2xl"
-              modifiers={calendarModifiers}
-              modifiersStyles={calendarModifiersStyles}
-            />
+            <Calendar mode="single" selected={selectedDate} onSelect={(d) => d && setSelectedDate(d)}
+              className="rounded-2xl" modifiers={calendarModifiers} modifiersStyles={calendarModifiersStyles} />
           </CardContent>
         </Card>
 
         <div>
           <div className="flex items-center gap-3 mb-4">
             <CalendarDays size={20} className="text-yellow-400" />
-            <h2 className="text-xl font-black uppercase tracking-tight text-white">
-              {format(selectedDate, 'dd/MM/yyyy')}
-            </h2>
+            <h2 className="text-xl font-black uppercase tracking-tight text-white">{format(selectedDate, 'dd/MM/yyyy')}</h2>
             <span className="text-zinc-500 text-sm">({dayAppointments.length} agendamento{dayAppointments.length !== 1 ? 's' : ''})</span>
           </div>
 
-          {loading && (
-            <div className="flex justify-center py-8"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
-          )}
+          {loading && <div className="flex justify-center py-8"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>}
           {!loading && dayAppointments.length === 0 && (
             <div className="text-center py-12 text-zinc-500 bg-zinc-900 rounded-3xl border border-zinc-800">
               <Clock size={36} className="mx-auto mb-3 text-zinc-700" />
@@ -115,23 +144,34 @@ export default function AgendaPage() {
           )}
           {!loading && dayAppointments.length > 0 && (
             <div className="space-y-3">
-              {dayAppointments.sort((a, b) => a.time_start.localeCompare(b.time_start)).map(a => (
-                <Card key={a.id} className="bg-zinc-900 border-zinc-800 rounded-2xl hover:shadow-[0_0_15px_rgba(250,204,21,0.1)] transition-all duration-300">
-                  <CardContent className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="bg-yellow-400/10 text-yellow-400 rounded-xl px-3 py-2 text-center">
+              {dayAppointments.map(a => (
+                <Card key={a.id} className="bg-zinc-900 border-zinc-800 rounded-2xl hover:shadow-[0_0_15px_rgba(250,204,21,0.1)] transition-all" data-testid={`appt-card-${a.id}`}>
+                  <CardContent className="p-4 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-4 flex-1">
+                      <div className="bg-yellow-400/10 text-yellow-400 rounded-xl px-3 py-2 text-center flex-shrink-0">
                         <p className="text-sm font-bold">{a.time_start}</p>
                         <p className="text-xs text-zinc-500">{a.time_end}</p>
                       </div>
-                      <div>
+                      <div className="flex-1">
                         <p className="font-semibold text-white">{a.title}</p>
                         {a.client_name && <p className="text-sm text-zinc-400">{a.client_name}</p>}
+                        {a.location && <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1"><MapPin size={11} /> {a.location}</p>}
                         {a.notes && <p className="text-xs text-zinc-600 mt-1">{a.notes}</p>}
+                        {(a.employee_ids || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(a.employee_ids || []).map(id => (
+                              <Badge key={id} className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 text-[10px]">
+                                <Users size={9} className="mr-1" /> {empName(id)}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <button data-testid={`delete-appointment-${a.id}`} onClick={() => handleDelete(a.id)} className="text-zinc-600 hover:text-red-400 p-2 transition">
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex flex-col gap-1">
+                      <button onClick={() => openEdit(a)} data-testid={`edit-appt-${a.id}`} className="text-zinc-500 hover:text-yellow-400 p-1.5 rounded hover:bg-zinc-800"><Pencil size={14} /></button>
+                      <button onClick={() => handleDelete(a.id)} data-testid={`delete-appointment-${a.id}`} className="text-zinc-500 hover:text-red-400 p-1.5 rounded hover:bg-zinc-800"><Trash2 size={14} /></button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -141,40 +181,78 @@ export default function AgendaPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-md">
+        <DialogContent className="bg-zinc-950 border-zinc-800 rounded-3xl max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">Novo Agendamento</DialogTitle>
-            <DialogDescription className="text-zinc-500 text-sm">Crie um novo agendamento na sua agenda</DialogDescription>
+            <DialogTitle className="text-2xl font-black uppercase tracking-tight text-white">
+              {editingId ? 'Editar Agendamento' : 'Novo Agendamento'}
+            </DialogTitle>
+            <DialogDescription className="text-zinc-500 text-sm">
+              Atribua o compromisso a um ou mais técnicos — vai aparecer no Portal Técnico deles.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
-              <Label className="text-zinc-300 text-sm">Titulo *</Label>
-              <Input data-testid="appointment-title-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Visita tecnica" />
+              <Label className="text-zinc-300 text-sm">Título *</Label>
+              <Input data-testid="appointment-title-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
+                className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Ex: Visita técnica" />
             </div>
-            <div>
-              <Label className="text-zinc-300 text-sm">Cliente</Label>
-              <Input value={form.client_name} onChange={e => setForm({ ...form, client_name: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
-            </div>
-            <div>
-              <Label className="text-zinc-300 text-sm">Data *</Label>
-              <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-zinc-300 text-sm">Hora Início *</Label>
+                <Label className="text-zinc-300 text-sm">Cliente</Label>
+                <Input value={form.client_name} onChange={e => setForm({ ...form, client_name: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
+              </div>
+              <div>
+                <Label className="text-zinc-300 text-sm">Local</Label>
+                <Input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="Morada ou obra" className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <Label className="text-zinc-300 text-sm">Data *</Label>
+                <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
+              </div>
+              <div>
+                <Label className="text-zinc-300 text-sm">Início *</Label>
                 <Input data-testid="appointment-start-time" type="time" value={form.time_start} onChange={e => setForm({ ...form, time_start: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
               </div>
               <div>
-                <Label className="text-zinc-300 text-sm">Hora Fim *</Label>
+                <Label className="text-zinc-300 text-sm">Fim *</Label>
                 <Input data-testid="appointment-end-time" type="time" value={form.time_end} onChange={e => setForm({ ...form, time_end: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
               </div>
             </div>
+
+            {/* Atribuir a Técnicos */}
+            <div className="pt-2">
+              <Label className="text-zinc-300 text-sm flex items-center gap-2 mb-2">
+                <Users size={14} className="text-yellow-400" /> Atribuir a técnico(s) *
+              </Label>
+              <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 max-h-40 overflow-y-auto">
+                {employees.length === 0 && <p className="text-xs text-zinc-500 italic">Sem funcionários activos. Crie primeiro em Funcionários.</p>}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                  {employees.map(emp => (
+                    <label key={emp.id} data-testid={`assign-emp-${emp.id}`}
+                      className="flex items-center gap-2 p-2 rounded hover:bg-zinc-800/50 cursor-pointer">
+                      <Checkbox checked={form.employee_ids.includes(emp.id)} onCheckedChange={() => toggleEmp(emp.id)} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-zinc-200 truncate">{emp.name}</p>
+                        <p className="text-[10px] text-zinc-500 truncate">{emp.role || 'Técnico'}</p>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              {form.employee_ids.length > 0 && (
+                <p className="text-[11px] text-yellow-400 mt-1">{form.employee_ids.length} técnico(s) seleccionado(s)</p>
+              )}
+            </div>
+
             <div>
               <Label className="text-zinc-300 text-sm">Notas</Label>
-              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" placeholder="Observações..." />
+              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observações…" className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
             </div>
+
             <Button data-testid="save-appointment-btn" onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
-              Criar Agendamento
+              {editingId ? 'Guardar Alterações' : 'Criar Agendamento'}
             </Button>
           </div>
         </DialogContent>
