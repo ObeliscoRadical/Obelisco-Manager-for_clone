@@ -801,12 +801,36 @@ async def create_work_from_proposal(proposal_id: str, user=Depends(get_current_u
     proposal = await db.proposals.find_one({"id": proposal_id}, {"_id": 0})
     if not proposal:
         raise HTTPException(status_code=404, detail="Proposta não encontrada")
+    budget_id = proposal.get("budget_id", "")
+    budget = await db.budgets.find_one({"id": budget_id}, {"_id": 0}) if budget_id else None
+
+    # Popular items da obra a partir do orçamento — para que sale_total, predicted, margens
+    # apareçam de imediato na Caixa da Obra sem exigir sync manual.
+    initial_items = []
+    if budget:
+        for idx, b_it in enumerate(budget.get("items", [])):
+            initial_items.append({
+                "id": str(uuid.uuid4()),
+                "budget_item_idx": idx,
+                "category": b_it.get("category", ""),
+                "name": b_it.get("name", ""),
+                "unit": b_it.get("unit", "un"),
+                "quantity": b_it.get("quantity", 1),
+                "predicted_unit_cost": b_it.get("unit_cost", 0),
+                "margin": b_it.get("margin", 0.6),
+                "real_unit_cost": 0,
+                "real_quantity": None,
+                "real_notes": "",
+                "history": [],
+                "is_extra": False,
+            })
+
     doc = {
         "id": str(uuid.uuid4()),
         "title": proposal["title"],
         "client_name": proposal["client_name"],
         "client_phone": proposal.get("client_phone", ""),
-        "budget_id": proposal.get("budget_id", ""),
+        "budget_id": budget_id,
         "proposal_id": proposal_id,
         "status": "orcamento",
         "predicted_cost": proposal["final_value"],
@@ -814,6 +838,8 @@ async def create_work_from_proposal(proposal_id: str, user=Depends(get_current_u
         "notes": f"Criada a partir da proposta {proposal['label']}",
         "start_date": "",
         "end_date": "",
+        "items": initial_items,
+        "items_synced_at": datetime.now(timezone.utc).isoformat() if initial_items else None,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "created_by": user["id"]
     }
@@ -916,6 +942,34 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
     work = await db.works.find_one({"id": work_id}, {"_id": 0})
     if not work:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
+
+    # Auto-sync: se a obra foi criada antes deste ajuste e não tem items,
+    # mas tem budget_id, carrega os items do orçamento uma única vez.
+    if not (work.get("items") or []) and work.get("budget_id"):
+        budget = await db.budgets.find_one({"id": work["budget_id"]}, {"_id": 0})
+        if budget and budget.get("items"):
+            new_items = []
+            for idx, b_it in enumerate(budget.get("items", [])):
+                new_items.append({
+                    "id": str(uuid.uuid4()),
+                    "budget_item_idx": idx,
+                    "category": b_it.get("category", ""),
+                    "name": b_it.get("name", ""),
+                    "unit": b_it.get("unit", "un"),
+                    "quantity": b_it.get("quantity", 1),
+                    "predicted_unit_cost": b_it.get("unit_cost", 0),
+                    "margin": b_it.get("margin", 0.6),
+                    "real_unit_cost": 0,
+                    "real_quantity": None,
+                    "real_notes": "",
+                    "history": [],
+                    "is_extra": False,
+                })
+            await db.works.update_one(
+                {"id": work_id},
+                {"$set": {"items": new_items, "items_synced_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            work["items"] = new_items
 
     # Items para calcular venda + previsto + real
     items = [_compute_work_item_totals(it) for it in (work.get("items") or [])]
