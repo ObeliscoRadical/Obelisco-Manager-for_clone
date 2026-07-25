@@ -1,0 +1,23 @@
+{
+  "summary": "Feature 'Importar Proposta (IA)' testada end-to-end. Backend (6/6 pytest passes): (1) /api/proposal-import/extract com PDF gerado por reportlab retorna JSON completo com todos os campos esperados (title, client_name, phone, nif, date, number, notes, detected_total, is_summary, confidence, raw_summary, items[]) e cada item com todos os sub-campos; confidence='high', detected_total>0 e 3 itens extraídos correctamente. (2) Rejeições: .txt -> 400 'Só é suportado PDF', PDF vazio -> 400 'Ficheiro vazio', sem auth -> 401/403. (3) E2E: POST /api/budgets + POST /api/budgets/{id}/generate-proposals cria 3 propostas (basico/profissional/premium) ligadas por budget_id. Frontend E2E via Playwright: login admin -> /propostas -> click 'import-proposal-btn' abre dialog, upload PDF mostra spinner 'import-proposal-extracting', painel 'import-proposal-review' aparece com todos os data-testids (title/client/phone/notes/items-table e linhas import-item-N com -name/-cost/-remove), badge de confiança 'high' visível, add/remove item funcionam (3->4->3), edição de unit_cost recalcula PVP total imediatamente (575,36€ -> 2009,28€), click 'import-save' mostra spinner de saving, redirecciona para /orcamentos?highlight={budget_id}. Nada de regressão observada em botões do header. Tudo passa.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_proposal_import.py",
+    "/app/test_reports/pytest/proposal_import.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "proposal_import.py L86: modelo 'gemini-3.1-pro-preview' — funcionou mas é fora do standard; verificar se é o pretendido (vs. gemini-2.5-pro).",
+    "Cleanup em testes: DELETE /api/proposals/{id} retornou 403 num teste manual fora do pytest (via urllib+Bearer). Dentro do pytest com requests+Bearer não falhou (tests pass). Vale a pena confirmar consistência do endpoint de DELETE proposals com Bearer auth.",
+    "UI: se a IA devolver {error} o UI mostra toast e volta a 'upload' — correcto. Não há retry automático (aceitável)."
+  ],
+  "updated_files": ["/app/backend/tests/test_proposal_import.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (fluxo completo verde)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Criado 1 budget e 3 propostas via UI test (highlight=e2ac2808-8f79-4667-9b2f-b916e77e4c03). Pytest E2E limpou o seu próprio. Cleanup UI-side: tentou DELETE via urllib e recebeu 403 — orçamento pode ainda estar em BD.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature Importar Proposta IA está totalmente funcional. Se precisar re-testar, gerar PDF via reportlab (ver test_proposal_import.py) e usar admin@obelisco.pt/obelisco2024. LLM call demora ~15s. data-testids no diálogo: import-proposal-btn/dialog/pick/file/extracting/review/saving, import-field-title/client/phone/notes, import-items-table, import-item-{idx}-name/cost/remove, import-add-item, import-save, import-cancel.",
+  "rca of the issue": "N/A — nenhum bug encontrado."
+}

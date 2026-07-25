@@ -12,6 +12,7 @@ import { toast } from 'sonner';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
+import ImportarPropostaButton from '../components/ImportarPropostaButton';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 
@@ -536,9 +537,12 @@ export default function PropostasPage() {
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Propostas</h1>
           <p className="text-zinc-400 mt-1 font-medium">Visualize, exporte e envie propostas</p>
         </div>
-        <Button data-testid="settings-btn" onClick={openSettings} className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-full font-medium">
-          <Settings size={16} className="mr-2" /> Pagamento e Condições
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <ImportarPropostaButton onImported={fetchProposals} />
+          <Button data-testid="settings-btn" onClick={openSettings} className="bg-zinc-800 text-zinc-300 hover:bg-zinc-700 rounded-full font-medium">
+            <Settings size={16} className="mr-2" /> Pagamento e Condições
+          </Button>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

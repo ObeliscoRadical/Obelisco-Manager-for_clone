@@ -4139,6 +4139,9 @@ app.include_router(create_expenses_router(db, get_current_user))
 from invoices import create_invoices_router
 app.include_router(create_invoices_router(db, get_current_user))
 
+from proposal_import import create_proposal_import_router
+app.include_router(create_proposal_import_router(get_current_user))
+
 from employee_loans import create_loans_router
 app.include_router(create_loans_router(db, get_current_user))
 
