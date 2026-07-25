@@ -1005,6 +1005,66 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
     }
 
 
+class WorkLinkInput(BaseModel):
+    obra_id: Optional[str] = None   # None => desassocia
+
+
+def _require_finance_module(user, module_key: str):
+    """Permite acesso se user for admin OU tiver a permissão do módulo."""
+    if user.get("role") == "admin":
+        return
+    perms = user.get("module_permissions") or {}
+    if not perms.get(module_key):
+        raise HTTPException(status_code=403, detail=f"Sem permissão para gerir o módulo '{module_key}'.")
+
+
+@api_router.put("/invoices/{invoice_id}/link-work")
+async def link_invoice_to_work(invoice_id: str, input: WorkLinkInput, user=Depends(get_current_user)):
+    """Associa (ou desassocia) uma fatura existente a uma obra. Requer permissão do módulo Faturas ou admin."""
+    _require_finance_module(user, "faturas")
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Fatura não encontrada")
+
+    new_obra = (input.obra_id or "").strip() or None
+    if new_obra:
+        work = await db.works.find_one({"id": new_obra}, {"_id": 0})
+        if not work:
+            raise HTTPException(status_code=404, detail="Obra não encontrada")
+
+    await db.invoices.update_one({"id": invoice_id}, {"$set": {"obra_id": new_obra}})
+    updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    return updated
+
+
+@api_router.put("/expenses/{expense_id}/link-work")
+async def link_expense_to_work(expense_id: str, input: WorkLinkInput, user=Depends(get_current_user)):
+    """Associa (ou desassocia) uma despesa existente a uma obra. Requer permissão do módulo Despesas ou admin."""
+    _require_finance_module(user, "despesas")
+    expense = await db.expenses.find_one({"id": expense_id}, {"_id": 0})
+    if not expense:
+        raise HTTPException(status_code=404, detail="Despesa não encontrada")
+
+    new_obra = (input.obra_id or "").strip() or None
+    obra_name = None
+    if new_obra:
+        work = await db.works.find_one({"id": new_obra}, {"_id": 0})
+        if not work:
+            raise HTTPException(status_code=404, detail="Obra não encontrada")
+        obra_name = work.get("title")
+        # Se estiver a associar a obra, garantir que o tipo passa a "obra"
+        expense_type = expense.get("type", "variavel")
+        if expense_type != "obra":
+            await db.expenses.update_one({"id": expense_id}, {"$set": {"type": "obra"}})
+
+    await db.expenses.update_one(
+        {"id": expense_id},
+        {"$set": {"obra_id": new_obra, "obra_name": obra_name}},
+    )
+    updated = await db.expenses.find_one({"id": expense_id}, {"_id": 0})
+    return updated
+
+
 @api_router.get("/works/{work_id}/full")
 async def get_work_full(work_id: str, user=Depends(get_current_user)):
     """Devolve a obra + items computados + despesas vinculadas + KPIs agregados."""

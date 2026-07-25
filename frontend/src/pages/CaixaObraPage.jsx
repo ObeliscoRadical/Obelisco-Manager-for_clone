@@ -1,11 +1,16 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
-import { Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, ArrowLeft, HardHat, Receipt, FileCheck, Clock, DollarSign, PiggyBank, Target, Calendar } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import {
+  Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HardHat,
+  Receipt, FileCheck, Clock, PiggyBank, Target, Plus, Unlink, Search, X,
+} from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -24,12 +29,194 @@ const KPI = ({ label, value, icon: Icon, color = 'text-white', hint, testid }) =
   </Card>
 );
 
+/**
+ * Diálogo genérico para associar registos existentes (faturas ou despesas) a uma obra.
+ * kind: 'invoice' | 'expense'
+ */
+function LinkPickerDialog({ open, onClose, kind, currentWorkId, currentWorkTitle, onLinked, works }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [showAllObras, setShowAllObras] = useState(false);   // por defeito só sem obra
+  const [confirming, setConfirming] = useState(null);        // item que já tem obra, aguarda confirmação de troca
+
+  const endpoint = kind === 'invoice' ? '/invoices' : '/expenses';
+  const label = kind === 'invoice' ? 'Fatura' : 'Despesa';
+  const titleLabel = kind === 'invoice' ? 'Associar Fatura à Obra' : 'Associar Despesa à Obra';
+
+  useEffect(() => {
+    if (!open) return;
+    setSearch(''); setShowAllObras(false); setConfirming(null);
+    (async () => {
+      setLoading(true);
+      try {
+        const { data } = await api.get(endpoint);
+        setItems(data || []);
+      } catch { toast.error(`Erro ao carregar ${label.toLowerCase()}s`); }
+      finally { setLoading(false); }
+    })();
+  }, [open, endpoint, label]);
+
+  const worksById = useMemo(() => Object.fromEntries((works || []).map(w => [w.id, w])), [works]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (items || []).filter(it => {
+      // Excluir os já pertencentes à obra actual
+      if (it.obra_id === currentWorkId) return false;
+      // Por defeito só sem obra
+      if (!showAllObras && it.obra_id) return false;
+      if (!q) return true;
+      if (kind === 'invoice') {
+        return [it.number, it.client_name, it.notes, it.value_total, it.issue_date]
+          .filter(Boolean).some(v => String(v).toLowerCase().includes(q));
+      }
+      return [it.supplier, it.invoice_number, it.category, it.description, it.notes, it.value_gross, it.date]
+        .filter(Boolean).some(v => String(v).toLowerCase().includes(q));
+    });
+  }, [items, search, showAllObras, currentWorkId, kind]);
+
+  const doLink = async (item) => {
+    try {
+      const url = kind === 'invoice'
+        ? `/invoices/${item.id}/link-work`
+        : `/expenses/${item.id}/link-work`;
+      await api.put(url, { obra_id: currentWorkId });
+      toast.success(`${label} associada à obra.`);
+      setConfirming(null);
+      onLinked();
+      onClose();
+    } catch (e) {
+      const msg = e?.response?.data?.detail || `Erro ao associar ${label.toLowerCase()}.`;
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao associar.');
+    }
+  };
+
+  const handlePick = (item) => {
+    if (item.obra_id && item.obra_id !== currentWorkId) {
+      setConfirming(item);   // pedir confirmação
+    } else {
+      doLink(item);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent
+        data-testid={`link-${kind}-dialog`}
+        className="bg-zinc-950 border-zinc-800 text-white max-w-2xl max-h-[85vh] flex flex-col"
+      >
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            {kind === 'invoice' ? <FileCheck className="h-5 w-5 text-emerald-400" /> : <Receipt className="h-5 w-5 text-red-400" />}
+            {titleLabel}
+          </DialogTitle>
+          <p className="text-xs text-zinc-400 mt-1">Obra: <span className="text-yellow-400">{currentWorkTitle}</span></p>
+        </DialogHeader>
+
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="h-4 w-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              data-testid={`link-${kind}-search`}
+              value={search} onChange={e => setSearch(e.target.value)}
+              placeholder={kind === 'invoice' ? 'Procurar por número, cliente, valor…' : 'Procurar por fornecedor, categoria, valor…'}
+              className="pl-9 bg-zinc-900 border-zinc-800 text-white"
+            />
+          </div>
+          <Button
+            data-testid={`link-${kind}-toggle-all`}
+            variant="outline" size="sm"
+            className={`h-10 whitespace-nowrap ${showAllObras ? 'bg-yellow-500/10 border-yellow-500/50 text-yellow-300' : 'bg-zinc-900 border-zinc-800 text-zinc-300'}`}
+            onClick={() => setShowAllObras(v => !v)}
+          >
+            {showAllObras ? 'A mostrar todas' : 'Só sem obra'}
+          </Button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto min-h-[240px] rounded-lg border border-zinc-800 divide-y divide-zinc-800/60">
+          {loading && <p className="text-xs text-zinc-500 text-center py-8">A carregar…</p>}
+          {!loading && filtered.length === 0 && (
+            <p className="text-xs text-zinc-500 italic text-center py-10">
+              {items.length === 0 ? `Sem ${label.toLowerCase()}s registadas.` : 'Sem resultados para os filtros escolhidos.'}
+            </p>
+          )}
+          {filtered.map((it) => {
+            const otherObra = it.obra_id && worksById[it.obra_id];
+            const primary = kind === 'invoice' ? (it.number || 'Sem número') : (it.supplier || it.description || 'Despesa');
+            const secondary = kind === 'invoice'
+              ? `${it.client_name || '—'} · ${it.issue_date || '—'}`
+              : `${it.category || '—'} · ${it.date || '—'}${it.invoice_number ? ` · ${it.invoice_number}` : ''}`;
+            const value = kind === 'invoice' ? it.value_total : it.value_gross;
+            return (
+              <button
+                key={it.id}
+                data-testid={`link-${kind}-item-${it.id}`}
+                onClick={() => handlePick(it)}
+                className="w-full text-left p-3 hover:bg-zinc-900/60 transition-colors flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-white font-medium truncate">{primary}</p>
+                  <p className="text-[11px] text-zinc-500 truncate">{secondary}</p>
+                  {otherObra && (
+                    <Badge className="mt-1 bg-amber-500/15 text-amber-300 border-amber-500/40 text-[9px]">
+                      Actualmente em: {otherObra.title}
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm text-white font-mono">{fmt(value)}</p>
+                  <p className="text-[10px] text-yellow-400 mt-1">+ Associar</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} data-testid={`link-${kind}-close`} className="text-zinc-400">Fechar</Button>
+        </DialogFooter>
+
+        {confirming && (
+          <Dialog open onOpenChange={(v) => { if (!v) setConfirming(null); }}>
+            <DialogContent data-testid={`link-${kind}-confirm`} className="bg-zinc-950 border-zinc-800 text-white max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-400" /> Trocar de obra?
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-zinc-300">
+                Esta {label.toLowerCase()} já está associada à obra <span className="text-amber-300 font-medium">
+                  “{worksById[confirming.obra_id]?.title || confirming.obra_id}”
+                </span>.<br />
+                Confirma que quer <strong>movê-la</strong> para <span className="text-yellow-400 font-medium">“{currentWorkTitle}”</span>?
+              </p>
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={() => setConfirming(null)} data-testid={`link-${kind}-confirm-cancel`}>Cancelar</Button>
+                <Button
+                  data-testid={`link-${kind}-confirm-ok`}
+                  className="bg-yellow-500 hover:bg-yellow-400 text-black font-semibold"
+                  onClick={() => doLink(confirming)}
+                >
+                  Sim, mover para esta obra
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function CaixaObraPage() {
   const nav = useNavigate();
   const [works, setWorks] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [caixa, setCaixa] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [linkKind, setLinkKind] = useState(null);        // 'invoice' | 'expense' | null
+  const [unlinking, setUnlinking] = useState(null);      // { kind, id, name }
 
   const load = useCallback(async () => {
     try {
@@ -42,18 +229,35 @@ export default function CaixaObraPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
+  const reloadCaixa = useCallback(async () => {
     if (!selectedId) return;
-    (async () => {
-      try {
-        const { data } = await api.get(`/works/${selectedId}/caixa`);
-        setCaixa(data);
-      } catch { toast.error('Erro ao carregar caixa'); }
-    })();
+    try {
+      const { data } = await api.get(`/works/${selectedId}/caixa`);
+      setCaixa(data);
+    } catch { toast.error('Erro ao carregar caixa'); }
   }, [selectedId]);
+
+  useEffect(() => { reloadCaixa(); }, [reloadCaixa]);
+
+  const doUnlink = async () => {
+    if (!unlinking) return;
+    try {
+      const url = unlinking.kind === 'invoice'
+        ? `/invoices/${unlinking.id}/link-work`
+        : `/expenses/${unlinking.id}/link-work`;
+      await api.put(url, { obra_id: null });
+      toast.success('Associação removida.');
+      setUnlinking(null);
+      reloadCaixa();
+    } catch (e) {
+      const msg = e?.response?.data?.detail || 'Erro ao desassociar.';
+      toast.error(typeof msg === 'string' ? msg : 'Erro ao desassociar.');
+    }
+  };
 
   if (loading) return <div className="flex items-center justify-center py-24"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>;
 
+  const currentWork = works.find(w => w.id === selectedId);
   const marginColor = caixa?.resumo?.margin_real_pct >= caixa?.resumo?.margin_predicted_pct * 0.85 ? 'text-emerald-400' : 'text-red-400';
   const cashColor = (caixa?.caixa?.cash_balance || 0) >= 0 ? 'text-emerald-400' : 'text-red-400';
 
@@ -84,7 +288,6 @@ export default function CaixaObraPage() {
 
       {caixa && (
         <>
-          {/* KPI principais */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <KPI testid="kpi-sale-total" label="Valor de Venda" value={fmt0(caixa.resumo.sale_total)} icon={Target} color="text-white" hint="do orçamento" />
             <KPI testid="kpi-received" label="Já Recebido" value={fmt0(caixa.receitas.total_received)} icon={CheckCircle2} color="text-emerald-400" hint={`de ${fmt0(caixa.receitas.total_invoiced)} facturado`} />
@@ -92,7 +295,6 @@ export default function CaixaObraPage() {
             <KPI testid="kpi-cash-balance" label="Caixa Efectiva" value={fmt0(caixa.caixa.cash_balance)} icon={PiggyBank} color={cashColor} hint="recebido − pago" />
           </div>
 
-          {/* Barras de progresso */}
           <Card className="bg-zinc-900 border-zinc-800">
             <CardHeader className="pb-3"><CardTitle className="text-sm text-white">Progresso Financeiro</CardTitle></CardHeader>
             <CardContent className="space-y-4">
@@ -115,7 +317,6 @@ export default function CaixaObraPage() {
             </CardContent>
           </Card>
 
-          {/* Margens */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <KPI testid="kpi-margin-predicted" label="Margem Prevista" value={pct(caixa.resumo.margin_predicted_pct)} icon={TrendingUp} color="text-blue-400" hint={fmt0(caixa.resumo.predicted_profit)} />
             <KPI testid="kpi-margin-real" label="Margem Real (actual)" value={pct(caixa.resumo.margin_real_pct)} icon={caixa.resumo.margin_real_pct >= caixa.resumo.margin_predicted_pct ? TrendingUp : TrendingDown} color={marginColor} hint={fmt0(caixa.resumo.real_profit)} />
@@ -131,31 +332,53 @@ export default function CaixaObraPage() {
             </div>
           )}
 
-          {/* Facturas + Despesas em 2 colunas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* FACTURAS */}
             <Card className="bg-zinc-900 border-zinc-800">
-              <CardHeader className="pb-2 flex-row items-center justify-between">
-                <CardTitle className="text-sm text-white flex items-center gap-2"><FileCheck className="h-4 w-4 text-emerald-400" /> Facturas ({caixa.receitas.invoices_count})</CardTitle>
-                <Button size="sm" variant="ghost" onClick={() => nav('/faturas')} className="text-xs text-yellow-400 h-7">Ver todas →</Button>
+              <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
+                <CardTitle className="text-sm text-white flex items-center gap-2">
+                  <FileCheck className="h-4 w-4 text-emerald-400" /> Facturas ({caixa.receitas.invoices_count})
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button
+                    data-testid="btn-associar-fatura"
+                    size="sm"
+                    className="h-7 px-2 text-xs bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25"
+                    onClick={() => setLinkKind('invoice')}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Associar
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => nav('/faturas')} className="text-xs text-yellow-400 h-7">Ver todas →</Button>
+                </div>
               </CardHeader>
               <CardContent className="pt-0">
-                {caixa.receitas.invoices.length === 0 && <p className="text-xs text-zinc-500 italic py-3 text-center">Sem facturas ainda.</p>}
+                {caixa.receitas.invoices.length === 0 && <p className="text-xs text-zinc-500 italic py-3 text-center">Sem facturas ainda. Clique em “Associar” para vincular uma existente.</p>}
                 {caixa.receitas.invoices.map(i => {
                   const outstanding = (i.value_total || 0) - (i.paid_total || 0);
                   return (
-                    <div key={i.id} className="py-2 border-b border-zinc-800/60 last:border-0 text-sm" data-testid={`inv-${i.id}`}>
-                      <div className="flex justify-between items-start">
-                        <div>
+                    <div key={i.id} className="py-2 border-b border-zinc-800/60 last:border-0 text-sm group" data-testid={`inv-${i.id}`}>
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="min-w-0">
                           <p className="text-white font-mono text-xs">{i.number || 'sem número'}</p>
                           <p className="text-[10px] text-zinc-500">Emitida: {i.issue_date} · Vence: {i.due_date}</p>
                         </div>
-                        <div className="text-right">
-                          <p className="text-white font-mono">{fmt(i.value_total)}</p>
-                          {outstanding > 0 ? (
-                            <p className="text-[10px] text-yellow-400">Falta {fmt(outstanding)}</p>
-                          ) : (
-                            <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px]">PAGA</Badge>
-                          )}
+                        <div className="text-right flex items-start gap-2">
+                          <div>
+                            <p className="text-white font-mono">{fmt(i.value_total)}</p>
+                            {outstanding > 0 ? (
+                              <p className="text-[10px] text-yellow-400">Falta {fmt(outstanding)}</p>
+                            ) : (
+                              <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px]">PAGA</Badge>
+                            )}
+                          </div>
+                          <button
+                            data-testid={`unlink-invoice-${i.id}`}
+                            onClick={() => setUnlinking({ kind: 'invoice', id: i.id, name: i.number || 'sem número' })}
+                            title="Remover associação"
+                            className="opacity-40 hover:opacity-100 text-zinc-400 hover:text-red-400 transition-opacity"
+                          >
+                            <Unlink className="h-3.5 w-3.5" />
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -164,27 +387,50 @@ export default function CaixaObraPage() {
               </CardContent>
             </Card>
 
+            {/* DESPESAS */}
             <Card className="bg-zinc-900 border-zinc-800">
-              <CardHeader className="pb-2 flex-row items-center justify-between">
-                <CardTitle className="text-sm text-white flex items-center gap-2"><Receipt className="h-4 w-4 text-red-400" /> Despesas ({caixa.despesas.count})</CardTitle>
-                <Button size="sm" variant="ghost" onClick={() => nav('/despesas')} className="text-xs text-yellow-400 h-7">Ver todas →</Button>
+              <CardHeader className="pb-2 flex-row items-center justify-between gap-2">
+                <CardTitle className="text-sm text-white flex items-center gap-2">
+                  <Receipt className="h-4 w-4 text-red-400" /> Despesas ({caixa.despesas.count})
+                </CardTitle>
+                <div className="flex items-center gap-1">
+                  <Button
+                    data-testid="btn-associar-despesa"
+                    size="sm"
+                    className="h-7 px-2 text-xs bg-red-500/15 border border-red-500/40 text-red-300 hover:bg-red-500/25"
+                    onClick={() => setLinkKind('expense')}
+                  >
+                    <Plus className="h-3.5 w-3.5 mr-1" /> Associar
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => nav('/despesas')} className="text-xs text-yellow-400 h-7">Ver todas →</Button>
+                </div>
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="text-xs mb-2 flex gap-3">
                   <span className="text-emerald-400">Pago: {fmt0(caixa.despesas.expenses_paid)}</span>
                   <span className="text-yellow-400">A pagar: {fmt0(caixa.despesas.expenses_to_pay)}</span>
                 </div>
-                {caixa.despesas.expenses.length === 0 && <p className="text-xs text-zinc-500 italic py-3 text-center">Sem despesas registadas.</p>}
+                {caixa.despesas.expenses.length === 0 && <p className="text-xs text-zinc-500 italic py-3 text-center">Sem despesas registadas. Clique em “Associar” para vincular uma existente.</p>}
                 {caixa.despesas.expenses.slice(0, 10).map(e => (
-                  <div key={e.id} className="py-2 border-b border-zinc-800/60 last:border-0 text-sm" data-testid={`exp-${e.id}`}>
-                    <div className="flex justify-between items-start">
+                  <div key={e.id} className="py-2 border-b border-zinc-800/60 last:border-0 text-sm group" data-testid={`exp-${e.id}`}>
+                    <div className="flex justify-between items-start gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="text-white text-xs truncate">{e.description || e.supplier || 'Despesa'}</p>
                         <p className="text-[10px] text-zinc-500">{e.date} · {e.category || ''}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-white font-mono text-xs">{fmt(e.value_gross)}</p>
-                        {e.paid ? <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px]">PAGA</Badge> : <Badge className="bg-yellow-500/20 text-yellow-300 text-[9px]">POR PAGAR</Badge>}
+                      <div className="text-right flex items-start gap-2">
+                        <div>
+                          <p className="text-white font-mono text-xs">{fmt(e.value_gross)}</p>
+                          {e.paid ? <Badge className="bg-emerald-500/20 text-emerald-300 text-[9px]">PAGA</Badge> : <Badge className="bg-yellow-500/20 text-yellow-300 text-[9px]">POR PAGAR</Badge>}
+                        </div>
+                        <button
+                          data-testid={`unlink-expense-${e.id}`}
+                          onClick={() => setUnlinking({ kind: 'expense', id: e.id, name: e.supplier || e.description || 'despesa' })}
+                          title="Remover associação"
+                          className="opacity-40 hover:opacity-100 text-zinc-400 hover:text-red-400 transition-opacity"
+                        >
+                          <Unlink className="h-3.5 w-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -195,6 +441,44 @@ export default function CaixaObraPage() {
               </CardContent>
             </Card>
           </div>
+
+          {/* Diálogo de associar (partilhado) */}
+          <LinkPickerDialog
+            open={!!linkKind}
+            onClose={() => setLinkKind(null)}
+            kind={linkKind}
+            currentWorkId={selectedId}
+            currentWorkTitle={currentWork?.title || ''}
+            works={works}
+            onLinked={reloadCaixa}
+          />
+
+          {/* Confirmação de desassociar */}
+          <Dialog open={!!unlinking} onOpenChange={(v) => { if (!v) setUnlinking(null); }}>
+            <DialogContent data-testid="unlink-confirm" className="bg-zinc-950 border-zinc-800 text-white max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-2">
+                  <X className="h-5 w-5 text-red-400" /> Remover associação
+                </DialogTitle>
+              </DialogHeader>
+              <p className="text-sm text-zinc-300">
+                Tem a certeza que quer desassociar a {unlinking?.kind === 'invoice' ? 'fatura' : 'despesa'}{' '}
+                <span className="text-white font-medium">“{unlinking?.name}”</span> desta obra?
+                <br />
+                <span className="text-xs text-zinc-500">O registo continua no módulo respectivo, apenas fica sem obra.</span>
+              </p>
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={() => setUnlinking(null)} data-testid="unlink-cancel">Cancelar</Button>
+                <Button
+                  data-testid="unlink-ok"
+                  className="bg-red-500 hover:bg-red-400 text-white font-semibold"
+                  onClick={doUnlink}
+                >
+                  Desassociar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </>
       )}
     </div>

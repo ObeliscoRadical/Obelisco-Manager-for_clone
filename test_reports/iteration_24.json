@@ -1,0 +1,29 @@
+{
+  "summary": "Testing completo do novo feature 'Associar/Desassociar Facturas & Despesas' na Caixa da Obra. Backend: 9/9 pytest a passar (link/unlink de facturas e despesas, reflexo em GET /works/{id}/caixa, 404 para obra/id inexistente, 403 para tech, move entre obras). Frontend: fluxo end-to-end validado com Playwright — login admin, KPIs visíveis, botões '+ Associar' para facturas/despesas abrem diálogos correctos com data-testids, toggle 'Só sem obra' ↔ 'A mostrar todas' funcional, associar e desassociar via UI funcionaram (toast 'Associação removida'), unlink-confirm/unlink-ok operacional.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CaixaObraPage — LinkPickerDialog", "issues": ["Aviso React: <span> como filho de <option> (hidratação). Não bloqueia mas polui a consola.", "Aviso a11y: 'Missing Description or aria-describedby' em DialogContent do link/unlink — adicionar DialogDescription ou aria-describedby.", "Quando o toggle 'A mostrar todas' expõe uma factura cujo obra_id aponta para uma obra inexistente/apagada, o badge 'Actualmente em: <título>' não aparece (worksById[obra_id] undefined). Considerar fallback 'Actualmente em: (obra desconhecida)'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_caixa_obra_link.py", "/app/test_reports/pytest/link_work.xml"],
+  "action_items": [
+    "(minor) Suprimir aviso hidratação: no <select> substituir label do <option> por texto directo sem <span> (linha ~277 em CaixaObraPage.jsx).",
+    "(minor) Adicionar DialogDescription/aria-describedby aos DialogContent (link-*-dialog, link-*-confirm, unlink-confirm).",
+    "(minor) Renderizar badge fallback quando obra_id existe mas a obra não está em worksById."
+  ],
+  "critical_code_review_comments": [
+    "server.py get_current_user aceita apenas admin JWT — tech token cai em 401, não 403. Ambos são aceitáveis para bloquear acesso.",
+    "link_expense_to_work força type='obra' ao associar mas ao desassociar não reverte o type. Se for a intenção mantê-lo como 'obra' órfão, ok; senão considerar reverter para 'variavel'."
+  ],
+  "updated_files": ["/app/backend/tests/test_caixa_obra_link.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% flows críticos"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024 (usado)",
+  "seed_data_creation": "Criada 1 fatura TEST_CLIENT_LINK (limpa no teardown) e 1 despesa TEST_EXPENSE_LINK (limpa). Durante teste UI, foi associada+desassociada 1 fatura real (afd587aa-...) e 1 despesa (325ffe58-...); estado restaurado (unlink) ao fim.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "O fluxo de troca entre obras (confirm dialog link-*-confirm) não teve dados reais para validar UI end-to-end porque não havia facturas/despesas noutras obras diferentes da seleccionada com badge visível. O código path está coberto pelos testes backend (TestMoveBetweenWorks.test_move_invoice_across_works) e pela inspecção JSX. Para simular na UI: criar/associar previamente uma factura à Obra B, depois abrir dialog na Obra A e activar 'A mostrar todas'.",
+  "rca of the issue": "N/A — sem bugs bloqueantes."
+}
