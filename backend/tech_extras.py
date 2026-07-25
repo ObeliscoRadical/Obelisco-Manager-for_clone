@@ -47,15 +47,12 @@ def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def create_tech_extras_router(db, get_current_user):
-    """Cria router com dependências independentes (tech auth próprio)."""
-    tech_extra_router = APIRouter(prefix="/api/tech", tags=["tech-extras"])
-
+def _get_tech_user_dep(db):
+    """Factory pública para expor a dependência get_tech_user a outros módulos."""
     JWT_SECRET = os.environ["JWT_SECRET"]
     JWT_ALGO = "HS256"
 
     async def get_tech_user(request: Request):
-        """Aceita JWT tech OU admin. Admin fica com _is_admin=True para as views decidirem."""
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
             raise HTTPException(status_code=401, detail="Não autenticado")
@@ -68,7 +65,6 @@ def create_tech_extras_router(db, get_current_user):
                     raise HTTPException(status_code=401, detail="Funcionário inactivo")
                 return {**emp, "_is_admin": False}
             elif ttype == "access":
-                # Utilizador da collection `users` — admin OU qualquer user com tech_portal=True
                 from bson import ObjectId as _OID
                 u = await db.users.find_one({"_id": _OID(payload["sub"])})
                 if not u:
@@ -82,11 +78,19 @@ def create_tech_extras_router(db, get_current_user):
                     "name": u.get("name"),
                     "email": u.get("email"),
                     "role": u.get("role"),
-                    "_is_admin": True,   # trata como supervisor (vê tudo, não filtra por employee_id)
+                    "_is_admin": True,
                 }
             raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
+
+    return get_tech_user
+
+
+def create_tech_extras_router(db, get_current_user):
+    """Cria router com dependências independentes (tech auth próprio)."""
+    tech_extra_router = APIRouter(prefix="/api/tech", tags=["tech-extras"])
+    get_tech_user = _get_tech_user_dep(db)
 
     # ============================================================
     # PONTO (Timesheet / Clock in-out)
@@ -221,6 +225,21 @@ def create_tech_extras_router(db, get_current_user):
         }
         await db.tech_messages.insert_one(doc)
         doc.pop("_id", None)
+        # Notificar todos os admins
+        try:
+            from notifications import create_notification
+            admins = await db.users.find({"role": "admin"}, {"_id": 0, "id": 1}).to_list(50)
+            preview = (input.text or "")[:80]
+            for a in admins:
+                await create_notification(
+                    db, user_id=a["id"], user_kind="user", type="chat",
+                    title=f"Nova mensagem de {user.get('name', 'técnico')}",
+                    message=preview,
+                    link="/mensagens-tecnicos",
+                    meta={"employee_id": emp_id, "message_id": doc["id"]},
+                )
+        except Exception:
+            pass
         return doc
 
     # Admin: ver todas as threads
@@ -275,6 +294,18 @@ def create_tech_extras_router(db, get_current_user):
         }
         await db.tech_messages.insert_one(doc)
         doc.pop("_id", None)
+        # Notificar o técnico
+        try:
+            from notifications import create_notification
+            await create_notification(
+                db, user_id=employee_id, user_kind="employee", type="chat",
+                title=f"Nova mensagem de {user.get('name', 'Escritório')}",
+                message=(input.text or "")[:80],
+                link="/tech/chat",
+                meta={"message_id": doc["id"]},
+            )
+        except Exception:
+            pass
         return doc
 
     # ============================================================

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { Toaster } from "sonner";
 import Sidebar from "./components/Sidebar";
+import NotificationsBell from "./components/NotificationsBell";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import OrcamentosPage from "./pages/OrcamentosPage";
@@ -53,7 +54,10 @@ function Layout({ children }) {
   return (
     <div className="flex min-h-screen bg-zinc-950">
       <Sidebar />
-      <main className="flex-1 ml-72 p-6 md:p-8 lg:p-10">
+      <main className="flex-1 ml-72 p-6 md:p-8 lg:p-10 relative">
+        <div className="absolute top-4 right-6 md:right-8 lg:right-10 z-40">
+          <NotificationsBell />
+        </div>
         {children}
       </main>
     </div>

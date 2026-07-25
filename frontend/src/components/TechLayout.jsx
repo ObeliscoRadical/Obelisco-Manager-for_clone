@@ -2,6 +2,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
+import NotificationsBell from './NotificationsBell';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
@@ -47,6 +48,7 @@ export default function TechLayout({ children }) {
             </div>
           </Link>
           <div className="flex items-center gap-2">
+            <NotificationsBell isTech={true} />
             {isAdminViewing && (
               <button
                 onClick={() => navigate('/')}

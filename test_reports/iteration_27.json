@@ -1,0 +1,51 @@
+{
+  "summary": "Testado o sistema de notificações in-app (backend + frontend). Pytest: 13/17 verde após correcção do payload de guides no meu próprio teste (14/17). Frontend admin funcional: sino visível com badge=1, dropdown abre com 2 notificações de faturas vencidas (102 dias e 222 dias) já pré-existentes, botão 'Marcar todas' presente. Isolação tech vs admin OK. Scan idempotente de faturas OK (dedup_key único). CRUD notif admin (list, mark-read, mark-all-read, delete, 404 casos) OK. Endpoints tech (list, mark-read, mark-all) OK e correctamente sem DELETE. Hook chat admin→tech OK, hook guias criação OK, admin invoice scan OK. FALHAS: (1) CRITICAL — POST/PUT /api/appointments dão HTTP 500 devido a bug regressivo no código de notificação (usa input.start_at/end_at inexistentes). (2) HIGH — Hook chat tech→admin nunca notifica admins (query projecta campo 'id' que não existe em users; str(_id) devia ser usado). Testes de appointment (create/update/delete) e chat tech→admin falharam por causa destas 2 bugs.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/appointments, PUT /api/appointments/{id}",
+        "issue": "HTTP 500 AttributeError: 'AppointmentCreate' object has no attribute 'start_at'. server.py L1367, L1390, L1397 usam input.start_at e input.end_at, mas o Pydantic model tem apenas date/time_start/time_end/title/employee_ids. Isto BLOQUEIA totalmente a criação/edição de marcações na app — regressão crítica introduzida pelo hook de notificação. Fix: construir start_at = f'{input.date}T{input.time_start}' e end_at = f'{input.date}T{input.time_end}' antes de passar ao create_notification. Também: no PUT o `before.get('start_at')` / `before.get('end_at')` retornam sempre None (nunca gravado), pelo que a condição de 'Marcação alterada' devia comparar date/time_start/time_end (não start_at/end_at).",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/tech/messages (hook notify admins)",
+        "issue": "Admins nunca recebem notificação quando o técnico manda uma mensagem. tech_extras.py L231 faz `db.users.find({'role':'admin'}, {'_id':0,'id':1})` mas os documentos de `users` guardam apenas `_id` (ObjectId), sem campo `id`. A[i]['id'] lança KeyError que é engolido pelo try/except silencioso. Fix: iterar e mapear `str(u['_id'])` como user_id (idem em server.py L4186 `_get_admin_users`).",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": [
+      {"endpoint": "notifications._scan_invoice_alerts_for_admin", "issue": "Try/except silencia todas as exceções — dificulta debugging. Logar warning pelo menos."},
+      {"endpoint": "notifications.notify_admins", "issue": "Função definida mas nunca chamada (hooks fazem a query inline). Ou remover ou usar."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Agenda create/edit", "issue": "Devido ao bug backend acima, o botão de guardar uma marcação vai devolver 500 e a UI mostra erro. Não testado em detalhe mas é consequência directa.", "affected_selectors": ["[data-testid=appointment-title-input]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_notifications.py",
+    "/app/test_reports/pytest/notifications.xml"
+  ],
+  "action_items": [
+    "URGENTE: corrigir server.py POST/PUT /api/appointments — usar input.date + input.time_start/time_end em vez de input.start_at/input.end_at nos create_notification calls (linhas ~1367, 1390, 1397). Também trocar `before.get('start_at')/('end_at')` por comparações de date/time_start/time_end.",
+    "Corrigir tech_extras.py L231 (e server.py L4186 _get_admin_users): user_id deve ser `str(u['_id'])`, não `u['id']`. Remover ou reduzir o try/except silencioso nas hooks para expor erros similares no futuro.",
+    "Depois de aplicar as 2 correcções, correr novamente pytest backend/tests/test_notifications.py — devem passar 17/17."
+  ],
+  "critical_code_review_comments": [
+    "server.py está com 4235 linhas — precisa split urgente em módulos (agenda.py, works.py, etc).",
+    "Múltiplos try/except silenciosos (`except Exception: pass`) nos hooks de notificação — mascaram erros exactamente como aconteceu neste sprint. Substituir por `logger.warning` ou reraise em dev.",
+    "AppointmentCreate model está inconsistente com o que a UI e o resto do código assumem: falta uniformização date+time_* vs start_at/end_at. Considerar adicionar computed properties `start_at` e `end_at` no model.",
+    "notifications.py hardcoded rotas `/tech/agenda`, `/tech/chat`, `/tech/guias`, `/faturas`, `/mensagens-tecnicos` — validar que existem no frontend router (aparentemente sim, mas convém tests)."
+  ],
+  "updated_files": ["/app/backend/tests/test_notifications.py"],
+  "success_rate": {"backend": "82% (14/17 depois da correcção do meu teste de guides; 12/17 originalmente por bugs reais 500 em appointments e chat)", "frontend": "100% smoke test (bell + badge + dropdown + mark-all + empty state + invoice notifs visíveis)"},
+  "test_credentials": "admin@obelisco.pt/obelisco2024 · d.oliveira1986@gmail.com/A24d22r04 (Employee ID: 4d357339-7b7e-40bb-91fe-93109060cbda)",
+  "seed_data_creation": "Criadas notificações de teste type=chat (via /api/tech/admin/messages), type=guide (via POST /api/transport-guides), type=agenda (várias). As de admin foram apagadas pelo teste de DELETE. Notificações de tech (agenda/chat/guide) permanecem na coleção mas foram marcadas como lidas via read-all. Criadas 2 tech_messages (uma de cada lado) e 1 transport_guide de teste com item TEST_material (guide foi DELETEd pelo teste). Não foi possível apagar as tech_messages pelas APIs disponíveis (não há DELETE público).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Depois do main agent corrigir os 2 bugs (appointments 500 + chat admin notify), correr: `cd /app && python -m pytest backend/tests/test_notifications.py -v`. Esperar 17/17 verde. O teste de agenda cria uma marcação futura (D+2 10:00-12:00) — se falhar por conflito, ajustar timestamp. Empregado tech de teste: id=4d357339-7b7e-40bb-91fe-93109060cbda.",
+  "rca of the issue": "Bug 1 (appointments 500): quando o hook de notificação foi adicionado a POST/PUT /api/appointments, o autor assumiu que AppointmentCreate teria start_at/end_at (naming típico ISO), mas o model existente usa date+time_start+time_end. AttributeError não capturado explode como 500 e bloqueia toda a criação de marcações. Reproduzir: POST /api/appointments com payload válido → 500. Mitigação: construir start_at localmente a partir de input.date + input.time_start. Bug 2 (chat admin notify): o hook usa projecção Mongo `{_id:0, id:1}` assumindo que users têm campo `id`, mas o schema real só tem `_id` (ObjectId). O try/except silencia o KeyError. Reproduzir: POST /api/tech/messages como técnico → verificar GET /api/notifications como admin → não aparece. Mitigação: `for a in users_cursor: uid = str(a['_id']); create_notification(user_id=uid, ...)`."
+}

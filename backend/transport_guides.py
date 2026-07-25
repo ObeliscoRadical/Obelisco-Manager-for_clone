@@ -316,6 +316,18 @@ def create_transport_guides_router(db, get_current_user: Callable):
         }
         await db.transport_guides.insert_one(guide)
         guide.pop("_id", None)
+        if input.assigned_employee_id:
+            try:
+                from notifications import create_notification
+                await create_notification(
+                    db, user_id=input.assigned_employee_id, user_kind="employee", type="guide",
+                    title=f"Nova guia atribuída · Nº {number}",
+                    message=f"{guide.get('obra_name', '')} · {len(input.items)} item(ns)",
+                    link="/tech/guias",
+                    meta={"guide_id": guide["id"]},
+                )
+            except Exception:
+                pass
         return guide
 
     @router.get("/transport-guides/{guide_id}")
@@ -353,6 +365,21 @@ def create_transport_guides_router(db, get_current_user: Callable):
             data["items"] = new_items
         await db.transport_guides.update_one({"id": guide_id}, {"$set": data})
         await _push_history(guide_id, "updated", user.get("name") or user.get("email", ""), {"fields": list(data.keys())})
+        # Notificar novo técnico se a atribuição mudou
+        new_emp = data.get("assigned_employee_id")
+        old_emp = g.get("assigned_employee_id")
+        if new_emp and new_emp != old_emp:
+            try:
+                from notifications import create_notification
+                await create_notification(
+                    db, user_id=new_emp, user_kind="employee", type="guide",
+                    title=f"Guia atribuída · Nº {g.get('number', '')}",
+                    message=f"{g.get('obra_name', '') or data.get('obra_name', '')}",
+                    link="/tech/guias",
+                    meta={"guide_id": guide_id},
+                )
+            except Exception:
+                pass
         return await db.transport_guides.find_one({"id": guide_id}, {"_id": 0})
 
     @router.delete("/transport-guides/{guide_id}")
