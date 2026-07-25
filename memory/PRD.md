@@ -34,6 +34,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v30) — Importar Proposta Antiga (PDF) com IA
+- **Pedido**: importar propostas antigas em PDF e o IA converte para o formato atual (Orçamento + 3 Propostas).
+- **Backend novo (`/app/backend/proposal_import.py`)**:
+  - `POST /api/proposal-import/extract` — upload PDF → JSON estruturado
+  - Usa Gemini via `emergentintegrations` (EMERGENT_LLM_KEY)
+  - IA decide **detalhado linha-a-linha** OU **resumido (1 item)**, indica `confidence` e `detected_total`
+  - Só aceita PDF, máx. 25 MB; devolve 400 para formatos/ficheiros inválidos
+- **Frontend novo (`components/ImportarPropostaButton.jsx`)**:
+  - Botão **"Importar Proposta (IA)"** no header de `/propostas`
+  - 4 fases: `upload → extracting (spinner) → review (editável) → saving`
+  - Painel de revisão com badges de confiança, cliente/título/notas + tabela de itens editável (adicionar/remover linhas, editar custo/margem/qtd) e alerta se PVP diverge do detectado
+  - Ao confirmar, cria Orçamento + 3 Propostas ligadas e redireciona para `/orcamentos?highlight={id}`
+- **Testado**: iteration_26.json — backend 6/6 pytest + frontend E2E OK (upload real, extração LLM, edição, save, redirect).
+
 ### Jul 25, 2026 (v29) — Caixa da Obra: Alertas contextuais
 - **Pedido**: mostrar alertas por obra dentro da Caixa da Obra (mostrar obra a obra, ao seleccionar).
 - **Backend (`server.py` — get_work_caixa)**: novo campo `alerts[]` no retorno com 6 códigos possíveis:
