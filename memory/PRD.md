@@ -34,6 +34,19 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 25, 2026 (v29) — Caixa da Obra: Alertas contextuais
+- **Pedido**: mostrar alertas por obra dentro da Caixa da Obra (mostrar obra a obra, ao seleccionar).
+- **Backend (`server.py` — get_work_caixa)**: novo campo `alerts[]` no retorno com 6 códigos possíveis:
+  - `margem_baixa` — margem real < 70% da prevista (high se <50%)
+  - `custo_excedido` — real_total_cost > previsto (high se overrun>20%)
+  - `faturas_vencidas` — invoices com balance>0 e due_date passada (high se atraso>30 dias)
+  - `despesas_atraso` — despesas não pagas com date>30 dias
+  - `sem_faturacao` — obra activa há >30 dias sem faturas emitidas
+  - `recebimento_lento` — >50% do facturado ainda por receber
+  - schema: `{code, severity: high|medium|low, title, message, meta}`
+- **Frontend (`CaixaObraPage.jsx`)**: componente `AlertsPanel` logo após os KPIs, com contadores por severidade no cabeçalho e cor/border por criticidade (red/amber/blue). Estado vazio verde ("tudo sob controlo").
+- **Testado**: iteration_25.json — backend E2E semeado + 5 códigos individuais + cleanup validado (alerts volta a []). Zero regressões em iteration_24 (link/unlink).
+
 ### Jul 25, 2026 (v28) — Caixa da Obra: Associar Faturas & Despesas existentes
 - **Pedido**: dentro da Caixa da Obra, permitir vincular a uma obra faturas já lançadas no módulo Faturas e despesas já lançadas no módulo Despesas.
 - **Backend novo (server.py)**:
