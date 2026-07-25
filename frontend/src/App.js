@@ -37,6 +37,7 @@ import TechPontoPage from "./pages/TechPontoPage";
 import TechChatPage from "./pages/TechChatPage";
 import TechPerfilPage from "./pages/TechPerfilPage";
 import AdminMensagensTecnicosPage from "./pages/AdminMensagensTecnicosPage";
+import CaixaObraPage from "./pages/CaixaObraPage";
 import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
@@ -142,6 +143,7 @@ function App() {
           <Route path="/contabilista" element={<ProtectedRoute module="contabilista"><ContabilistaPage /></ProtectedRoute>} />
           <Route path="/definicoes" element={<ProtectedRoute module="configuracoes"><DefinicoesPage /></ProtectedRoute>} />
           <Route path="/mensagens-tecnicos" element={<ProtectedRoute module="funcionarios"><AdminMensagensTecnicosPage /></ProtectedRoute>} />
+          <Route path="/caixa-obra" element={<ProtectedRoute module="obras"><CaixaObraPage /></ProtectedRoute>} />
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
           <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />

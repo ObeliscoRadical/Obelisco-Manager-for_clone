@@ -904,6 +904,107 @@ async def sync_work_from_budget(work_id: str, user=Depends(get_current_user)):
     return await get_work_full(work_id, user)
 
 
+@api_router.get("/works/{work_id}/caixa")
+async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
+    """
+    Caixa da Obra — balanço financeiro completo:
+    - Valor de venda (do orçamento aprovado)
+    - Facturas emitidas + pagamentos recebidos + saldo em dívida
+    - Despesas pagas / a pagar
+    - Margem prevista vs real, cashflow líquido
+    """
+    work = await db.works.find_one({"id": work_id}, {"_id": 0})
+    if not work:
+        raise HTTPException(status_code=404, detail="Obra não encontrada")
+
+    # Items para calcular venda + previsto + real
+    items = [_compute_work_item_totals(it) for it in (work.get("items") or [])]
+    sale_total = round(sum(it.get("sale_total", 0) for it in items), 2)
+    predicted_total = round(sum(it.get("predicted_total", 0) for it in items), 2)
+    real_items_total = round(sum(it.get("real_total", 0) for it in items), 2)
+
+    # Facturas emitidas para esta obra
+    invoices = await db.invoices.find({"obra_id": work_id}, {"_id": 0}).to_list(500)
+    total_invoiced = round(sum(float(i.get("value_total") or 0) for i in invoices), 2)
+    total_received = 0.0
+    for inv in invoices:
+        for p in (inv.get("payments") or []):
+            total_received += float(p.get("amount") or 0)
+    total_received = round(total_received, 2)
+    to_receive = round(total_invoiced - total_received, 2)  # em dívida
+    to_invoice = round(max(0, sale_total - total_invoiced), 2)  # ainda por facturar
+
+    # Despesas
+    expenses = await db.expenses.find({"obra_id": work_id}, {"_id": 0}).to_list(2000)
+    expenses_total = round(sum(float(e.get("value_gross") or 0) for e in expenses), 2)
+    expenses_paid = round(sum(float(e.get("value_gross") or 0) for e in expenses if e.get("paid")), 2)
+    expenses_to_pay = round(expenses_total - expenses_paid, 2)
+
+    # Custo real total (items + expenses)
+    real_total_cost = round(real_items_total + expenses_total, 2)
+
+    # Margens
+    predicted_profit = round(sale_total - predicted_total, 2)
+    real_profit = round(sale_total - real_total_cost, 2)
+    margin_predicted_pct = round((predicted_profit / sale_total * 100) if sale_total > 0 else 0, 1)
+    margin_real_pct = round((real_profit / sale_total * 100) if sale_total > 0 else 0, 1)
+
+    # Cashflow — o que está de facto na caixa desta obra
+    cash_balance = round(total_received - expenses_paid, 2)  # dinheiro efectivo
+    projected_cash_balance = round(sale_total - real_total_cost, 2)  # se tudo for cobrado/pago
+
+    return {
+        "work": {
+            "id": work.get("id"),
+            "title": work.get("title"),
+            "client_name": work.get("client_name"),
+            "status": work.get("status"),
+            "start_date": work.get("start_date"),
+            "end_date": work.get("end_date"),
+        },
+        "resumo": {
+            "sale_total": sale_total,
+            "predicted_total": predicted_total,
+            "real_total_cost": real_total_cost,
+            "predicted_profit": predicted_profit,
+            "real_profit": real_profit,
+            "margin_predicted_pct": margin_predicted_pct,
+            "margin_real_pct": margin_real_pct,
+        },
+        "receitas": {
+            "total_invoiced": total_invoiced,
+            "total_received": total_received,
+            "to_receive": to_receive,
+            "to_invoice": to_invoice,
+            "invoices_count": len(invoices),
+            "invoices": [{
+                "id": i.get("id"), "number": i.get("number"), "issue_date": i.get("issue_date"),
+                "due_date": i.get("due_date"), "value_total": i.get("value_total"),
+                "paid_total": sum(float(p.get("amount") or 0) for p in (i.get("payments") or [])),
+                "status": i.get("status"),
+            } for i in invoices],
+        },
+        "despesas": {
+            "expenses_total": expenses_total,
+            "expenses_paid": expenses_paid,
+            "expenses_to_pay": expenses_to_pay,
+            "count": len(expenses),
+            "expenses": [{
+                "id": e.get("id"), "description": e.get("description"), "date": e.get("date"),
+                "supplier": e.get("supplier"), "category": e.get("category"),
+                "value_gross": e.get("value_gross"), "paid": e.get("paid", False),
+                "type": e.get("type"),
+            } for e in expenses],
+        },
+        "caixa": {
+            "cash_balance": cash_balance,                     # dinheiro efectivo na caixa da obra
+            "projected_cash_balance": projected_cash_balance, # o que sobra quando tudo cobrado/pago
+            "receipts_progress_pct": round((total_received / sale_total * 100) if sale_total > 0 else 0, 1),
+            "cost_progress_pct": round((real_total_cost / predicted_total * 100) if predicted_total > 0 else 0, 1),
+        },
+    }
+
+
 @api_router.get("/works/{work_id}/full")
 async def get_work_full(work_id: str, user=Depends(get_current_user)):
     """Devolve a obra + items computados + despesas vinculadas + KPIs agregados."""

@@ -12,6 +12,7 @@ const navItems = [
   { path: '/propostas', label: 'Propostas', icon: ClipboardList, mod: 'propostas' },
   { path: '/negociacao', label: 'Negociação', icon: HandCoins, mod: 'propostas' },
   { path: '/obras', label: 'Obras', icon: HardHat, mod: 'obras' },
+  { path: '/caixa-obra', label: 'Caixa da Obra', icon: Wallet, mod: 'obras' },
   { path: '/agenda', label: 'Agenda', icon: CalendarDays, mod: 'agenda' },
   { path: '/despesas', label: 'Despesas', icon: Receipt, mod: 'despesas' },
   { path: '/custos-fixos', label: 'Custos Fixos', icon: Repeat, mod: 'custos_fixos' },

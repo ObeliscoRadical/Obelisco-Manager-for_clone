@@ -1,0 +1,27 @@
+{
+  "summary": "Full backend + frontend test of new Caixa da Obra feature. Backend endpoint GET /api/works/{id}/caixa: 7/7 pytest tests pass (auth required, full structure, math consistency cash=received-paid & to_receive=invoiced-received, defaults when no invoices/expenses -> cash=0/margin=100, 404 for invalid work, regression /works and /works/{id}/full). Frontend /caixa-obra page renders correctly with data-testid='caixa-obra-page', sidebar 'Caixa da Obra' entry between Obras and Agenda, work-selector lists 3 works, all 8 KPI cards populated (kpi-sale-total=264€, kpi-received=0€, kpi-to-receive=0€, kpi-cash-balance=0€, kpi-margin-predicted=37.8%, kpi-margin-real=100%, kpi-projected-cash=264€), 2 progress bars render, Facturas+Despesas lists shown, 'Ver todas →' navigates to /faturas (verified) and /despesas. /obras regression OK. Values match spec exactly (264€ sale, no invoices -> cash=0, margin_real=100).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CaixaObraPage - work selector", "issues": ["Emergent dev instrumentation wraps <option> text with <span data-ve-dynamic> causing React 'span cannot be a child of option' hydration warning in console. Not a functional bug (selector works fine, options render text correctly) — appears to be caused by the platform's dev overlay injecting x-file-name spans into option elements. Consider suppressing the wrapper for <option> children or ignore as dev-only warning."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_caixa_obra.py", "/app/test_reports/pytest/caixa_results.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Endpoint /api/works/{id}/caixa properly excludes MongoDB _id via projection {'_id': 0} — good.",
+    "Cashflow math is internally consistent (verified via automated assertions).",
+    "Backend server.py at 4003 lines — exceeds 700-line guideline; should be split into routers/modules in a future refactor (not blocking).",
+    "Warning banner 'warning-margem' data-testid works only when margin_real < 70% of margin_predicted — could not observe in test data (no work has negative margin yet); logic reviewed in JSX and looks correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_caixa_obra.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing seeded work 'Instalação Circuito A/c — APEC' with 264€ sale value.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Caixa da Obra feature is fully functional. Backend endpoint pattern: GET /api/works/{id}/caixa returns {work, resumo, receitas, despesas, caixa}. Frontend at /caixa-obra uses testids: caixa-obra-page, work-selector, kpi-sale-total, kpi-received, kpi-to-receive, kpi-cash-balance, kpi-margin-predicted, kpi-margin-real, kpi-projected-cash, warning-margem. Permission test (user with only 'dashboard' perm) NOT executed because seeded non-admin users unavailable; route uses <ProtectedRoute module='obras'> so behavior is inherited from framework (already tested in earlier iterations for other 'obras' routes). To create a scenario for warning-margem: link an expense with value > 30% of sale to a work.",
+  "rca of the issue": "N/A — no bugs found. The console hydration warning about <span> inside <option> is caused by the Emergent dev instrumentation wrapping dynamic text nodes with tracking <span> elements; harmless at runtime."
+}
