@@ -34,6 +34,15 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 26, 2026 (v33) — Pedido de Orçamento a Fornecedor (PDF)
+- **Pedido**: na página Orçamentos, à semelhança da checklist, criar botão para gerar PDF de pedido de orçamento a fornecedor **com selecção manual de itens** (assim o mesmo orçamento pode originar múltiplos pedidos: cabos para um fornecedor, tomadas/interruptores para outro, etc.).
+- **Frontend novo**:
+  - `lib/supplierRequestPdf.js` — gerador de PDF com layout Obelisco (faixa preta+amarela, logo, título "PEDIDO DE ORÇAMENTO", Nº pedido auto-gerado, obra referência, bloco "solicitamos ao fornecedor", rodapé)
+  - `components/SupplierRequestDialog.jsx` — diálogo com pesquisa, checkboxes por item, "Seleccionar visíveis" / "Desmarcar visíveis", nome do fornecedor, data de entrega, observações. Filtra automaticamente para categorias de material (exclui "Mão de obra", "Serviços", "Trabalho", "Hora")
+- **Frontend integração**: `OrcamentosPage.jsx` — novo botão `data-testid="supplier-request-{id}"` (ícone camião azul-teal) ao lado do "imprimir checklist" na tabela de orçamentos
+- **PDF conteúdo**: 4 colunas neutras — REF · DESCRIÇÃO · UN · QTD (sem preços internos para ser mais profissional). Nome do ficheiro `PedidoOrcamento_{fornecedor}_{obra}.pdf`
+- **Testado**: fluxo Playwright completo — abrir diálogo, preencher fornecedor+entrega+notas, seleccionar 158 items, gerar PDF real. Análise de conteúdo confirma layout correto, zero preços visíveis, tabela com REF/DESCRIÇÃO/UN/QTD, cabeçalho e rodapé Obelisco.
+
 ### Jul 25, 2026 (v32) — Bug Fix: Notificações agenda + chat
 - **Bug 1 CRITICAL** (`server.py`): POST/PUT `/api/appointments` davam HTTP 500 (`AttributeError: start_at`). O hook de notificações assumia `AppointmentCreate.start_at/end_at` mas o model usa `date+time_start+time_end`. Corrigido para construir label `f"{date} {time_start}"` e comparar `date/time_start/time_end` no PUT.
 - **Bug 2 HIGH** (`tech_extras.py`): chat técnico → admin nunca notificava admins. A query projetava `{_id:0, id:1}` mas `users` só tem `_id` (ObjectId). Corrigido para `str(u['_id'])`. Aplicado o mesmo fix em `_get_admin_users` (`server.py`).

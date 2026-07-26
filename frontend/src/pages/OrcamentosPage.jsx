@@ -7,8 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown, Download, Upload, Copy, History, ClipboardCheck, Printer } from 'lucide-react';
+import { Plus, Trash2, Pencil, FileText, Calculator, Search, Loader2, ChevronDown, Download, Upload, Copy, History, ClipboardCheck, Printer, Truck } from 'lucide-react';
 import { generateChecklistPDF } from '../lib/checklistPdf';
+import SupplierRequestDialog from '../components/SupplierRequestDialog';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -71,6 +72,7 @@ export default function OrcamentosPage() {
   const [materials, setMaterials] = useState([]);
   const [settings, setSettings] = useState(null);
   const [logoBase64, setLogoBase64] = useState(null);
+  const [supplierBudget, setSupplierBudget] = useState(null);   // orçamento em modo "pedido fornecedor"
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -431,6 +433,7 @@ export default function OrcamentosPage() {
                       <Button variant="ghost" size="sm" onClick={() => handleSaveVersion(b.id)} className="text-purple-400 hover:text-purple-300 h-8 w-8 p-0" title="Guardar Versao"><History size={15} /></Button>
                       <Button data-testid={`checklist-pdf-${b.id}`} variant="ghost" size="sm" onClick={() => generateChecklistPDF(b, settings, logoBase64).catch(() => toast.error('Erro a gerar checklist'))} className="text-orange-400 hover:text-orange-300 h-8 w-8 p-0" title="Checklist de Separação (PDF)"><ClipboardCheck size={15} /></Button>
                       <Button data-testid={`checklist-print-${b.id}`} variant="ghost" size="sm" onClick={() => generateChecklistPDF(b, settings, logoBase64, { autoPrint: true }).catch(() => toast.error('Erro a imprimir'))} className="text-orange-300 hover:text-orange-200 h-8 w-8 p-0" title="Imprimir Checklist directamente"><Printer size={15} /></Button>
+                      <Button data-testid={`supplier-request-${b.id}`} variant="ghost" size="sm" onClick={() => setSupplierBudget(b)} className="text-teal-400 hover:text-teal-300 h-8 w-8 p-0" title="Pedido de Orçamento a Fornecedor"><Truck size={15} /></Button>
                       <Button data-testid={`delete-budget-${b.id}`} variant="ghost" size="sm" onClick={() => handleDelete(b.id)} className="text-red-400 hover:text-red-300 h-8 w-8 p-0" title="Eliminar"><Trash2 size={15} /></Button>
                     </div>
                   </TableCell>
@@ -775,6 +778,14 @@ export default function OrcamentosPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <SupplierRequestDialog
+        budget={supplierBudget}
+        settings={settings}
+        logoBase64={logoBase64}
+        open={!!supplierBudget}
+        onClose={() => setSupplierBudget(null)}
+      />
     </div>
   );
 }
