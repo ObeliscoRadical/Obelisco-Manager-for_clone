@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { Plus, Pencil, Trash2, HardHat, BarChart3, RefreshCw, AlertTriangle, FileDown, History, Receipt, Sparkles, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, HardHat, BarChart3, RefreshCw, AlertTriangle, FileDown, History, Receipt, Sparkles, X, ListChecks } from 'lucide-react';
+import WorkExecutionPanel from '../components/WorkExecutionPanel';
 import { toast } from 'sonner';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -239,6 +240,7 @@ function WorkAnalysisDialog({ open, workId, onOpenChange }) {
   const [extraForm, setExtraForm] = useState({ name: '', category: 'Extra', unit: 'un', quantity: 1, predicted_unit_cost: 0, real_unit_cost: 0, notes: '' });
   const [showHistory, setShowHistory] = useState(false);
   const [filter, setFilter] = useState(''); // search
+  const [tab, setTab] = useState('execucao');  // 'execucao' | 'custos'
 
   const load = useCallback(async () => {
     if (!workId) return;
@@ -447,6 +449,41 @@ function WorkAnalysisDialog({ open, workId, onOpenChange }) {
 
           {!loading && data && (
             <>
+              {/* TABS */}
+              <div className="flex gap-2 border-b border-zinc-800 -mx-6 px-6" data-testid="work-tabs">
+                <button
+                  data-testid="tab-execucao"
+                  onClick={() => setTab('execucao')}
+                  className={`px-4 py-2.5 text-sm font-semibold transition-colors flex items-center gap-2 border-b-2 -mb-px ${
+                    tab === 'execucao'
+                      ? 'text-yellow-400 border-yellow-400'
+                      : 'text-zinc-500 border-transparent hover:text-white'
+                  }`}
+                >
+                  <ListChecks size={16} /> Execução
+                </button>
+                <button
+                  data-testid="tab-custos"
+                  onClick={() => setTab('custos')}
+                  className={`px-4 py-2.5 text-sm font-semibold transition-colors flex items-center gap-2 border-b-2 -mb-px ${
+                    tab === 'custos'
+                      ? 'text-yellow-400 border-yellow-400'
+                      : 'text-zinc-500 border-transparent hover:text-white'
+                  }`}
+                >
+                  <Receipt size={16} /> Custos Reais
+                </button>
+              </div>
+
+              {tab === 'execucao' && (
+                <WorkExecutionPanel
+                  workId={workId}
+                  items={data.items || []}
+                  onUpdated={load}
+                />
+              )}
+
+              {tab === 'custos' && (<>
               {/* Toolbar */}
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-1 min-w-[200px]">
@@ -704,6 +741,7 @@ function WorkAnalysisDialog({ open, workId, onOpenChange }) {
                   </div>
                 )}
               </div>
+              </>)}
             </>
           )}
         </div>

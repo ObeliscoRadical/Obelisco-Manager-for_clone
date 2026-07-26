@@ -32,6 +32,7 @@ import PipelinePage from "./pages/PipelinePage";
 import PontoEquilibrioPage from "./pages/PontoEquilibrioPage";
 import ContabilistaPage from "./pages/ContabilistaPage";
 import TechDashboardPage from "./pages/TechDashboardPage";
+import TechExecucaoPage from "./pages/TechExecucaoPage";
 import TechGuideDetailPage from "./pages/TechGuideDetailPage";
 import TechAgendaPage from "./pages/TechAgendaPage";
 import TechPontoPage from "./pages/TechPontoPage";
@@ -150,6 +151,8 @@ function App() {
           <Route path="/caixa-obra" element={<ProtectedRoute module="obras"><CaixaObraPage /></ProtectedRoute>} />
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
+          <Route path="/tech/execucao" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
+          <Route path="/tech/execucao/:workId" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
           <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
           <Route path="/tech/agenda" element={<TechProtectedRoute><TechAgendaPage /></TechProtectedRoute>} />
           <Route path="/tech/ponto" element={<TechProtectedRoute><TechPontoPage /></TechProtectedRoute>} />

@@ -193,6 +193,74 @@ def create_tech_extras_router(db, get_current_user):
         return appts
 
     # ============================================================
+    # EXECUÇÃO DA OBRA (read-only)
+    # ============================================================
+    @tech_extra_router.get("/works")
+    async def tech_list_works(user=Depends(get_tech_user)):
+        """Lista todas as obras (light). Read-only para técnicos."""
+        works = await db.works.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+        # calcular progresso rápido
+        result = []
+        for w in works:
+            items = w.get("items") or []
+            sale_total = 0.0
+            executed = 0.0
+            done = in_prog = pending = 0
+            for it in items:
+                qty = float(it.get("quantity") or 0)
+                uc = float(it.get("predicted_unit_cost") or 0)
+                marg = float(it.get("margin") or 0)
+                line_sale = uc * (1 + marg) * qty
+                sale_total += line_sale
+                st = it.get("execution_status") or "pending"
+                exec_q = float(it.get("executed_quantity") or 0)
+                if st == "done":
+                    done += 1
+                    executed += line_sale
+                elif st == "in_progress":
+                    in_prog += 1
+                    executed += (line_sale * (exec_q / qty)) if qty > 0 else 0
+                else:
+                    pending += 1
+            pct = round((executed / sale_total * 100) if sale_total > 0 else 0, 1)
+            result.append({
+                "id": w.get("id"),
+                "title": w.get("title"),
+                "client_name": w.get("client_name"),
+                "status": w.get("status"),
+                "start_date": w.get("start_date"),
+                "items_total": len(items),
+                "items_done": done,
+                "items_in_progress": in_prog,
+                "items_pending": pending,
+                "execution_pct": pct,
+            })
+        return result
+
+    @tech_extra_router.get("/works/{work_id}/execution")
+    async def tech_work_execution(work_id: str, user=Depends(get_tech_user)):
+        """Detalhe read-only da execução de uma obra."""
+        w = await db.works.find_one({"id": work_id}, {"_id": 0})
+        if not w:
+            raise HTTPException(status_code=404, detail="Obra não encontrada")
+        return {
+            "id": w.get("id"),
+            "title": w.get("title"),
+            "client_name": w.get("client_name"),
+            "status": w.get("status"),
+            "items": [{
+                "id": it.get("id"),
+                "name": it.get("name"),
+                "category": it.get("category"),
+                "unit": it.get("unit"),
+                "quantity": it.get("quantity"),
+                "executed_quantity": it.get("executed_quantity", 0),
+                "execution_status": it.get("execution_status", "pending"),
+                "is_extra": it.get("is_extra", False),
+            } for it in (w.get("items") or [])],
+        }
+
+    # ============================================================
     # CHAT / MENSAGENS
     # ============================================================
     @tech_extra_router.get("/messages")

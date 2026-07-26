@@ -1,17 +1,18 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield } from 'lucide-react';
+import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 import NotificationsBell from './NotificationsBell';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
 const NAV_ITEMS = [
-  { path: '/tech',          label: 'Guias',   icon: Package,       testid: 'tech-nav-guias' },
-  { path: '/tech/agenda',   label: 'Agenda',  icon: Calendar,      testid: 'tech-nav-agenda' },
-  { path: '/tech/ponto',    label: 'Ponto',   icon: Clock,         testid: 'tech-nav-ponto' },
-  { path: '/tech/chat',     label: 'Chat',    icon: MessageSquare, testid: 'tech-nav-chat' },
-  { path: '/tech/perfil',   label: 'Perfil',  icon: User,          testid: 'tech-nav-perfil' },
+  { path: '/tech',          label: 'Guias',    icon: Package,       testid: 'tech-nav-guias' },
+  { path: '/tech/execucao', label: 'Execução', icon: ListChecks,    testid: 'tech-nav-execucao' },
+  { path: '/tech/agenda',   label: 'Agenda',   icon: Calendar,      testid: 'tech-nav-agenda' },
+  { path: '/tech/ponto',    label: 'Ponto',    icon: Clock,         testid: 'tech-nav-ponto' },
+  { path: '/tech/chat',     label: 'Chat',     icon: MessageSquare, testid: 'tech-nav-chat' },
+  { path: '/tech/perfil',   label: 'Perfil',   icon: User,          testid: 'tech-nav-perfil' },
 ];
 
 export default function TechLayout({ children }) {
@@ -116,7 +117,7 @@ export default function TechLayout({ children }) {
 
       {/* Bottom nav (mobile only) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 md:hidden" data-testid="tech-bottom-nav">
-        <div className="grid grid-cols-5 max-w-3xl mx-auto py-1">
+        <div className="grid grid-cols-6 max-w-3xl mx-auto py-1">
           {NAV_ITEMS.map(it => {
             const Icon = it.icon;
             const active = isActive(it.path);

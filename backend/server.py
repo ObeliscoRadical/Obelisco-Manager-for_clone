@@ -854,6 +854,9 @@ class WorkItemUpdate(BaseModel):
     real_unit_cost: Optional[float] = None
     real_quantity: Optional[float] = None
     real_notes: Optional[str] = None
+    execution_status: Optional[str] = None    # "pending" | "in_progress" | "done"
+    executed_quantity: Optional[float] = None  # quantidade já executada
+    execution_notes: Optional[str] = None
 
 
 class WorkItemExtra(BaseModel):
@@ -976,6 +979,36 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
     sale_total = round(sum(it.get("sale_total", 0) for it in items), 2)
     predicted_total = round(sum(it.get("predicted_total", 0) for it in items), 2)
     real_items_total = round(sum(it.get("real_total", 0) for it in items), 2)
+
+    # --- Execução por item (peso = sale_total de cada linha) ---
+    execution_done = 0.0
+    execution_in_progress = 0.0
+    execution_pending = 0.0
+    items_done_count = 0
+    items_in_progress_count = 0
+    items_pending_count = 0
+    exec_weighted_pct = 0.0
+    raw_items = work.get("items") or []
+    for computed, raw in zip(items, raw_items):
+        st = raw.get("execution_status") or "pending"
+        qty_total = float(raw.get("quantity") or 0)
+        exec_qty = float(raw.get("executed_quantity") or 0)
+        line_sale = computed.get("sale_total", 0)
+        if st == "done":
+            items_done_count += 1
+            execution_done += line_sale
+            item_pct = 1.0
+        elif st == "in_progress":
+            items_in_progress_count += 1
+            item_pct = (exec_qty / qty_total) if qty_total > 0 else 0
+            execution_in_progress += line_sale * item_pct
+        else:
+            items_pending_count += 1
+            item_pct = 0
+        if sale_total > 0:
+            exec_weighted_pct += (line_sale / sale_total) * item_pct
+    execution_pct = round(exec_weighted_pct * 100, 1)
+    executed_value = round(execution_done + execution_in_progress, 2)
 
     # Facturas emitidas para esta obra
     invoices = await db.invoices.find({"obra_id": work_id}, {"_id": 0}).to_list(500)
@@ -1177,6 +1210,15 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
             "receipts_progress_pct": round((total_received / sale_total * 100) if sale_total > 0 else 0, 1),
             "cost_progress_pct": round((real_total_cost / predicted_total * 100) if predicted_total > 0 else 0, 1),
         },
+        "execution": {
+            "pct": execution_pct,
+            "executed_value": executed_value,
+            "remaining_value": round(sale_total - executed_value, 2),
+            "items_done": items_done_count,
+            "items_in_progress": items_in_progress_count,
+            "items_pending": items_pending_count,
+            "items_total": len(raw_items),
+        },
         "alerts": alerts,
     }
 
@@ -1311,6 +1353,7 @@ async def get_work_full(work_id: str, user=Depends(get_current_user)):
 
 @api_router.put("/works/{work_id}/items/{item_id}")
 async def update_work_item(work_id: str, item_id: str, input: WorkItemUpdate, user=Depends(get_current_user)):
+    _require_admin(user)   # só admin/escritório marca execução e custos reais
     work = await db.works.find_one({"id": work_id}, {"_id": 0})
     if not work:
         raise HTTPException(status_code=404, detail="Obra não encontrada")
@@ -1322,7 +1365,18 @@ async def update_work_item(work_id: str, item_id: str, input: WorkItemUpdate, us
     if not data:
         raise HTTPException(status_code=400, detail="Nada para atualizar")
 
-    # Registar histórico se o custo real mudar
+    # Normaliza execution_status
+    if "execution_status" in data and data["execution_status"] not in ("pending", "in_progress", "done"):
+        raise HTTPException(status_code=400, detail="execution_status inválido")
+
+    # Se marcado como concluído mas sem executed_quantity, assume = quantity total
+    if data.get("execution_status") == "done" and "executed_quantity" not in data:
+        data["executed_quantity"] = float(items[idx].get("quantity") or 0)
+    # Se em curso e sem quantidade, mantém a existente ou 0
+    if data.get("execution_status") == "pending":
+        data["executed_quantity"] = 0
+
+    # Histórico de custo real
     prev_real = float(items[idx].get("real_unit_cost") or 0)
     new_real = data.get("real_unit_cost", prev_real)
     if new_real != prev_real:
@@ -1331,6 +1385,22 @@ async def update_work_item(work_id: str, item_id: str, input: WorkItemUpdate, us
             "by": user.get("name", ""),
             "from": prev_real,
             "to": float(new_real),
+        })
+
+    # Histórico de execução
+    prev_status = items[idx].get("execution_status") or "pending"
+    prev_qty = float(items[idx].get("executed_quantity") or 0)
+    new_status = data.get("execution_status", prev_status)
+    new_qty = float(data.get("executed_quantity", prev_qty))
+    if new_status != prev_status or new_qty != prev_qty:
+        items[idx].setdefault("execution_history", []).append({
+            "at": datetime.now(timezone.utc).isoformat(),
+            "by": user.get("name", ""),
+            "status_from": prev_status,
+            "status_to": new_status,
+            "qty_from": prev_qty,
+            "qty_to": new_qty,
+            "note": data.get("execution_notes", ""),
         })
 
     items[idx] = {**items[idx], **data}

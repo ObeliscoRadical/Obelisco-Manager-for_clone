@@ -349,6 +349,35 @@ export default function CaixaObraPage() {
             <KPI testid="kpi-cash-balance" label="Caixa Efectiva" value={fmt0(caixa.caixa.cash_balance)} icon={PiggyBank} color={cashColor} hint="recebido − pago" />
           </div>
 
+          {/* Execução */}
+          {caixa.execution && caixa.execution.items_total > 0 && (
+            <Card className="bg-zinc-900 border-zinc-800" data-testid="caixa-execution-card">
+              <CardHeader className="pb-2 flex-row items-center justify-between">
+                <CardTitle className="text-sm text-white flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-yellow-400" /> Execução da Obra
+                </CardTitle>
+                <div className="text-2xl font-black text-white" data-testid="caixa-execution-pct">
+                  {caixa.execution.pct}<span className="text-sm text-zinc-500 font-normal">%</span>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2">
+                <Progress value={caixa.execution.pct} className="h-3 bg-zinc-800" />
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex gap-3">
+                    <span className="text-emerald-400">● {caixa.execution.items_done} concluídos</span>
+                    <span className="text-yellow-400">● {caixa.execution.items_in_progress} em curso</span>
+                    <span className="text-zinc-500">● {caixa.execution.items_pending} pendentes</span>
+                  </div>
+                  <div className="text-zinc-500">
+                    Executado <span className="text-white font-mono">{fmt0(caixa.execution.executed_value)}</span>
+                    <span className="mx-2 text-zinc-700">·</span>
+                    Falta <span className="text-yellow-400 font-mono">{fmt0(caixa.execution.remaining_value)}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <AlertsPanel alerts={caixa.alerts || []} />
 
           <Card className="bg-zinc-900 border-zinc-800">

@@ -34,6 +34,26 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 26, 2026 (v34) — Execução da Obra por item
+- **Pedido**: dentro de cada obra, poder marcar itens do orçamento como concluídos/em curso e ver percentagem de execução.
+- **Backend (`server.py`)**:
+  - `WorkItemUpdate` agora aceita `execution_status` (pending/in_progress/done), `executed_quantity`, `execution_notes`
+  - Marcar "done" auto-preenche `executed_quantity = quantity`; "pending" reseta a 0
+  - `execution_history[]` guarda cada transição {at, by, status_from→to, qty_from→to}
+  - Endpoint `_require_admin` — só admin/escritório pode marcar
+  - `GET /api/works/{id}/caixa` retorna novo bloco `execution` com pct ponderado pelo sale_total de cada linha, executed_value, remaining_value, contadores por estado
+- **Backend tech (`tech_extras.py`)**:
+  - `GET /api/tech/works` — lista obras com execution_pct por obra
+  - `GET /api/tech/works/{id}/execution` — detalhe read-only dos items
+- **Frontend admin**:
+  - `WorkExecutionPanel.jsx` — cabeçalho com % gigante, 3 KPI cards (Concluídos/Em Curso/Pendentes), barra de progresso, valor executado vs falta, filtros por estado + pesquisa
+  - Cada item: 3 botões (○▶✓) para trocar estado + input qty executada
+  - Tabs no `WorkAnalysisDialog`: "Execução" (default) | "Custos Reais"
+- **Frontend caixa** (`CaixaObraPage.jsx`): novo card "Execução da Obra" com % + barra + contadores
+- **Frontend tech** (`TechExecucaoPage.jsx`): lista de obras activas com progresso; click abre detalhe read-only com items agrupados por categoria
+- **Navegação tech**: novo item "Execução" no bottom-nav e top-nav (grid ajustado para 6 colunas)
+- **Testado (E2E)**: backend curl valida `in_progress qty=5/30 → pct=8.7%`, `done → auto-fill qty total`, `pending → reset`. Frontend Playwright: dialog obra → tab Execução → click botão em curso → badge muda + contador atualiza + toast. Caixa da Obra mostra card execução. Endpoints tech devolvem lista + detalhe.
+
 ### Jul 26, 2026 (v33) — Pedido de Orçamento a Fornecedor (PDF)
 - **Pedido**: na página Orçamentos, à semelhança da checklist, criar botão para gerar PDF de pedido de orçamento a fornecedor **com selecção manual de itens** (assim o mesmo orçamento pode originar múltiplos pedidos: cabos para um fornecedor, tomadas/interruptores para outro, etc.).
 - **Frontend novo**:
