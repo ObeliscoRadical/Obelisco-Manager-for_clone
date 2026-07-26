@@ -34,6 +34,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 26, 2026 (v35) — Agenda ↔ Obra + Página "Obra em curso" no Portal Técnico
+- **Pedido**: no agendamento do técnico associar a obra; ao clicar, o técnico abre uma vista completa da obra com todos os itens **sem valores**.
+- **Backend**:
+  - `AppointmentCreate` aceita `work_id: Optional[str]` (persiste em `appointments`)
+  - `GET /api/tech/works/{id}/execution` agora inclui `client_phone`, `notes`, `start_date`, `end_date` e `appointments[]` (últimos 20 agendamentos da obra)
+- **Frontend admin (`AgendaPage.jsx`)**:
+  - Dropdown "**Obra (opcional)**" no topo do form com ícone HardHat; ao seleccionar auto-preenche título e cliente (se vazios); lista só obras não finalizadas/canceladas
+  - Cartão da agenda mostra badge amarelo "Obra: <título>"
+- **Frontend técnico**:
+  - `TechAgendaPage.jsx`: cartão da marcação com badge **"Ver detalhes da obra"** + chevron ➤; click abre `/tech/obra/:workId`
+  - `TechObraDetailPage.jsx` (novo): cabeçalho com obra/cliente/data/hora + **% progresso gigante**, 2 botões grandes **Google Maps** e **Ligar Cliente** (usa `tel:` e Maps deep-link), cards de **notas** (da marcação + da obra), 2 acções rápidas (Falar com Escritório / Guias de Transporte), lista de trabalhos previstos **agrupados por categoria com contadores 0/N**, badges de estado, sem qualquer valor comercial
+  - Nova rota `/tech/obra/:workId`
+- **Testado**: backend curl (create/read/persist `work_id`) + Playwright mobile viewport E2E: técnico vê badge → clica → obra abre com todos os componentes (maps, ligar, notas amarelas, categorias, sem preços) ✅
+
 ### Jul 26, 2026 (v34) — Execução da Obra por item
 - **Pedido**: dentro de cada obra, poder marcar itens do orçamento como concluídos/em curso e ver percentagem de execução.
 - **Backend (`server.py`)**:

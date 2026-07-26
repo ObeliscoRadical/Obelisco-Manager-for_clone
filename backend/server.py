@@ -162,6 +162,7 @@ class AppointmentCreate(BaseModel):
     notes: str = ""
     employee_ids: List[str] = []      # Técnicos atribuídos a este compromisso
     location: str = ""
+    work_id: Optional[str] = None     # Obra associada (opcional)
 
 
 # --- Auth Endpoints ---

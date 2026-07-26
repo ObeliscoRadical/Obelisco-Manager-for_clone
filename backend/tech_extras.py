@@ -243,11 +243,18 @@ def create_tech_extras_router(db, get_current_user):
         w = await db.works.find_one({"id": work_id}, {"_id": 0})
         if not w:
             raise HTTPException(status_code=404, detail="Obra não encontrada")
+        # Agendamentos associados a esta obra (próximos e recentes)
+        appts = await db.appointments.find({"work_id": work_id}, {"_id": 0}).sort("date", -1).limit(20).to_list(20)
         return {
             "id": w.get("id"),
             "title": w.get("title"),
             "client_name": w.get("client_name"),
+            "client_phone": w.get("client_phone"),
             "status": w.get("status"),
+            "notes": w.get("notes"),
+            "start_date": w.get("start_date"),
+            "end_date": w.get("end_date"),
+            "appointments": appts,
             "items": [{
                 "id": it.get("id"),
                 "name": it.get("name"),

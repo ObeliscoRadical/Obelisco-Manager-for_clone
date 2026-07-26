@@ -8,15 +8,16 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil } from 'lucide-react';
+import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil, HardHat } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
-const emptyForm = { title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '', employee_ids: [], location: '' };
+const emptyForm = { title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '', employee_ids: [], location: '', work_id: '' };
 
 export default function AgendaPage() {
   const [appointments, setAppointments] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [works, setWorks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -25,12 +26,14 @@ export default function AgendaPage() {
 
   const fetchAll = useCallback(async () => {
     try {
-      const [apts, emps] = await Promise.all([
+      const [apts, emps, ws] = await Promise.all([
         api.get('/appointments'),
         api.get('/payroll/employees').catch(() => ({ data: [] })),
+        api.get('/works').catch(() => ({ data: [] })),
       ]);
       setAppointments(apts.data);
       setEmployees((emps.data || []).filter(e => e.active !== false));
+      setWorks(ws.data || []);
     } catch (err) { toast.error('Erro ao carregar dados'); }
     finally { setLoading(false); }
   }, []);
@@ -50,6 +53,7 @@ export default function AgendaPage() {
   }), []);
 
   const empName = (id) => employees.find(e => e.id === id)?.name || 'Funcionário';
+  const workById = (id) => works.find(w => w.id === id);
 
   const openNew = () => {
     setEditingId(null);
@@ -68,8 +72,25 @@ export default function AgendaPage() {
       notes: a.notes || '',
       employee_ids: a.employee_ids || [],
       location: a.location || '',
+      work_id: a.work_id || '',
     });
     setDialogOpen(true);
+  };
+
+  const onWorkSelected = (workId) => {
+    if (!workId) {
+      setForm(prev => ({ ...prev, work_id: '' }));
+      return;
+    }
+    const w = workById(workId);
+    if (!w) return;
+    // Auto-preencher campos vazios com dados da obra
+    setForm(prev => ({
+      ...prev,
+      work_id: workId,
+      title: prev.title || w.title || '',
+      client_name: prev.client_name || w.client_name || '',
+    }));
   };
 
   const toggleEmp = (id) => {
@@ -155,6 +176,11 @@ export default function AgendaPage() {
                       <div className="flex-1">
                         <p className="font-semibold text-white">{a.title}</p>
                         {a.client_name && <p className="text-sm text-zinc-400">{a.client_name}</p>}
+                        {a.work_id && workById(a.work_id) && (
+                          <Badge className="bg-yellow-500/15 text-yellow-300 border-yellow-500/40 text-[10px] mt-1">
+                            <HardHat size={9} className="mr-1" /> Obra: {workById(a.work_id).title}
+                          </Badge>
+                        )}
                         {a.location && <p className="text-xs text-zinc-500 flex items-center gap-1 mt-1"><MapPin size={11} /> {a.location}</p>}
                         {a.notes && <p className="text-xs text-zinc-600 mt-1">{a.notes}</p>}
                         {(a.employee_ids || []).length > 0 && (
@@ -191,6 +217,21 @@ export default function AgendaPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
+            <div>
+              <Label className="text-zinc-300 text-sm flex items-center gap-1"><HardHat size={14} className="text-yellow-400" /> Obra (opcional)</Label>
+              <select
+                data-testid="appointment-work-select"
+                value={form.work_id || ''}
+                onChange={e => onWorkSelected(e.target.value)}
+                className="mt-1 w-full bg-zinc-900 border border-zinc-800 rounded-xl h-10 px-3 text-white text-sm"
+              >
+                <option value="">— Sem obra associada —</option>
+                {works
+                  .filter(w => !['finalizado', 'concluida', 'cancelada'].includes((w.status || '').toLowerCase()))
+                  .map(w => <option key={w.id} value={w.id}>{w.title} · {w.client_name || 's/ cliente'}</option>)}
+              </select>
+              {form.work_id && <p className="text-[10px] text-yellow-400 mt-1">✓ Técnico poderá ver a lista de itens desta obra no portal.</p>}
+            </div>
             <div>
               <Label className="text-zinc-300 text-sm">Título *</Label>
               <Input data-testid="appointment-title-input" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })}
