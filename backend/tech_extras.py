@@ -239,7 +239,6 @@ def create_tech_extras_router(db, get_current_user):
 
     @tech_extra_router.get("/works/{work_id}/execution")
     async def tech_work_execution(work_id: str, user=Depends(get_tech_user)):
-        """Detalhe read-only da execução de uma obra."""
         w = await db.works.find_one({"id": work_id}, {"_id": 0})
         if not w:
             raise HTTPException(status_code=404, detail="Obra não encontrada")

@@ -936,6 +936,26 @@ async def sync_work_from_budget(work_id: str, user=Depends(get_current_user)):
 
 @api_router.get("/works/{work_id}/caixa")
 async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
+    """Retorna todos os KPIs financeiros e de execução da caixa da obra."""
+
+    async def _work_attendance_today(wid: str):
+        """Lista os técnicos que picaram nesta obra HOJE (in/out)."""
+        today_iso = datetime.now(timezone.utc).date().isoformat()
+        atts = await db.attendance.find({"date": today_iso}, {"_id": 0}).to_list(200)
+        result = []
+        for att in atts:
+            work_punches = [p for p in (att.get("punches") or []) if p.get("work_id") == wid]
+            if not work_punches:
+                continue
+            emp = await db.employees.find_one({"id": att.get("employee_id")}, {"_id": 0, "name": 1})
+            last = work_punches[-1]
+            result.append({
+                "employee_id": att.get("employee_id"),
+                "employee_name": (emp or {}).get("name", "Técnico"),
+                "current_status": "in" if last.get("action") == "in" else "out",
+                "punches": work_punches,
+            })
+        return result
     """
     Caixa da Obra — balanço financeiro completo:
     - Valor de venda (do orçamento aprovado)
@@ -1220,6 +1240,7 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
             "items_pending": items_pending_count,
             "items_total": len(raw_items),
         },
+        "attendance": await _work_attendance_today(work_id),
         "alerts": alerts,
     }
 

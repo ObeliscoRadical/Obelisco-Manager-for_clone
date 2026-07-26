@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import {
   Wallet, TrendingUp, TrendingDown, AlertTriangle, CheckCircle2, HardHat,
   Receipt, FileCheck, Clock, PiggyBank, Target, Plus, Unlink, Search, X,
-  Siren, BellRing,
+  Siren, BellRing, LogIn, LogOut, UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -374,6 +374,44 @@ export default function CaixaObraPage() {
                     Falta <span className="text-yellow-400 font-mono">{fmt0(caixa.execution.remaining_value)}</span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Técnicos em obra hoje */}
+          {caixa.attendance && caixa.attendance.length > 0 && (
+            <Card className="bg-zinc-900 border-zinc-800" data-testid="caixa-attendance-card">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm text-white flex items-center gap-2">
+                  <UserCheck className="h-4 w-4 text-emerald-400" /> Técnicos em obra <span className="text-xs text-zinc-500 font-normal">hoje</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2">
+                {caixa.attendance.map((a) => (
+                  <div key={a.employee_id} className="flex items-start justify-between gap-2 border-b border-zinc-800/50 last:border-0 pb-2 last:pb-0" data-testid={`attendance-${a.employee_id}`}>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm text-white font-medium">{a.employee_name}</p>
+                        {a.current_status === 'in' ? (
+                          <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/40 text-[9px] uppercase font-bold">
+                            <LogIn className="h-2.5 w-2.5 mr-1" /> Na obra
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-zinc-800 text-zinc-400 border-zinc-700 text-[9px] uppercase">
+                            <LogOut className="h-2.5 w-2.5 mr-1" /> Saiu
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 mt-0.5 flex flex-wrap gap-x-2">
+                        {a.punches.map((p, i) => (
+                          <span key={i} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
+                            {p.action === 'in' ? '→' : '←'} {new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </CardContent>
             </Card>
           )}

@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   HardHat, ArrowLeft, Phone, MapPin, MessageSquare, Package as PackageIcon,
   CheckCircle2, Circle, Play, User, StickyNote, CalendarClock,
+  LogIn, LogOut, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,18 +25,35 @@ export default function TechObraDetailPage() {
   const nav = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [today, setToday] = useState(null);          // timesheet do dia
+  const [punching, setPunching] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get(`/tech/works/${workId}/execution`);
-      setData(data);
+      const [resWork, resToday] = await Promise.all([
+        api.get(`/tech/works/${workId}/execution`),
+        api.get('/tech/timesheet/today').catch(() => ({ data: null })),
+      ]);
+      setData(resWork.data);
+      setToday(resToday.data);
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Erro ao carregar obra');
     } finally { setLoading(false); }
   }, [workId]);
 
   useEffect(() => { load(); }, [load]);
+
+  const punch = async (action) => {
+    setPunching(true);
+    try {
+      const { data: updated } = await api.post('/tech/timesheet/punch', { action, work_id: workId });
+      setToday(updated);
+      toast.success(action === 'in' ? '📍 Chegada registada' : '✅ Saída registada');
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Erro ao registar');
+    } finally { setPunching(false); }
+  };
 
   if (loading || !data) {
     return (
@@ -75,6 +93,15 @@ export default function TechObraDetailPage() {
     window.location.href = `tel:${phone.replace(/\s/g, '')}`;
   };
 
+  // Picagens do dia relativas a ESTA obra
+  const punchesForThisWork = ((today && today.punches) || []).filter(p => p.work_id === workId);
+  const lastPunchThisWork = punchesForThisWork[punchesForThisWork.length - 1];
+  const isCheckedIn = lastPunchThisWork && lastPunchThisWork.action === 'in';
+  // Também bloqueia se está in noutra obra (evita picar 2 obras em simultâneo)
+  const allPunches = (today?.punches || []);
+  const globalLast = allPunches[allPunches.length - 1];
+  const inAnotherWork = globalLast && globalLast.action === 'in' && globalLast.work_id && globalLast.work_id !== workId;
+
   return (
     <TechLayout title="Obra">
       <div className="space-y-4" data-testid="tech-obra-detail">
@@ -85,6 +112,47 @@ export default function TechObraDetailPage() {
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Voltar
         </button>
+
+        {/* BOTÕES CHEGUEI / TERMINEI — bem visíveis no topo */}
+        <div className="grid grid-cols-2 gap-2" data-testid="tech-obra-punch">
+          <Button
+            data-testid="tech-obra-punch-in"
+            onClick={() => punch('in')}
+            disabled={punching || isCheckedIn || inAnotherWork}
+            className={`h-14 rounded-xl font-black text-base shadow-lg ${
+              isCheckedIn
+                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                : 'bg-emerald-500 hover:bg-emerald-400 text-white'
+            } disabled:opacity-40 disabled:cursor-not-allowed`}
+          >
+            {punching ? <Loader2 className="h-5 w-5 animate-spin" /> : <><LogIn className="h-5 w-5 mr-2" /> {isCheckedIn ? 'NA OBRA' : 'CHEGUEI'}</>}
+          </Button>
+          <Button
+            data-testid="tech-obra-punch-out"
+            onClick={() => punch('out')}
+            disabled={punching || !isCheckedIn}
+            className="h-14 rounded-xl font-black text-base shadow-lg bg-red-500 hover:bg-red-400 text-white disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {punching ? <Loader2 className="h-5 w-5 animate-spin" /> : <><LogOut className="h-5 w-5 mr-2" /> TERMINEI</>}
+          </Button>
+        </div>
+
+        {inAnotherWork && (
+          <p className="text-xs text-amber-300 bg-amber-900/30 border border-amber-500/30 rounded-lg p-2 text-center" data-testid="tech-obra-punch-warning">
+            ⚠️ Estás noutra obra em curso — termina lá primeiro para picares aqui.
+          </p>
+        )}
+
+        {punchesForThisWork.length > 0 && (
+          <div className="text-[11px] text-zinc-500 flex flex-wrap gap-x-3 gap-y-1" data-testid="tech-obra-punch-log">
+            <span className="text-zinc-400 font-bold uppercase tracking-wider text-[10px]">Hoje aqui:</span>
+            {punchesForThisWork.map((p, i) => (
+              <span key={i} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
+                {p.action === 'in' ? '→' : '←'} {new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* CABEÇALHO */}
         <Card className="bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800">

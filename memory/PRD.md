@@ -34,6 +34,21 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Jul 26, 2026 (v36) — Botões "Cheguei"/"Terminei" na obra + Técnicos em obra na Caixa
+- **Pedido**: no topo da página da obra (Portal Técnico), botões grandes para registar chegada/saída da obra; o admin vê em tempo real quem está onde.
+- **Portal Técnico (`TechObraDetailPage.jsx`)**:
+  - 2 botões grandes no topo: **CHEGUEI** (verde) e **TERMINEI** (vermelho)
+  - Usa endpoint existente `POST /api/tech/timesheet/punch` passando `{action, work_id}` — integração natural com o módulo Ponto
+  - Estado dinâmico: quando picado, o "CHEGUEI" mostra "NA OBRA" desactivado e liberta o "TERMINEI"
+  - Aviso amarelo se o técnico já estiver picado noutra obra (evita 2 obras em simultâneo)
+  - Timeline "HOJE AQUI:" com todas as picagens do dia relativas a esta obra
+- **Caixa da Obra admin (`CaixaObraPage.jsx`)**:
+  - Novo card **"Técnicos em obra · hoje"** com lista de técnicos, badge "NA OBRA"/"SAIU", e timeline das picagens do dia
+- **Backend (`server.py`)**:
+  - Helper `_work_attendance_today` no endpoint da caixa varre `attendance` do dia filtrando pelas picagens com `work_id` igual
+  - Retorno agora inclui `attendance: [{employee_id, employee_name, current_status, punches}]`
+- **Testado (E2E Playwright mobile + Playwright desktop)**: tech pica CHEGUEI → estado UI muda + toast → refresh na Caixa admin mostra "NA OBRA" com timeline correta ✅
+
 ### Jul 26, 2026 (v35) — Agenda ↔ Obra + Página "Obra em curso" no Portal Técnico
 - **Pedido**: no agendamento do técnico associar a obra; ao clicar, o técnico abre uma vista completa da obra com todos os itens **sem valores**.
 - **Backend**:
