@@ -11,6 +11,9 @@ import { generateSupplierRequestPDF } from '../lib/supplierRequestPdf';
 // Categorias que são consideradas MATERIAL (excluir Mão de obra, Serviços, Extras)
 const NON_MATERIAL_KEYWORDS = ['mão de obra', 'mao de obra', 'servico', 'serviço', 'trabalho', 'hora'];
 
+// Unidades comuns em material de eletricidade/telecom
+const UNIT_OPTIONS = ['un', 'm', 'm²', 'm³', 'kg', 'rolo', 'cx', 'par', 'jogo', 'lote', 'kit'];
+
 function isMaterial(item) {
   const cat = (item.category || '').toLowerCase().trim();
   const name = (item.name || '').toLowerCase();
@@ -28,6 +31,7 @@ function isMaterial(item) {
 export default function SupplierRequestDialog({ budget, settings, logoBase64, open, onClose }) {
   const materials = useMemo(() => (budget?.items || []).filter(isMaterial), [budget]);
   const [selected, setSelected] = useState({});     // {index: true}
+  const [overrides, setOverrides] = useState({});   // {index: {unit, quantity}} — apenas para o PDF
   const [search, setSearch] = useState('');
   const [supplierName, setSupplierName] = useState('');
   const [deliveryDate, setDeliveryDate] = useState('');
@@ -37,6 +41,7 @@ export default function SupplierRequestDialog({ budget, settings, logoBase64, op
     // Reset quando abrir
     if (open) {
       setSelected({});
+      setOverrides({});
       setSearch('');
       setSupplierName('');
       setDeliveryDate('');
@@ -72,7 +77,17 @@ export default function SupplierRequestDialog({ budget, settings, logoBase64, op
 
   const generate = async () => {
     if (!someSelected) { toast.error('Seleccione pelo menos um item.'); return; }
-    const items = materials.filter((_, i) => selected[i]);
+    const items = materials
+      .map((it, i) => {
+        if (!selected[i]) return null;
+        const ov = overrides[i] || {};
+        return {
+          ...it,
+          unit: ov.unit !== undefined && ov.unit !== '' ? ov.unit : (it.unit || 'un'),
+          quantity: ov.quantity !== undefined && ov.quantity !== '' ? Number(ov.quantity) : it.quantity,
+        };
+      })
+      .filter(Boolean);
     try {
       await generateSupplierRequestPDF(
         budget,
@@ -163,28 +178,64 @@ export default function SupplierRequestDialog({ budget, settings, logoBase64, op
           {filtered.map((it) => {
             const idx = materials.indexOf(it);
             const checked = !!selected[idx];
+            const ov = overrides[idx] || {};
+            const currentUnit = ov.unit !== undefined ? ov.unit : (it.unit || 'un');
+            const currentQty = ov.quantity !== undefined ? ov.quantity : String(it.quantity ?? '');
+            const unitChanged = ov.unit !== undefined && ov.unit !== (it.unit || 'un');
+            const qtyChanged = ov.quantity !== undefined && Number(ov.quantity) !== Number(it.quantity);
             return (
-              <button
+              <div
                 key={idx}
                 data-testid={`supplier-item-${idx}`}
-                type="button"
-                onClick={() => toggle(idx)}
-                className={`w-full text-left px-3 py-2.5 flex items-center gap-3 hover:bg-zinc-900/60 transition-colors ${checked ? 'bg-yellow-500/5' : ''}`}
+                className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${checked ? 'bg-yellow-500/5' : 'hover:bg-zinc-900/60'}`}
               >
-                {checked
-                  ? <CheckSquare className="h-4 w-4 text-yellow-400 shrink-0" />
-                  : <Square className="h-4 w-4 text-zinc-600 shrink-0" />}
-                <div className="min-w-0 flex-1">
+                <button
+                  type="button"
+                  onClick={() => toggle(idx)}
+                  className="shrink-0"
+                  aria-label="toggle"
+                  data-testid={`supplier-item-toggle-${idx}`}
+                >
+                  {checked
+                    ? <CheckSquare className="h-4 w-4 text-yellow-400" />
+                    : <Square className="h-4 w-4 text-zinc-600" />}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggle(idx)}
+                  className="min-w-0 flex-1 text-left"
+                >
                   <p className="text-sm text-white truncate">{it.name || 'Item sem descrição'}</p>
                   <div className="flex flex-wrap gap-1.5 mt-0.5">
                     {it.category && <Badge className="bg-zinc-800 border-zinc-700 text-zinc-400 text-[9px]">{it.category}</Badge>}
                     {it.brand && <Badge className="bg-zinc-800 border-zinc-700 text-zinc-400 text-[9px]">{it.brand}</Badge>}
+                    {(unitChanged || qtyChanged) && (
+                      <Badge className="bg-yellow-500/15 text-yellow-300 border-yellow-500/40 text-[9px]">alterado</Badge>
+                    )}
                   </div>
+                </button>
+                <div className="flex items-center gap-1.5 shrink-0" onClick={e => e.stopPropagation()}>
+                  <Input
+                    data-testid={`supplier-item-qty-${idx}`}
+                    type="number" min="0" step="0.01"
+                    value={currentQty}
+                    onChange={(e) => setOverrides({ ...overrides, [idx]: { ...ov, quantity: e.target.value } })}
+                    className="h-8 w-20 bg-zinc-950 border-zinc-800 text-white text-right text-xs rounded-lg"
+                  />
+                  <select
+                    data-testid={`supplier-item-unit-${idx}`}
+                    value={UNIT_OPTIONS.includes(currentUnit) ? currentUnit : '__custom__'}
+                    onChange={(e) => {
+                      if (e.target.value === '__custom__') return;
+                      setOverrides({ ...overrides, [idx]: { ...ov, unit: e.target.value } });
+                    }}
+                    className="h-8 bg-zinc-950 border border-zinc-800 rounded-lg text-white text-xs px-1.5"
+                  >
+                    {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
+                    {!UNIT_OPTIONS.includes(currentUnit) && <option value="__custom__">{currentUnit}</option>}
+                  </select>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-mono text-white">{it.quantity || 0} <span className="text-zinc-500 text-xs">{it.unit || 'un'}</span></p>
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
