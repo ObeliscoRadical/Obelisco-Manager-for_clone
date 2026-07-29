@@ -48,7 +48,6 @@ export default function OrcamentosPage() {
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [items, setItems] = useState([createItem()]);
-  const [globalMultiplier, setGlobalMultiplier] = useState(1.8);   // Multiplicador global — actualiza margens dos items em tempo real
   const [categories, setCategories] = useState([]);
   const [searchingPrice, setSearchingPrice] = useState({});
   // Global discount
@@ -133,15 +132,6 @@ export default function OrcamentosPage() {
     setClientName(budget.client_name);
     setClientPhone(budget.client_phone || '');
     setItems(budget.items?.length > 0 ? budget.items.map(i => ({ discount_type: 'percentage', discount_value: 0, ...i, _key: `item-${++itemIdCounter}` })) : [createItem()]);
-    // Sincronizar multiplicador com as margens dos itens (se forem uniformes)
-    if (budget.items?.length > 0) {
-      const margins = budget.items.map(i => Number(i.margin || 0));
-      const first = margins[0];
-      const uniform = margins.every(m => Math.abs(m - first) < 0.001);
-      setGlobalMultiplier(uniform ? Math.round((1 + first) * 100) / 100 : 1.8);
-    } else {
-      setGlobalMultiplier(1.8);
-    }
     setDiscountType(budget.discount_type || 'percentage');
     setDiscountValue(budget.discount_value || 0);
     setPaymentMethods(budget.payment_methods || []);
@@ -748,28 +738,10 @@ export default function OrcamentosPage() {
             </div>
 
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-              <div className="flex gap-6 flex-wrap items-center">
+              <div className="flex gap-8 flex-wrap">
                 <div>
                   <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Custo Total</p>
                   <p className="text-xl font-bold text-zinc-300">{formatEuro(totalCost)}</p>
-                </div>
-                <div className="flex items-center gap-2 bg-yellow-500/5 border border-yellow-500/30 rounded-xl px-3 py-2" data-testid="multiplier-inline">
-                  <span className="text-xs text-yellow-400 font-bold">×</span>
-                  <Input
-                    data-testid="multiplier-input"
-                    type="number" step="0.1" min="1" max="10"
-                    value={globalMultiplier}
-                    onChange={e => {
-                      const v = Math.max(1, parseFloat(e.target.value) || 1);
-                      setGlobalMultiplier(v);
-                      const newMargin = v - 1;
-                      setItems(prev => prev.map(it => ({ ...it, margin: newMargin })));
-                    }}
-                    className="h-8 w-16 bg-zinc-950 border-yellow-500/40 text-yellow-300 text-lg font-bold font-mono rounded-lg text-center px-1"
-                  />
-                  <span className="text-[10px] text-zinc-500 leading-tight max-w-[110px]">
-                    multiplicador<br/>margem&nbsp;{((globalMultiplier - 1) * 100).toFixed(0)}%
-                  </span>
                 </div>
                 {discountValue > 0 && (
                   <div>
