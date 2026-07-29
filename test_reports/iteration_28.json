@@ -1,0 +1,22 @@
+{
+  "summary": "Frontend-only regression on OrcamentosPage inline multiplier. Logged in as admin@obelisco.pt, opened an existing budget via edit-budget-{id}. Confirmed old 'multiplier-card' and 'apply-multiplier-btn' are absent from DOM. New pill 'multiplier-inline' with input 'multiplier-input' is rendered with default value 1.8 and legend 'margem 80%'. Changing the multiplier live-updates all item margins AND the Preço Final without any button click: 2.0 → margem 100%, Preço 1323→1705,50 €; 1.5 → margem 50%, Preço 1278,00 €; 1.85 → margem 85% and item margin inputs updated to 0.85 (visible in screenshot). Entering 0.5 is correctly clamped to 1 (prevents prejuízo). Decimal values accepted. save-budget-btn is present. No console errors related to the flow (only pre-login 401s, expected).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OrcamentosPage.jsx is 811 lines — consider splitting items table, totals block and dialog into subcomponents.",
+    "globalMultiplier is local state only; when opening an existing budget with mixed margins it does not reflect the loaded items. Acceptable per spec ('não precisa persistir') but the pill will still show 1.8 while items keep their own margins until user touches the input. Consider deriving default from items on load if margins are uniform."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a", "frontend": "100%" },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "None — used existing budgets",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Inline multiplier working. All 8 required checks passed. Only cosmetic suggestion: on load, sync globalMultiplier from uniform item margins so pill reflects reality."
+}

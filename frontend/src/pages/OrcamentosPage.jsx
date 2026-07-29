@@ -48,8 +48,7 @@ export default function OrcamentosPage() {
   const [clientName, setClientName] = useState('');
   const [clientPhone, setClientPhone] = useState('');
   const [items, setItems] = useState([createItem()]);
-  const [globalMultiplier, setGlobalMultiplier] = useState(1.8);   // Multiplicador global (calculadora)
-  const [vatRate, setVatRate] = useState(23);                       // IVA % para simulação
+  const [globalMultiplier, setGlobalMultiplier] = useState(1.8);   // Multiplicador global — actualiza margens dos items em tempo real
   const [categories, setCategories] = useState([]);
   const [searchingPrice, setSearchingPrice] = useState({});
   // Global discount
@@ -739,79 +738,29 @@ export default function OrcamentosPage() {
               </div>
             </div>
 
-            <div className="p-5 rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 border border-yellow-500/30" data-testid="multiplier-card">
-              <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
-                <div>
-                  <p className="text-xs uppercase tracking-widest text-yellow-400 font-bold flex items-center gap-2">
-                    <Calculator size={14} /> Simulação por Multiplicador
-                  </p>
-                  <p className="text-[11px] text-zinc-500 mt-0.5">
-                    Método do consultor: <strong>custo directo × multiplicador</strong> (cobre indirectos + garantia + lucro).
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                <div>
-                  <Label className="text-[10px] text-zinc-500 uppercase tracking-wider">Custo Directo</Label>
-                  <p className="text-lg font-bold text-zinc-300 font-mono mt-1">{formatEuro(totalCost)}</p>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-zinc-400 uppercase tracking-wider">× Multiplicador</Label>
-                  <Input
-                    data-testid="multiplier-input"
-                    type="number" step="0.05" min="1" max="10"
-                    value={globalMultiplier}
-                    onChange={e => setGlobalMultiplier(Math.max(1, parseFloat(e.target.value) || 1))}
-                    className="mt-1 h-9 bg-zinc-950 border-yellow-500/30 text-yellow-300 text-lg font-bold font-mono rounded-lg text-center"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[10px] text-zinc-500 uppercase tracking-wider">Margem Gestão</Label>
-                  <p className="text-lg font-bold text-emerald-400 font-mono mt-1">{formatEuro(totalCost * (globalMultiplier - 1))}</p>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-zinc-500 uppercase tracking-wider">Subtotal (s/ IVA)</Label>
-                  <p className="text-lg font-bold text-white font-mono mt-1">{formatEuro(totalCost * globalMultiplier)}</p>
-                </div>
-                <div>
-                  <Label className="text-[10px] text-zinc-500 uppercase tracking-wider">
-                    IVA
-                    <Input
-                      data-testid="multiplier-vat-input"
-                      type="number" step="0.5" min="0" max="30"
-                      value={vatRate}
-                      onChange={e => setVatRate(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="inline-block h-5 w-12 ml-1 bg-zinc-950 border-zinc-800 text-zinc-300 text-[10px] rounded px-1 text-center"
-                    /> %
-                  </Label>
-                  <p className="text-lg font-bold text-yellow-400 font-mono mt-1">{formatEuro(totalCost * globalMultiplier * (1 + vatRate / 100))}</p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between gap-2 mt-4 pt-3 border-t border-zinc-800 flex-wrap">
-                <p className="text-[11px] text-zinc-500">
-                  Multiplicador <strong className="text-yellow-400">{globalMultiplier}</strong> · Margem <strong className="text-emerald-400">{((globalMultiplier - 1) * 100).toFixed(0)}%</strong> sobre custo · <strong className="text-white">{formatEuro(totalCost * globalMultiplier)}</strong> antes de IVA
-                </p>
-                <Button
-                  data-testid="apply-multiplier-btn"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const newMargin = globalMultiplier - 1;
-                    setItems(prev => prev.map(it => ({ ...it, margin: newMargin })));
-                    toast.success(`Multiplicador ${globalMultiplier} aplicado a ${items.length} item(s)`);
-                  }}
-                  className="border-yellow-500/40 text-yellow-300 hover:bg-yellow-500/10 rounded-full text-xs h-8"
-                >
-                  Aplicar aos itens (margem = {((globalMultiplier - 1) * 100).toFixed(0)}%)
-                </Button>
-              </div>
-            </div>
-
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
-              <div className="flex gap-8 flex-wrap">
+              <div className="flex gap-6 flex-wrap items-center">
                 <div>
                   <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Custo Total</p>
                   <p className="text-xl font-bold text-zinc-300">{formatEuro(totalCost)}</p>
+                </div>
+                <div className="flex items-center gap-2 bg-yellow-500/5 border border-yellow-500/30 rounded-xl px-3 py-2" data-testid="multiplier-inline">
+                  <span className="text-xs text-yellow-400 font-bold">×</span>
+                  <Input
+                    data-testid="multiplier-input"
+                    type="number" step="0.1" min="1" max="10"
+                    value={globalMultiplier}
+                    onChange={e => {
+                      const v = Math.max(1, parseFloat(e.target.value) || 1);
+                      setGlobalMultiplier(v);
+                      const newMargin = v - 1;
+                      setItems(prev => prev.map(it => ({ ...it, margin: newMargin })));
+                    }}
+                    className="h-8 w-16 bg-zinc-950 border-yellow-500/40 text-yellow-300 text-lg font-bold font-mono rounded-lg text-center px-1"
+                  />
+                  <span className="text-[10px] text-zinc-500 leading-tight max-w-[110px]">
+                    multiplicador<br/>margem&nbsp;{((globalMultiplier - 1) * 100).toFixed(0)}%
+                  </span>
                 </div>
                 {discountValue > 0 && (
                   <div>
@@ -820,7 +769,7 @@ export default function OrcamentosPage() {
                   </div>
                 )}
                 <div>
-                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Preco Final</p>
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider font-medium">Preço Final</p>
                   <p className="text-xl font-bold text-yellow-400">{formatEuro(totalPrice)}</p>
                 </div>
                 <div>
