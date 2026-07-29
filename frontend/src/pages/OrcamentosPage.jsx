@@ -133,6 +133,15 @@ export default function OrcamentosPage() {
     setClientName(budget.client_name);
     setClientPhone(budget.client_phone || '');
     setItems(budget.items?.length > 0 ? budget.items.map(i => ({ discount_type: 'percentage', discount_value: 0, ...i, _key: `item-${++itemIdCounter}` })) : [createItem()]);
+    // Sincronizar multiplicador com as margens dos itens (se forem uniformes)
+    if (budget.items?.length > 0) {
+      const margins = budget.items.map(i => Number(i.margin || 0));
+      const first = margins[0];
+      const uniform = margins.every(m => Math.abs(m - first) < 0.001);
+      setGlobalMultiplier(uniform ? Math.round((1 + first) * 100) / 100 : 1.8);
+    } else {
+      setGlobalMultiplier(1.8);
+    }
     setDiscountType(budget.discount_type || 'percentage');
     setDiscountValue(budget.discount_value || 0);
     setPaymentMethods(budget.payment_methods || []);
