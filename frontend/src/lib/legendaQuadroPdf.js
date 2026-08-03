@@ -1,6 +1,6 @@
-// Gerador de LEGENDA DE QUADRO ELÉCTRICO — Obelisco Radical
-// A4 portrait; auto-detecta se cabe em 1 página ou divide em N páginas
-// desenhadas para colagem lado-a-lado (marcas de corte/alinhamento nas margens internas).
+// Legenda de Quadro — Obelisco Radical
+// Landscape A4. Cabeçalho SÓ na 1ª página, rodapé SÓ na última.
+// Colunas com larguras fixas e idênticas em todas as folhas -> ao colar lado-a-lado forma um painel contínuo.
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -11,164 +11,192 @@ const WHITE = [255, 255, 255];
 const GREY_LIGHT = [230, 230, 230];
 const GREY = [110, 110, 110];
 
-const A4_W = 210;
-const A4_H = 297;
+const PW = 297;   // landscape
+const PH = 210;
+const MARGIN = 6;
 
-// Nº máximo de módulos por página (com header + footer + linhas ~9mm)
-// altura útil ≈ 297 - 55 (header) - 24 (footer) = 218 mm → ~22 linhas @ 9mm cada
-const MODULES_PER_PAGE = 22;
+const HEADER_H = 42;   // 1ª página
+const FOOTER_H = 18;   // última página
+const ROW_H = 8.5;
+const HEAD_ROW_H = 8;
 
-/**
- * @param {Object}   header  { client_name, work_date, panel_name, technician }
- * @param {Array}    modules [{ number, type, description, amperage }]
- * @param {String}   logoBase64 (opcional)
- */
-export function generateLegendaQuadroPDF(header, modules, logoBase64) {
-  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-  const totalPages = Math.max(1, Math.ceil(modules.length / MODULES_PER_PAGE));
+// Nº de módulos por página — 1ª limitada (tem header), últimas maiores (só linhas), média entre
+function capacityFirst() { return Math.floor((PH - HEADER_H - HEAD_ROW_H - 6) / ROW_H); }
+function capacityMiddle() { return Math.floor((PH - HEAD_ROW_H - 6) / ROW_H); }
+function capacityLast() { return Math.floor((PH - FOOTER_H - HEAD_ROW_H - 6) / ROW_H); }
 
-  for (let p = 0; p < totalPages; p++) {
-    if (p > 0) doc.addPage();
-    const slice = modules.slice(p * MODULES_PER_PAGE, (p + 1) * MODULES_PER_PAGE);
-    drawPage(doc, header, slice, logoBase64, p + 1, totalPages);
+function splitModules(modules) {
+  const pages = [];
+  let idx = 0;
+  if (modules.length <= capacityFirst() + FOOTER_H && modules.length <= capacityFirst()) {
+    // cabe tudo numa página (com header + footer)
+    return [{ items: modules, showHeader: true, showFooter: true, page: 1, total: 1 }];
   }
+  // Múltiplas páginas
+  // 1ª: header, sem footer
+  pages.push({ items: modules.slice(idx, idx + capacityFirst()), showHeader: true, showFooter: false });
+  idx += capacityFirst();
+  // meio (todas as intermédias): sem header, sem footer
+  while (modules.length - idx > capacityLast()) {
+    pages.push({ items: modules.slice(idx, idx + capacityMiddle()), showHeader: false, showFooter: false });
+    idx += capacityMiddle();
+  }
+  // última: sem header, com footer
+  pages.push({ items: modules.slice(idx), showHeader: false, showFooter: true });
+  return pages.map((p, i) => ({ ...p, page: i + 1, total: pages.length }));
+}
+
+export function generateLegendaQuadroPDF(header, modules, logoBase64) {
+  const doc = new jsPDF({ orientation: 'l', unit: 'mm', format: 'a4' });
+  const pages = splitModules(modules);
+
+  pages.forEach((p, i) => {
+    if (i > 0) doc.addPage();
+    drawPage(doc, header, p, logoBase64);
+  });
 
   const stamp = new Date().toISOString().slice(0, 10);
   const safe = (s) => (s || '').replace(/[^a-z0-9_-]+/gi, '_').slice(0, 40);
   doc.save(`LegendaQuadro_${safe(header.panel_name || 'quadro')}_${stamp}.pdf`);
 }
 
-function drawPage(doc, header, modules, logoBase64, pageNum, totalPages) {
-  // ============ FAIXA SUPERIOR PRETA ============
-  doc.setFillColor(...BLACK);
-  doc.rect(0, 0, A4_W, 40, 'F');
-  doc.setFillColor(...YELLOW);
-  for (let x = 8; x < A4_W - 8; x += 12) doc.rect(x, 38.4, 6, 1.6, 'F');
+function drawPage(doc, header, pageData, logoBase64) {
+  const { items, showHeader, showFooter, page, total } = pageData;
+  const isMulti = total > 1;
 
-  if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 10, 6, 28, 28); } catch { /* ignore */ }
-  }
+  // fundo branco padrão (jsPDF já é branco)
+  let contentTop = MARGIN;
 
-  doc.setTextColor(...WHITE);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(22);
-  doc.text('LEGENDA DE QUADRO', A4_W / 2, 17, { align: 'center' });
-  doc.setTextColor(...YELLOW);
-  doc.setFontSize(10);
-  doc.text('IDENTIFICAÇÃO DE CIRCUITOS ELÉCTRICOS', A4_W / 2, 24, { align: 'center' });
-
-  if (totalPages > 1) {
+  // ====== HEADER (só na 1ª página) ======
+  if (showHeader) {
+    doc.setFillColor(...BLACK);
+    doc.rect(0, 0, PW, HEADER_H, 'F');
     doc.setFillColor(...YELLOW);
-    doc.roundedRect(A4_W - 42, 6, 34, 12, 1.5, 1.5, 'F');
-    doc.setTextColor(...BLACK);
+    for (let x = 8; x < PW - 8; x += 12) doc.rect(x, HEADER_H - 1.6, 6, 1.6, 'F');
+
+    if (logoBase64) {
+      try { doc.addImage(logoBase64, 'PNG', 8, 6, 28, 28); } catch { /* ignore */ }
+    }
+
+    doc.setTextColor(...WHITE);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text('PARTE', A4_W - 25, 10.5, { align: 'center' });
-    doc.setFontSize(11);
-    doc.text(`${pageNum} / ${totalPages}`, A4_W - 25, 15.5, { align: 'center' });
+    doc.setFontSize(22);
+    doc.text('LEGENDA DE QUADRO', 42, 18);
+    doc.setTextColor(...YELLOW);
+    doc.setFontSize(9);
+    doc.text('IDENTIFICAÇÃO DE CIRCUITOS ELÉCTRICOS', 42, 24);
+
+    // Info cabeçalho (lado direito)
+    const infoX = 165;
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(200, 200, 200);
+    doc.text('CLIENTE / OBRA', infoX, 10);
+    doc.text('QUADRO', infoX, 20);
+    doc.text('TÉCNICO', infoX + 60, 20);
+    doc.text('DATA', infoX + 60, 10);
+
+    doc.setTextColor(...WHITE);
+    doc.setFontSize(10);
+    doc.text((header.client_name || '—').slice(0, 45), infoX, 15);
+    doc.text((header.panel_name || '—').slice(0, 25), infoX, 25);
+    doc.text((header.technician || '—').slice(0, 25), infoX + 60, 25);
+    doc.text(header.work_date || '—', infoX + 60, 15);
+
+    contentTop = HEADER_H + 3;
+  } else {
+    // faixa fina preta no topo para continuidade visual
+    doc.setFillColor(...BLACK);
+    doc.rect(0, 0, PW, 4, 'F');
+    doc.setFillColor(...YELLOW);
+    doc.rect(0, 3, PW, 1, 'F');
+    contentTop = 6;
   }
 
-  // ============ INFO CABEÇALHO ============
-  let y = 46;
-  const drawField = (label, value, x, w) => {
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(6.5);
-    doc.setTextColor(...GREY);
-    doc.text(label, x, y);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.setTextColor(...BLACK);
-    doc.text(String(value || '________________').slice(0, 40), x, y + 5);
-    doc.setDrawColor(...GREY_LIGHT);
-    doc.setLineWidth(0.3);
-    doc.line(x, y + 6.5, x + w, y + 6.5);
-  };
-  drawField('CLIENTE / OBRA', header.client_name, 10, 90);
-  drawField('QUADRO', header.panel_name, 105, 45);
-  drawField('DATA', header.work_date, 155, 45);
-  y += 10;
-  drawField('TÉCNICO RESPONSÁVEL', header.technician, 10, 90);
-  y += 8;
-
-  // Linha divisória amarela
-  doc.setFillColor(...YELLOW);
-  for (let x = 8; x < A4_W - 8; x += 8) doc.rect(x, y, 4, 1.2, 'F');
-  y += 6;
-
-  // ============ TABELA DE MÓDULOS ============
-  const tableHead = [['Nº', 'TIPO', 'CIRCUITO / IDENTIFICAÇÃO', 'A / mA']];
-  const tableBody = modules.map(m => [
+  // ====== TABELA ======
+  const bottomLimit = PH - (showFooter ? FOOTER_H + 2 : 4);
+  const tableBody = items.map(m => [
     String(m.number || ''),
     (m.type || '').toUpperCase(),
     m.description || '',
     m.amperage || '',
   ]);
-  if (tableBody.length === 0) tableBody.push(['—', '—', '(sem módulos)', '—']);
 
   autoTable(doc, {
-    head: tableHead,
+    head: [['Nº', 'TIPO', 'CIRCUITO / IDENTIFICAÇÃO', 'A / mA']],
     body: tableBody,
-    startY: y,
-    margin: { left: 8, right: 8 },
-    styles: { fontSize: 9, cellPadding: 2.2, lineColor: GREY_LIGHT, lineWidth: 0.3, textColor: BLACK, valign: 'middle', minCellHeight: 8.5 },
-    headStyles: { fillColor: BLACK, textColor: YELLOW, fontStyle: 'bold', fontSize: 8.5, halign: 'left', cellPadding: 2.6 },
+    startY: contentTop,
+    margin: { left: MARGIN, right: MARGIN },
+    tableWidth: PW - MARGIN * 2,
+    styles: { fontSize: 9, cellPadding: 2, lineColor: GREY_LIGHT, lineWidth: 0.3, textColor: BLACK, valign: 'middle', minCellHeight: ROW_H },
+    headStyles: { fillColor: BLACK, textColor: YELLOW, fontStyle: 'bold', fontSize: 8.5, halign: 'left', cellPadding: 2.4, minCellHeight: HEAD_ROW_H },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center', fontStyle: 'bold', fillColor: [248, 248, 248] },
-      1: { cellWidth: 48, fontStyle: 'bold', fontSize: 8 },
-      2: { cellWidth: 'auto' },
-      3: { cellWidth: 28, halign: 'center', fontStyle: 'bold' },
+      0: { cellWidth: 14, halign: 'center', fontStyle: 'bold', fillColor: [248, 248, 248] },
+      1: { cellWidth: 60, fontStyle: 'bold', fontSize: 8 },
+      2: { cellWidth: 175 },       // ← preenche o resto da landscape
+      3: { cellWidth: 36, halign: 'center', fontStyle: 'bold' },
     },
     alternateRowStyles: { fillColor: [250, 250, 250] },
+    didDrawPage: () => {},
+    pageBreak: 'avoid',
   });
 
-  // ============ MARCAS DE ALINHAMENTO (só se multipágina) ============
-  if (totalPages > 1) {
-    // Página ímpar (1, 3, 5...) → marcas na margem DIREITA (para junção com página seguinte)
-    // Página par (2, 4, 6...) → marcas na margem ESQUERDA (para junção com página anterior)
+  // ====== FOOTER (só na última) ======
+  if (showFooter) {
+    doc.setFillColor(...BLACK);
+    doc.rect(0, PH - FOOTER_H, PW, FOOTER_H, 'F');
+    doc.setFillColor(...YELLOW);
+    for (let x = 8; x < PW - 8; x += 12) doc.rect(x, PH - FOOTER_H + 0.6, 6, 1.4, 'F');
+
+    doc.setTextColor(...YELLOW);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('OBELISCO RADICAL', PW / 2, PH - 11, { align: 'center' });
+    doc.setTextColor(...WHITE);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('911 324 011    •    obeliscoradical@gmail.com    •    obeliscoradical.pt', PW / 2, PH - 5, { align: 'center' });
+  } else {
+    // faixa fina preta no fundo para continuidade
+    doc.setFillColor(...YELLOW);
+    doc.rect(0, PH - 4, PW, 1, 'F');
+    doc.setFillColor(...BLACK);
+    doc.rect(0, PH - 3, PW, 3, 'F');
+  }
+
+  // ====== MARCAS DE COLAGEM (só quando multipágina) ======
+  if (isMulti) {
     doc.setDrawColor(...BLACK);
     doc.setLineWidth(0.4);
-    const isOdd = pageNum % 2 === 1;
-    const markX = isOdd ? A4_W - 3 : 3;
-    const drawMark = (yy) => {
-      // pequeno triângulo apontando para o interior
-      if (isOdd) {
-        doc.line(markX, yy, A4_W - 6, yy);
-        doc.line(markX, yy - 2, markX, yy + 2);
-      } else {
-        doc.line(0 + 6, yy, markX, yy);
-        doc.line(markX, yy - 2, markX, yy + 2);
-      }
-    };
-    drawMark(45);
-    drawMark(A4_H / 2);
-    drawMark(A4_H - 45);
-
-    // Etiqueta discreta de junção
+    // Direita: colar com página seguinte (se não for a última)
+    if (page < total) {
+      // marca em cima e em baixo — na margem direita
+      const rx = PW - 1.5;
+      doc.line(rx - 4, 2, rx, 2);
+      doc.line(rx, 0, rx, 4);
+      doc.line(rx - 4, PH - 2, rx, PH - 2);
+      doc.line(rx, PH - 4, rx, PH);
+      doc.setFontSize(6);
+      doc.setTextColor(...GREY);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`↦ COLAR COM PARTE ${page + 1}`, PW - 3, PH / 2, { angle: 270 });
+    }
+    // Esquerda: colar com página anterior (se não for a primeira)
+    if (page > 1) {
+      const lx = 1.5;
+      doc.line(lx, 2, lx + 4, 2);
+      doc.line(lx, 0, lx, 4);
+      doc.line(lx, PH - 2, lx + 4, PH - 2);
+      doc.line(lx, PH - 4, lx, PH);
+      doc.setFontSize(6);
+      doc.setTextColor(...GREY);
+      doc.setFont('helvetica', 'bold');
+      doc.text(`PARTE ${page - 1} ↤`, 3, PH / 2, { angle: 90 });
+    }
+    // Etiqueta discreta no topo indicando parte X/Y
     doc.setFontSize(6);
     doc.setTextColor(...GREY);
     doc.setFont('helvetica', 'normal');
-    const joinLabel = isOdd ? `↦ colar com PARTE ${pageNum + 1}` : `PARTE ${pageNum - 1} ↤`;
-    const rotate = isOdd ? 270 : 90;
-    doc.text(joinLabel, isOdd ? A4_W - 2 : 2, A4_H / 2 + 30, { angle: rotate });
+    doc.text(`PARTE ${page} / ${total}`, PW - 8, PH - (showFooter ? FOOTER_H + 1 : 6), { align: 'right' });
   }
-
-  // ============ RODAPÉ PRETO ============
-  const fy = A4_H - 20;
-  doc.setFillColor(...BLACK);
-  doc.rect(0, fy, A4_W, 20, 'F');
-  doc.setFillColor(...YELLOW);
-  for (let x = 8; x < A4_W - 8; x += 12) doc.rect(x, fy + 0.6, 6, 1.4, 'F');
-
-  doc.setTextColor(...YELLOW);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('OBELISCO RADICAL', A4_W / 2, fy + 8, { align: 'center' });
-
-  doc.setTextColor(...WHITE);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-  doc.text(
-    '911 324 011    •    obeliscoradical@gmail.com    •    obeliscoradical.pt',
-    A4_W / 2, fy + 14, { align: 'center' }
-  );
 }
