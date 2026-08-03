@@ -34,6 +34,22 @@ const MODULES_PER_PAGE = 22;
 
 export default function LegendaQuadroPage() {
   const today = new Date().toISOString().slice(0, 10);
+  const HIST_KEY = 'legenda_quadro_desc_history';
+
+  const [descHistory, setDescHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); }
+    catch { return []; }
+  });
+
+  const saveDesc = (val) => {
+    const v = (val || '').trim();
+    if (!v || v.length < 2) return;
+    setDescHistory(prev => {
+      const dedup = [v, ...prev.filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 100);
+      try { localStorage.setItem(HIST_KEY, JSON.stringify(dedup)); } catch { /* ignore */ }
+      return dedup;
+    });
+  };
 
   const [header, setHeader] = useState({
     client_name: '',
@@ -71,6 +87,8 @@ export default function LegendaQuadroPage() {
   const handleGenerate = () => {
     if (modules.length === 0) { toast.error('Adicione pelo menos um módulo.'); return; }
     if (!header.client_name.trim()) { toast.error('Preencha o cliente/obra.'); return; }
+    // Guardar descrições no histórico de autocomplete
+    modules.forEach(m => saveDesc(m.description));
     try {
       generateLegendaQuadroPDF(header, modules, logoBase64);
       toast.success(`Legenda gerada (${modules.length} módulos · ${totalPages} folha${totalPages === 1 ? '' : 's'} A4).`);
@@ -153,8 +171,10 @@ export default function LegendaQuadroPage() {
               <div className="col-span-5">
                 <Input
                   data-testid={`legenda-module-desc-${idx}`}
+                  list="legenda-desc-history"
                   value={m.description}
                   onChange={e => updateModule(idx, { description: e.target.value })}
+                  onBlur={e => saveDesc(e.target.value)}
                   placeholder="Ex.: Iluminação Sala, Tomadas Cozinha, Bomba de Calor"
                   className="h-9 bg-zinc-900 border-zinc-800 text-white text-xs"
                 />
@@ -177,6 +197,9 @@ export default function LegendaQuadroPage() {
           ))}
           <datalist id="ampsug">
             {AMPERAGE_SUGGESTIONS.map(a => <option key={a} value={a} />)}
+          </datalist>
+          <datalist id="legenda-desc-history">
+            {descHistory.map(d => <option key={d} value={d} />)}
           </datalist>
         </CardContent>
       </Card>
