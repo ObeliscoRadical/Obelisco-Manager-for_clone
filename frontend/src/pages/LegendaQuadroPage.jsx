@@ -35,9 +35,14 @@ const MODULES_PER_PAGE = 22;
 export default function LegendaQuadroPage() {
   const today = new Date().toISOString().slice(0, 10);
   const HIST_KEY = 'legenda_quadro_desc_history';
+  const TYPE_KEY = 'legenda_quadro_type_history';
 
   const [descHistory, setDescHistory] = useState(() => {
     try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); }
+    catch { return []; }
+  });
+  const [customTypes, setCustomTypes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(TYPE_KEY) || '[]'); }
     catch { return []; }
   });
 
@@ -47,6 +52,18 @@ export default function LegendaQuadroPage() {
     setDescHistory(prev => {
       const dedup = [v, ...prev.filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 100);
       try { localStorage.setItem(HIST_KEY, JSON.stringify(dedup)); } catch { /* ignore */ }
+      return dedup;
+    });
+  };
+
+  const saveType = (val) => {
+    const v = (val || '').trim();
+    if (!v || v.length < 2) return;
+    // Só guarda se for personalizado (não está na lista fixa)
+    if (COMPONENT_TYPES.some(t => t.toLowerCase() === v.toLowerCase())) return;
+    setCustomTypes(prev => {
+      const dedup = [v, ...prev.filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 50);
+      try { localStorage.setItem(TYPE_KEY, JSON.stringify(dedup)); } catch { /* ignore */ }
       return dedup;
     });
   };
@@ -87,8 +104,8 @@ export default function LegendaQuadroPage() {
   const handleGenerate = () => {
     if (modules.length === 0) { toast.error('Adicione pelo menos um módulo.'); return; }
     if (!header.client_name.trim()) { toast.error('Preencha o cliente/obra.'); return; }
-    // Guardar descrições no histórico de autocomplete
-    modules.forEach(m => saveDesc(m.description));
+    // Guardar descrições e tipos custom no histórico
+    modules.forEach(m => { saveDesc(m.description); saveType(m.type); });
     try {
       generateLegendaQuadroPDF(header, modules, logoBase64);
       toast.success(`Legenda gerada (${modules.length} módulos · ${totalPages} folha${totalPages === 1 ? '' : 's'} A4).`);
@@ -159,14 +176,15 @@ export default function LegendaQuadroPage() {
                 </div>
               </div>
               <div className="col-span-4">
-                <select
+                <Input
                   data-testid={`legenda-module-type-${idx}`}
+                  list="legenda-type-options"
                   value={m.type}
                   onChange={e => updateModule(idx, { type: e.target.value })}
-                  className="w-full h-9 bg-zinc-900 border border-zinc-800 rounded-md text-white text-xs px-2"
-                >
-                  {COMPONENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  onBlur={e => saveType(e.target.value)}
+                  placeholder="Tipo (ou escreva um novo acessório)"
+                  className="h-9 bg-zinc-900 border-zinc-800 text-white text-xs"
+                />
               </div>
               <div className="col-span-5">
                 <Input
@@ -200,6 +218,10 @@ export default function LegendaQuadroPage() {
           </datalist>
           <datalist id="legenda-desc-history">
             {descHistory.map(d => <option key={d} value={d} />)}
+          </datalist>
+          <datalist id="legenda-type-options">
+            {COMPONENT_TYPES.map(t => <option key={t} value={t} />)}
+            {customTypes.map(t => <option key={t} value={t} />)}
           </datalist>
         </CardContent>
       </Card>
