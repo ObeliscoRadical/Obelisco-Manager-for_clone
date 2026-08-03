@@ -34,6 +34,18 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Fev 03, 2026 — Legenda de Quadro: Layout Horizontal/Vertical para colagem física
+- **Pedido**: PDFs multipágina não permitiam colagem contínua nas portas dos quadros. Utilizador precisava de escolher entre colagem lado-a-lado (horizontal) e em cima/baixo (vertical), consoante o formato físico do quadro.
+- **`legendaQuadroPdf.js`** reescrito para suportar `options.layout = 'horizontal' | 'vertical'`:
+  - Horizontal → A4 paisagem (297x210). Marcas de colagem nas margens LATERAIS ("↦ COLAR COM PARTE X" à direita, "PARTE X ↤" à esquerda).
+  - Vertical → A4 retrato (210x297). Marcas de colagem nas margens SUPERIOR/INFERIOR ("↧ COLAR COM PARTE X" em baixo, "↥ PARTE X" em cima).
+  - **Cabeçalho apenas na 1ª página**, **rodapé apenas na última**, faixas finas nas restantes para continuidade visual.
+  - Larguras de colunas fixas e idênticas em todas as folhas → junção contínua ao colar.
+  - Novo algoritmo de distribuição EQUILIBRADA (evita último página vazia; distribui n módulos em `ceil(n/total)` por folha).
+- **`LegendaQuadroPage.jsx`**: novo Card com dois botões (Horizontal / Vertical), preferência guardada em `localStorage`. Dica multipágina adaptativa.
+- Validado com `analyze_file_tool` em 3 cenários: 1 folha (5 mods, header+rodapé juntos), 3 folhas horizontal (40 mods), 2 folhas vertical (40 mods). Todos ✅.
+
+
 ### Jul 26, 2026 (v36) — Botões "Cheguei"/"Terminei" na obra + Técnicos em obra na Caixa
 - **Pedido**: no topo da página da obra (Portal Técnico), botões grandes para registar chegada/saída da obra; o admin vê em tempo real quem está onde.
 - **Portal Técnico (`TechObraDetailPage.jsx`)**:

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, FileDown, LayoutGrid, ChevronUp, ChevronDown, Copy } from 'lucide-react';
+import { Plus, Trash2, FileDown, LayoutGrid, ChevronUp, ChevronDown, Copy, ArrowLeftRight, ArrowUpDown } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '../lib/api';
 import { generateLegendaQuadroPDF } from '../lib/legendaQuadroPdf';
@@ -76,6 +76,11 @@ export default function LegendaQuadroPage() {
   });
   const [modules, setModules] = useState([newModule(1), newModule(2), newModule(3)]);
   const [logoBase64, setLogoBase64] = useState(null);
+  const [layout, setLayout] = useState(() => localStorage.getItem('legenda_quadro_layout') || 'horizontal');
+
+  useEffect(() => {
+    try { localStorage.setItem('legenda_quadro_layout', layout); } catch { /* ignore */ }
+  }, [layout]);
 
   useEffect(() => {
     // Carrega o logo (mesma técnica das outras páginas)
@@ -107,8 +112,8 @@ export default function LegendaQuadroPage() {
     // Guardar descrições e tipos custom no histórico
     modules.forEach(m => { saveDesc(m.description); saveType(m.type); });
     try {
-      generateLegendaQuadroPDF(header, modules, logoBase64);
-      toast.success(`Legenda gerada (${modules.length} módulos · ${totalPages} folha${totalPages === 1 ? '' : 's'} A4).`);
+      generateLegendaQuadroPDF(header, modules, logoBase64, { layout });
+      toast.success(`Legenda gerada (${modules.length} módulos · ${totalPages} folha${totalPages === 1 ? '' : 's'} A4 ${layout === 'vertical' ? 'vertical' : 'horizontal'}).`);
     } catch (e) {
       console.error(e);
       toast.error('Erro ao gerar PDF.');
@@ -133,6 +138,34 @@ export default function LegendaQuadroPage() {
           </Button>
         </div>
       </div>
+
+      {/* SELETOR DE LAYOUT DE COLAGEM */}
+      <Card className="bg-zinc-900 border-zinc-800" data-testid="legenda-layout-card">
+        <CardContent className="p-3 flex flex-wrap items-center gap-3">
+          <span className="text-xs text-zinc-400 font-semibold uppercase tracking-wide">Colagem das folhas:</span>
+          <button
+            type="button"
+            data-testid="legenda-layout-horizontal"
+            onClick={() => setLayout('horizontal')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold transition ${layout === 'horizontal' ? 'bg-yellow-400 text-zinc-950 border-yellow-400' : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-600'}`}
+          >
+            <ArrowLeftRight className="h-3.5 w-3.5" />
+            Horizontal (lado a lado)
+          </button>
+          <button
+            type="button"
+            data-testid="legenda-layout-vertical"
+            onClick={() => setLayout('vertical')}
+            className={`flex items-center gap-2 px-3 py-2 rounded-full border text-xs font-semibold transition ${layout === 'vertical' ? 'bg-yellow-400 text-zinc-950 border-yellow-400' : 'bg-zinc-950 text-zinc-300 border-zinc-800 hover:border-zinc-600'}`}
+          >
+            <ArrowUpDown className="h-3.5 w-3.5" />
+            Vertical (em cima/baixo)
+          </button>
+          <span className="text-[11px] text-zinc-500 ml-1">
+            {layout === 'horizontal' ? 'A4 paisagem — folhas colam pela lateral (ideal para quadros compridos).' : 'A4 retrato — folhas colam por cima/baixo (ideal para quadros altos).'}
+          </span>
+        </CardContent>
+      </Card>
 
       {/* CABEÇALHO DA OBRA */}
       <Card className="bg-zinc-900 border-zinc-800">
@@ -228,7 +261,7 @@ export default function LegendaQuadroPage() {
 
       {totalPages > 1 && (
         <div className="p-3 rounded-lg bg-yellow-500/5 border border-yellow-500/30 text-xs text-yellow-200" data-testid="legenda-multipage-hint">
-          ℹ️ <strong>Vai gerar {totalPages} folhas A4</strong> desenhadas para colagem lado a lado. Marcas de alinhamento serão impressas nas margens internas para facilitar a junção.
+          ℹ️ <strong>Vai gerar {totalPages} folhas A4</strong> {layout === 'horizontal' ? 'em paisagem, para colar lado a lado' : 'em retrato, para colar em cima/baixo'}. Cabeçalho só na 1ª folha, rodapé só na última, e marcas de alinhamento nas margens para facilitar a junção contínua.
         </div>
       )}
     </div>
