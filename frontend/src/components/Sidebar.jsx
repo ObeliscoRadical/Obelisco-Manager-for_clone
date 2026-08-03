@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, HandCoins, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 
@@ -10,7 +10,7 @@ const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, mod: 'dashboard' },
   { path: '/orcamentos', label: 'Orçamentos', icon: FileText, mod: 'orcamentos' },
   { path: '/propostas', label: 'Propostas', icon: ClipboardList, mod: 'propostas' },
-  { path: '/negociacao', label: 'Negociação', icon: HandCoins, mod: 'propostas' },
+  { path: '/legenda-quadro', label: 'Legenda de Quadro', icon: LayoutGrid, mod: 'propostas' },
   { path: '/obras', label: 'Obras', icon: HardHat, mod: 'obras' },
   { path: '/caixa-obra', label: 'Caixa da Obra', icon: Wallet, mod: 'obras' },
   { path: '/agenda', label: 'Agenda', icon: CalendarDays, mod: 'agenda' },

@@ -14,6 +14,7 @@ import MaoDeObraPage from "./pages/MaoDeObraPage";
 import ProdutividadesPage from "./pages/ProdutividadesPage";
 import DefinicoesPage from "./pages/DefinicoesPage";
 import NegociacaoPage from "./pages/NegociacaoPage";
+import LegendaQuadroPage from "./pages/LegendaQuadroPage";
 import UtilizadoresPage from "./pages/UtilizadoresPage";
 import BibliotecaPage from "./pages/BibliotecaPage";
 import FuncionariosPage from "./pages/FuncionariosPage";
@@ -126,6 +127,7 @@ function App() {
           <Route path="/orcamentos" element={<ProtectedRoute module="orcamentos"><OrcamentosPage /></ProtectedRoute>} />
           <Route path="/propostas" element={<ProtectedRoute module="propostas"><PropostasPage /></ProtectedRoute>} />
           <Route path="/negociacao" element={<ProtectedRoute module="propostas"><NegociacaoPage /></ProtectedRoute>} />
+          <Route path="/legenda-quadro" element={<ProtectedRoute module="propostas"><LegendaQuadroPage /></ProtectedRoute>} />
           <Route path="/obras" element={<ProtectedRoute module="obras"><ObrasPage /></ProtectedRoute>} />
           <Route path="/agenda" element={<ProtectedRoute module="agenda"><AgendaPage /></ProtectedRoute>} />
           <Route path="/materiais" element={<ProtectedRoute module="materiais"><MateriaisPage /></ProtectedRoute>} />
