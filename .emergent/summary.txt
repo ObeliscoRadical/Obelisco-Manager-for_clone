@@ -1,0 +1,133 @@
+<analysis>**original_problem_statement**: 
+O utilizador está a construir o **Obelisco Manager**, um ERP interno para uma empresa de eletricidade. Nesta sessão, os pedidos focaram-se na conclusão e expansão de ferramentas de identificação física para quadros elétricos. Primeiro, o utilizador pediu a opção de escolher entre layout Horizontal e Vertical para a Legenda de Quadro. De seguida, pediu a criação de um sub-módulo inteiramente novo: **Etiquetas de Máscara/Capa de Calha DIN**.
+
+PRODUCT REQUIREMENTS:
+- **Legenda de Quadro:** Permitir escolha entre Horizontal/Vertical.
+- **Máscara DIN:** 
+  - Escala real 1:1 (1 Módulo DIN = 18 mm).
+  - Editor visual para fundir/dividir módulos (ex: aparelhos tetrapolares).
+  - Divisão automática de filas longas em segmentos impressos (A4 Landscape) com setas de continuação.
+  - Atribuição de **cores por circuito** (fases, ID, motor, etc.) tanto no editor visual como no PDF exportado, incluindo uma legenda de cores.
+
+**User's preferred language**: Português (pt-PT). (INSTRUCT: O próximo agente DEVE responder exclusivamente em português).
+
+**what currently exists?** 
+Aplicação React + FastAPI + MongoDB madura com foco em gestão de obras e técnicos. O módulo de identificação de quadros está agora altamente robusto: possui um gerador de Legenda de Quadro (multipágina, adaptável H/V) e um recém-criado gerador de Máscara DIN que produz etiquetas à escala real (18mm) com marcações de corte, suporte para aparelhos multipolares (merge/split celular) e codificação por cores.
+
+**Last working item**: 
+- Last item agent was working: Adição de paleta de cores por circuito na Máscara DIN (atualização da UI em  com color picker e renderização visual, e atualização do  para desenhar os fundos coloridos e a legenda).
+- Status: COMPLETED (Verified by Agent).
+- Agent Testing Done: Y
+- Which testing method agent to use?:  (para o PDF) e  (para a UI).
+- User Testing Done: N
+
+**All Pending/In progress Issue list**: 
+Issue 1: P1 — Totais de Despesas podem não atualizar em produção
+   - Attempted fixes: Não reproduzido no ambiente de preview anteriormente.
+   - Next debug checklist: Solicitar ao utilizador passos exatos se o erro persistir. Validar se há discrepâncias de cache ou chamadas API a falhar silenciosamente.
+   - Why fix this issue and what will be achieved with the fix?: Garante a fiabilidade financeira do ERP.
+   - Status: USER VERIFICATION PENDING
+   - Is recurring issue?: N
+   - Should Test frontend/backend/both after fix?: Both
+   - Blocked on other issue: Nenhum.
+
+**In progress Task List**: 
+Nenhuma tarefa em progresso. O agente concluiu tudo o que foi pedido.
+
+**Upcoming and Future Tasks**
+Upcoming Tasks:
+- P1 — Perfil 360° do Cliente (mini-CRM): histórico, propostas, obras, faturas e prazo médio de pagamento.
+- P2 — Automação Máscara DIN: Ao importar da Legenda, atribuir cor automaticamente pelo tipo do módulo (Disjuntor → LZ, ID → ID, etc.) e auto-reservar espaços.
+
+Future Tasks:
+- P2 — Hardening de segurança recomendado na auditoria (allow-list estrita CORS, limites upload OCR, rate limiting login, CSP).
+- P2 — Integração formal com TOC Online (Apenas se utilizador pedir explicitamente e fornecer credenciais/API).
+
+**Completed work in this session**
+- Legenda de Quadro: Adicionada opção de layout Horizontal vs Vertical no PDF com adaptação correta de paginação (DONE)
+- Máscara DIN: Criação da página  e gerador PDF  à escala 1:1 (18mm/módulo) (DONE)
+- Máscara DIN: Divisão automática inteligente de filas longas para caberem em A4 Landscape (DONE)
+- Máscara DIN: Implementação de fusão (merge) e divisão (split) de células no editor visual (DONE)
+- Máscara DIN: Atribuição de cores (11 cores padrão) por circuito na UI e no PDF com legenda automática (DONE)
+
+**Earlier issues found/mentioned but not fixed**
+Issue 1: 
+   - Debug checklist: Implementar auditoria de segurança RBAC integral no backend (endpoints não estão totalmente blindados).
+   - Why to solve this issue and what will be achieved with this?: Previne acessos indevidos via escalada de privilégios.
+   - Should Test frontend/backend/both after fix: Backend
+   - Is recurring issue?: N
+
+**Known issue recurrence from previous fork**
+- Issue recurrence in previous fork: Autenticação via cookies bloqueada por iframe/ITP.
+- Recurrence count: 1
+- Status: RESOLVED (Mantém-se o uso de  para tokens Bearer).
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- Frontend: React, TailwindCSS, Shadcn, manipulação intensiva de  para cálculos milimétricos (escala física 1:1 para corte e colagem).
+- Persistência: Uso intensivo de  para transitar configurações (ex: da Legenda para a Máscara).
+
+**key DB schema**
+- Não houve alterações na base de dados nesta sessão. O foco foi 100% no Frontend/PDF export.
+
+**changes in tech stack**
+- Nenhuma alteração.
+
+**All files of reference**
+-  (Novo ficheiro, gera o PDF da Máscara com lógica complexa de segmentação e milímetros reais).
+-  (Nova página, UI de grelha configurável com merge/split e color picker).
+-  (Atualizado para suportar toggles de orientação).
+-  e  (Atualizados com novas rotas).
+
+**Areas that need refactoring**
+-  continua massivo (>4300 linhas).
+
+**key api endpoints**
+- Não aplicável para os desenvolvimentos desta sessão (tudo operou em client-side memory e exportação jsPDF).
+
+**Critical Info for New Agent**
+- O utilizador tem agora **DOIS** ambientes: O *Preview* onde o agente trabalha, e uma versão em *Produção* num domínio real. Se o utilizador reportar bugs gerais, questione em qual ambiente ocorrem.
+- **Não altere as lógicas de medida (18mm) em **. O utilizador necessita que o PDF, quando impresso a 100% de escala, caiba fisicamente nos plásticos dos quadros elétricos.
+- O utilizador valoriza muito testes visuais. Use ferramentas de análise no PDF antes de dar tarefas por concluídas.
+
+**documents and test reports created in this job**
+-  (Atualizado com os sub-módulos de identificação)
+
+**Last 10 User Messages and any pending HUMAN messages**
+1. *(Handoff)* Pedido pendente de correção da Legenda de Quadro.
+2. Pediu para poder escolher entre layout H e V na Legenda de Quadro. -> *Implementado.*
+3. Pediu a criação de Etiquetas de Máscara/Capa de Calha DIN com escala real, junção de módulos e formato de tira em A4. -> *Implementado.*
+4. Pediu a adição de Cores por Circuito na Máscara para identificar rapidamente (fases, ID, etc). -> *Implementado e testado (PDF e UI).*
+
+**Project Health Check:**
+- Broken: Nenhum detetado.
+- Mocked: N/A.
+
+**3rd Party Integrations**
+- Gemini Nano Banana (via emergentintegrations) — requer Emergent LLM Key (Usado na importação de propostas no backend).
+
+**Testing status**
+- Testing agent used after significant changes: NO (Foram usados o  e extensivamente o  para validar a precisão milimétrica e renderização correta dos PDFs em múltiplos cenários).
+- Troubleshoot agent used after agent stuck in loop: NO.
+- Test files created: N/A.
+- Known regressions: Nenhuma.
+
+**Credentials to test flow:**
+Consultar .
+- Admin:  / 
+
+**What agent forgot to execute**
+- O agente foi minucioso, não esquecendo requisitos das máscaras (escala, auto-split de páginas e legenda). No entanto, não invocou o  no final desta sessão, tendo optado por self-testing visual exaustivo (justificável devido à natureza exclusivamente visual e offline do requisito jsPDF). 
+
+**Debugging checklist for current issue**
+    Issue: Não há bugs bloqueantes atuais. Se o utilizador pedir ajustes na **Máscara DIN**:
+    
+    Frontend files to check: 
+    - 
+    - 
+    
+    Ações:
+    1. Qualquer alteração dimensional no PDF deve ser validada exportando um ficheiro e passando-o pelo  com o prompt para confirmar larguras milimétricas reais e posicionamento.
+    2. Evite quebrar o mecanismo de  de arrays que segmenta linhas maiores do que 270mm (A4 Landscape usable width).</analysis>

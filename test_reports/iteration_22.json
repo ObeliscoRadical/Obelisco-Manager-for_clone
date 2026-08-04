@@ -17,7 +17,7 @@
   ],
   "updated_files": ["/app/backend/tests/test_agenda_employee_ids.py"],
   "success_rate": {"backend": "100%", "frontend": "100%"},
-  "test_credentials": "Admin admin@obelisco.pt / obelisco2024; Tech d.oliveira1986@gmail.com / A24d22r04 (Daniel emp_id=4d357339-7b7e-40bb-91fe-93109060cbda). Sourced from /app/memory/test_credentials.md.",
+  "test_credentials": "Admin admin@obelisco.pt / obelisco2024; Tech d.oliveira1986@gmail.com / A24d22r04 (Daniel emp_id=eletro-manager-1). Sourced from /app/memory/test_credentials.md.",
   "seed_data_creation": "None persisted — all test appointments were deleted at end of tests (99_cleanup + Playwright fetch DELETE).",
   "retest_needed": false,
   "main_agent_can_self_test": true,

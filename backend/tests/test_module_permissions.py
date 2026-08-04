@@ -4,7 +4,7 @@ import time
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://proposal-hub-56.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://eletro-manager-1.preview.emergentagent.com").rstrip("/")
 
 ADMIN_EMAIL = "admin@obelisco.pt"
 ADMIN_PASSWORD = "obelisco2024"

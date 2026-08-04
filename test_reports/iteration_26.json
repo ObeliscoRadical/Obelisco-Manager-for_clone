@@ -15,7 +15,7 @@
   "updated_files": ["/app/backend/tests/test_proposal_import.py"],
   "success_rate": {"backend": "100% (6/6)", "frontend": "100% (fluxo completo verde)"},
   "test_credentials": "admin@obelisco.pt / obelisco2024",
-  "seed_data_creation": "Criado 1 budget e 3 propostas via UI test (highlight=e2ac2808-8f79-4667-9b2f-b916e77e4c03). Pytest E2E limpou o seu próprio. Cleanup UI-side: tentou DELETE via urllib e recebeu 403 — orçamento pode ainda estar em BD.",
+  "seed_data_creation": "Criado 1 budget e 3 propostas via UI test (highlight=eletro-manager-1). Pytest E2E limpou o seu próprio. Cleanup UI-side: tentou DELETE via urllib e recebeu 403 — orçamento pode ainda estar em BD.",
   "retest_needed": false,
   "should_main_agent_self_test": false,
   "context_for_next_testing_agent": "Feature Importar Proposta IA está totalmente funcional. Se precisar re-testar, gerar PDF via reportlab (ver test_proposal_import.py) e usar admin@obelisco.pt/obelisco2024. LLM call demora ~15s. data-testids no diálogo: import-proposal-btn/dialog/pick/file/extracting/review/saving, import-field-title/client/phone/notes, import-items-table, import-item-{idx}-name/cost/remove, import-add-item, import-save, import-cancel.",
