@@ -22,6 +22,21 @@ const YELLOW = [250, 204, 21];
 const GREY = [110, 110, 110];
 const GREY_LIGHT = [190, 190, 190];
 
+// Paleta (deve espelhar COLOR_PALETTE de MascaraDinPage.jsx)
+const COLOR_MAP = {
+  R:  { rgb: [239, 68, 68],  fg: [255, 255, 255], label: 'Fase R' },
+  S:  { rgb: [120, 53, 15],  fg: [255, 255, 255], label: 'Fase S' },
+  T:  { rgb: [82, 82, 82],   fg: [255, 255, 255], label: 'Fase T' },
+  N:  { rgb: [59, 130, 246], fg: [255, 255, 255], label: 'Neutro' },
+  PE: { rgb: [22, 163, 74],  fg: [255, 255, 255], label: 'Terra (PE)' },
+  ID: { rgb: [250, 204, 21], fg: [10, 10, 12],    label: 'Diferencial' },
+  CG: { rgb: [249, 115, 22], fg: [255, 255, 255], label: 'Corte Geral' },
+  MT: { rgb: [139, 92, 246], fg: [255, 255, 255], label: 'Motor/Bomba' },
+  LZ: { rgb: [14, 165, 233], fg: [255, 255, 255], label: 'Iluminação' },
+  TC: { rgb: [13, 148, 136], fg: [255, 255, 255], label: 'Tomadas' },
+  AC: { rgb: [6, 182, 212],  fg: [255, 255, 255], label: 'AC/Clima' },
+};
+
 // Largura útil por página (dá para desenhar cortes/rótulos fora sem sair da folha).
 const USABLE_W = PW - MARGIN_X * 2 - 4; // ~281 mm
 const MAX_MODULES_PER_SEGMENT = Math.floor(USABLE_W / MODULE_MM); // 15 módulos → 270 mm
@@ -129,9 +144,16 @@ export function generateMascaraDinPDF({ header, rows, config, logoBase64 }) {
 
   const pages = paginate(strips, config.stripHeightMm);
 
+  // Cores efectivamente usadas (para legenda)
+  const usedColors = new Set();
+  rows.forEach(r => r.cells.forEach(c => { if (c.color) usedColors.add(c.color); }));
+
   pages.forEach((pg, pi) => {
     if (pi > 0) doc.addPage('a4', 'l');
-    if (pg.isFirst) drawHeader(doc, header, logoBase64);
+    if (pg.isFirst) {
+      drawHeader(doc, header, logoBase64);
+      if (usedColors.size > 0) drawColorLegend(doc, Array.from(usedColors));
+    }
     else drawMiniHeader(doc);
     drawScaleWarning(doc);
 
@@ -203,6 +225,38 @@ function drawFooter(doc, page, total) {
   doc.text(`Folha ${page}/${total}`, PW / 2, PH - 2, { align: 'center' });
 }
 
+// Legenda de cores — desenha uma linha compacta no fundo da 1ª folha
+function drawColorLegend(doc, usedColorIds) {
+  const items = usedColorIds.map(id => ({ id, def: COLOR_MAP[id] })).filter(x => x.def);
+  if (!items.length) return;
+  const y = PH - 9;
+  const chip = 3;
+  const gap = 2;
+  const itemW = 30;
+  const totalW = items.length * itemW;
+  let x = Math.max(MARGIN_X, (PW - totalW) / 2);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.setTextColor(...GREY);
+  doc.text('LEGENDA', x - MARGIN_X + 2, y + chip / 2 + 0.7);
+
+  items.forEach(({ id, def }) => {
+    doc.setFillColor(...def.rgb);
+    doc.setDrawColor(...BLACK);
+    doc.setLineWidth(0.2);
+    doc.rect(x, y, chip, chip, 'FD');
+    doc.setTextColor(...BLACK);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(5.5);
+    doc.text(id, x + chip + 1, y + chip / 2 + 0.7);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(5);
+    doc.text(def.label, x + chip + 1 + 4, y + chip / 2 + 0.7);
+    x += itemW + gap;
+  });
+}
+
 function drawStrip(doc, strip, config) {
   const { y, heightMm, widthMm, cells, rowIndex, segIndex, segTotal, startMod, totalRowMods } = strip;
   const x0 = MARGIN_X + 2; // rótulo à esquerda cabe em 6-8 mm
@@ -272,7 +326,10 @@ function drawStrip(doc, strip, config) {
 function drawCell(doc, x, y, w, h, cell) {
   doc.setDrawColor(...BLACK);
   doc.setLineWidth(0.35);
-  doc.setFillColor(255, 255, 255);
+  const colorDef = cell.color ? COLOR_MAP[cell.color] : null;
+  const bg = colorDef ? colorDef.rgb : [255, 255, 255];
+  const fg = colorDef ? colorDef.fg : [10, 10, 12];
+  doc.setFillColor(...bg);
   doc.rect(x, y, w, h, 'FD');
 
   // Faixa preta topo com identificador
@@ -286,8 +343,26 @@ function drawCell(doc, x, y, w, h, cell) {
   doc.setFontSize(numSize);
   doc.text(numText, x + w / 2, y + topH - 1, { align: 'center' });
 
-  // Descrição
-  doc.setTextColor(...BLACK);
+  // Chip de cor no canto direito da faixa preta (se aplicável)
+  if (colorDef) {
+    const chipSize = Math.min(2.4, topH - 1);
+    const chipX = x + w - chipSize - 0.6;
+    const chipY = y + (topH - chipSize) / 2;
+    doc.setFillColor(...colorDef.rgb);
+    doc.setDrawColor(255, 255, 255);
+    doc.setLineWidth(0.15);
+    doc.rect(chipX, chipY, chipSize, chipSize, 'FD');
+    // Sigla no chip só se couber (>=2 mm)
+    if (chipSize >= 2.2) {
+      doc.setTextColor(...colorDef.fg);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(3.4);
+      doc.text(cell.color, chipX + chipSize / 2, chipY + chipSize - 0.6, { align: 'center' });
+    }
+  }
+
+  // Descrição — cor de contraste automática
+  doc.setTextColor(...fg);
   doc.setFont('helvetica', 'normal');
   const descSize = Math.min(7, Math.max(4.2, 3.8 + (w / MODULE_MM) * 0.35));
   doc.setFontSize(descSize);

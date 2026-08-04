@@ -13,9 +13,25 @@ import { generateMascaraDinPDF } from '../lib/mascaraDinPdf';
 const POSITIONS_OPTIONS = [12, 18, 24, 36];
 const MODULE_MM = 18;
 
+// Paleta de cores para identificação rápida de circuitos
+export const COLOR_PALETTE = [
+  { id: null, label: 'Sem cor', hex: null, fg: '#e4e4e7' },
+  { id: 'R',  label: 'Fase R',       hex: '#ef4444', fg: '#ffffff' },
+  { id: 'S',  label: 'Fase S',       hex: '#78350f', fg: '#ffffff' },
+  { id: 'T',  label: 'Fase T',       hex: '#525252', fg: '#ffffff' },
+  { id: 'N',  label: 'Neutro',       hex: '#3b82f6', fg: '#ffffff' },
+  { id: 'PE', label: 'Terra (PE)',   hex: '#16a34a', fg: '#ffffff' },
+  { id: 'ID', label: 'Diferencial',  hex: '#facc15', fg: '#0a0a0a' },
+  { id: 'CG', label: 'Corte Geral',  hex: '#f97316', fg: '#ffffff' },
+  { id: 'MT', label: 'Motor/Bomba',  hex: '#8b5cf6', fg: '#ffffff' },
+  { id: 'LZ', label: 'Iluminação',   hex: '#0ea5e9', fg: '#ffffff' },
+  { id: 'TC', label: 'Tomadas',      hex: '#0d9488', fg: '#ffffff' },
+  { id: 'AC', label: 'AC/Clima',     hex: '#06b6d4', fg: '#ffffff' },
+];
+
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-const emptyCell = (span = 1) => ({ id: uid(), span, text: '', desc: '' });
+const emptyCell = (span = 1) => ({ id: uid(), span, text: '', desc: '', color: null });
 
 function buildEmptyRow(positions) {
   return { id: uid(), cells: Array.from({ length: positions }, () => emptyCell(1)) };
@@ -338,33 +354,40 @@ export default function MascaraDinPage() {
                 style={{ width: `${rowWidthPx}px`, height: `${config.stripHeightMm * pxPerMm * 3.4}px` }}
                 data-testid={`mascara-row-strip-${ri}`}
               >
-                {row.cells.map((cell, ci) => (
-                  <button
-                    key={cell.id}
-                    data-testid={`mascara-cell-${ri}-${ci}`}
-                    onClick={() => setCellEditor({ rowIdx: ri, cellIdx: ci })}
-                    className="relative border-r border-zinc-800 last:border-r-0 flex flex-col items-center justify-center text-center hover:bg-zinc-800/40 transition group"
-                    style={{ width: `${scaledCell(cell.span)}px` }}
-                  >
-                    {/* faixa preta topo com nº */}
-                    <div className="w-full bg-zinc-950 border-b border-yellow-400/40 py-0.5">
-                      <span className="text-yellow-400 font-bold text-[10px] leading-none">{cell.text || '—'}</span>
-                    </div>
-                    {/* descrição */}
-                    <div className="flex-1 flex items-center px-1">
-                      <span className="text-white text-[9px] leading-tight break-words">
-                        {cell.desc || <span className="text-zinc-600">(vazio)</span>}
-                      </span>
-                    </div>
-                    {cell.span > 1 && (
-                      <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-yellow-400 bg-zinc-900/80 px-1 rounded">×{cell.span}</span>
-                    )}
-                    {/* ticks 18mm */}
-                    {cell.span > 1 && Array.from({ length: cell.span - 1 }).map((_, k) => (
-                      <div key={k} className="absolute top-0 bottom-0 border-l border-dashed border-zinc-700" style={{ left: `${((k + 1) / cell.span) * 100}%` }} />
-                    ))}
-                  </button>
-                ))}
+                {row.cells.map((cell, ci) => {
+                  const colorDef = COLOR_PALETTE.find(c => c.id === cell.color) || COLOR_PALETTE[0];
+                  const bg = colorDef.hex || '#09090b';
+                  const fg = colorDef.fg || '#e4e4e7';
+                  return (
+                    <button
+                      key={cell.id}
+                      data-testid={`mascara-cell-${ri}-${ci}`}
+                      onClick={() => setCellEditor({ rowIdx: ri, cellIdx: ci })}
+                      className="relative border-r border-zinc-800 last:border-r-0 flex flex-col items-stretch text-center hover:opacity-90 transition group"
+                      style={{ width: `${scaledCell(cell.span)}px` }}
+                    >
+                      {/* faixa preta topo com nº */}
+                      <div className="w-full bg-zinc-950 border-b border-yellow-400/40 py-0.5">
+                        <span className="text-yellow-400 font-bold text-[10px] leading-none">{cell.text || '—'}</span>
+                      </div>
+                      {/* descrição com cor de fundo */}
+                      <div className="flex-1 flex items-center justify-center px-1" style={{ backgroundColor: bg }}>
+                        <span className="text-[9px] leading-tight break-words" style={{ color: cell.desc ? fg : '#52525b' }}>
+                          {cell.desc || '(vazio)'}
+                        </span>
+                      </div>
+                      {cell.color && (
+                        <span className="absolute top-0.5 left-0.5 text-[8px] font-bold bg-black/60 text-white px-1 rounded">{cell.color}</span>
+                      )}
+                      {cell.span > 1 && (
+                        <span className="absolute top-0.5 right-0.5 text-[8px] font-bold text-yellow-400 bg-zinc-900/80 px-1 rounded">×{cell.span}</span>
+                      )}
+                      {cell.span > 1 && Array.from({ length: cell.span - 1 }).map((_, k) => (
+                        <div key={k} className="absolute top-0 bottom-0 border-l border-dashed border-zinc-700" style={{ left: `${((k + 1) / cell.span) * 100}%` }} />
+                      ))}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -411,6 +434,29 @@ export default function MascaraDinPage() {
                       placeholder="Ex.: Iluminação, Tomadas Cozinha"
                       className="bg-zinc-900 border-zinc-800 text-white"
                     />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-zinc-400">Cor do circuito</Label>
+                    <div className="grid grid-cols-6 gap-1.5 mt-1" data-testid="mascara-editor-color-palette">
+                      {COLOR_PALETTE.map(c => (
+                        <button
+                          key={c.id || 'none'}
+                          type="button"
+                          data-testid={`mascara-editor-color-${c.id || 'none'}`}
+                          onClick={() => updateCell(cellEditor.rowIdx, cellEditor.cellIdx, { color: c.id })}
+                          className={`h-9 rounded flex items-center justify-center text-[10px] font-bold border transition ${cell.color === c.id ? 'ring-2 ring-yellow-400 border-yellow-400 scale-105' : 'border-zinc-700 hover:border-zinc-500'}`}
+                          style={{ backgroundColor: c.hex || '#18181b', color: c.fg }}
+                          title={c.label}
+                        >
+                          {c.id ? c.id : '∅'}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-zinc-500 mt-1">
+                      {cell.color
+                        ? (COLOR_PALETTE.find(c => c.id === cell.color)?.label || '')
+                        : 'Sem cor (fundo branco no PDF)'}
+                    </p>
                   </div>
                   <div className="flex items-center gap-2 pt-1 flex-wrap">
                     <span className="text-xs text-zinc-400">Ocupa <strong className="text-yellow-400">{cell.span}</strong> módulo{cell.span === 1 ? '' : 's'} ({cell.span * MODULE_MM} mm)</span>

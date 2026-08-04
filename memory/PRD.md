@@ -34,7 +34,15 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
-### Fev 04, 2026 — Módulo "Máscara DIN" (capa de calha em escala real 1:1)
+### Fev 04, 2026 — Máscara DIN: cores por circuito (fase R/S/T, ID, motor, etc.)
+- **Pedido**: pintar cada célula com uma cor para identificação rápida (fases, diferencial, motor, iluminação, tomadas, etc.).
+- **Paleta pré-definida** (11 cores + "sem cor"): R (vermelho), S (castanho), T (cinzento), N (azul), PE (verde), ID (amarelo), CG (laranja), MT (roxo), LZ (azul-claro), TC (verde-azulado), AC (ciano).
+- **Editor visual**: nova secção "Cor do circuito" no diálogo de edição da célula com paleta clicável (6 colunas). Preview em tempo real com fundo colorido e contraste automático do texto.
+- **PDF**: célula com corpo colorido, chip pequeno no topo com a sigla, e **legenda automática** no rodapé da 1ª folha só com as cores efectivamente usadas.
+- **`mascaraDinPdf.js`**: mapa `COLOR_MAP` espelhado da `COLOR_PALETTE` da UI. Adição de `drawColorLegend()` no rodapé.
+- Validado com `analyze_file_tool` — 6 cores diferentes reconhecidas correctamente no PDF, legenda presente.
+
+
 - **Pedido**: novo sub-módulo de impressão para colar na capa do quadro. Escala 1:1 (1 módulo DIN = 18 mm), fusão de N módulos consecutivos (aparelhos multipolares), impressão A4 100%.
 - **Nova página `/mascara-din`** (sidebar) com editor visual:
   - Toggle de módulos por fila: 12 · 18 · 24 · 36 (custom 4-60), altura da tira configurável 8-18 mm (default 12 mm)
