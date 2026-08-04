@@ -34,6 +34,18 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Changelog
 
+### Fev 04, 2026 — Módulo "Máscara DIN" (capa de calha em escala real 1:1)
+- **Pedido**: novo sub-módulo de impressão para colar na capa do quadro. Escala 1:1 (1 módulo DIN = 18 mm), fusão de N módulos consecutivos (aparelhos multipolares), impressão A4 100%.
+- **Nova página `/mascara-din`** (sidebar) com editor visual:
+  - Toggle de módulos por fila: 12 · 18 · 24 · 36 (custom 4-60), altura da tira configurável 8-18 mm (default 12 mm)
+  - Editor visual clicável: cada célula abre diálogo com identificador, descrição, e botões **Fundir com direita** / **Dividir**. Zoom ajustável do editor (só visual).
+  - **Importar da Legenda** de Quadro: reutiliza módulos da última sessão como células iniciais (span=1) para editar.
+  - Validação: cada fila tem de totalizar exatamente `positionsPerRow` módulos antes de gerar PDF.
+- **Novo `lib/mascaraDinPdf.js`**: A4 paisagem, escala 1:1. Se a fila não cabe (>270 mm úteis), divide **automaticamente em segmentos** com marcas de continuação `↦ 1·2` / `1·1 ↤` e rótulos de posição (`pos 1-15`, `pos 16-24`). Cabeçalho fino só na 1ª folha, cortes tracejados e cantos de alinhamento em cada tira, aviso permanente "IMPRIMIR A 100%".
+- **`LegendaQuadroPage.jsx`**: persiste sessão actual (`legenda_quadro_last`) em localStorage para permitir importação na Máscara DIN.
+- Validado com `analyze_file_tool` em 2 cenários (12 mods numa página; 24 mods divididos em 2 segmentos). Ambos ✅.
+
+
 ### Fev 03, 2026 — Legenda de Quadro: Layout Horizontal/Vertical para colagem física
 - **Pedido**: PDFs multipágina não permitiam colagem contínua nas portas dos quadros. Utilizador precisava de escolher entre colagem lado-a-lado (horizontal) e em cima/baixo (vertical), consoante o formato físico do quadro.
 - **`legendaQuadroPdf.js`** reescrito para suportar `options.layout = 'horizontal' | 'vertical'`:

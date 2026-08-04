@@ -87,6 +87,11 @@ export default function LegendaQuadroPage() {
     api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch(() => {});
   }, []);
 
+  // Guarda a sessão actual para poder ser importada pelo módulo Máscara DIN
+  useEffect(() => {
+    try { localStorage.setItem('legenda_quadro_last', JSON.stringify({ header, modules })); } catch { /* ignore */ }
+  }, [header, modules]);
+
   const renumber = (list) => list.map((m, i) => ({ ...m, number: i + 1 }));
 
   const addModule = () => setModules(prev => [...prev, newModule(prev.length + 1)]);
