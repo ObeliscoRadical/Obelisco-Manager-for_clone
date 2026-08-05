@@ -10,6 +10,7 @@ from pathlib import Path
 import uuid
 import logging
 import os
+import asyncio
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,10 @@ logger = logging.getLogger(__name__)
 # Telegram config (optional)
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID')
+
+# Resend email config (optional)
+RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
+SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
 
 # Google Calendar config (optional)
 GOOGLE_CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID')
@@ -38,6 +43,52 @@ async def send_telegram_notification(message: str):
             })
     except Exception as e:
         logger.warning(f"Telegram notification failed: {e}")
+
+
+def _send_confirmation_email(order: dict):
+    """Send email confirmation to client (fire-and-forget sync)."""
+    if not RESEND_API_KEY:
+        return
+    try:
+        import resend
+        resend.api_key = RESEND_API_KEY
+        stype = SERVICE_TYPES.get(order.get('service_type', ''), {}).get('label', order.get('service_type', ''))
+        html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#09090B;color:#fff;padding:0;">
+          <div style="background:#09090B;padding:24px 32px;border-bottom:3px solid #FACC15;">
+            <h1 style="color:#FACC15;margin:0;font-size:22px;">OBELISCO RADICAL</h1>
+            <p style="color:#a1a1aa;margin:4px 0 0;font-size:12px;">Eletricidade &amp; Telecomunicações</p>
+          </div>
+          <div style="padding:32px;">
+            <h2 style="color:#fff;margin:0 0 16px;">Pedido Recebido!</h2>
+            <p style="color:#a1a1aa;line-height:1.6;">
+              Olá <strong style="color:#fff;">{order['client_name']}</strong>,<br><br>
+              Recebemos o seu pedido de <strong style="color:#FACC15;">{stype}</strong> e entraremos em contacto brevemente.
+            </p>
+            <div style="background:#18181B;border:1px solid #27272A;border-radius:8px;padding:16px;margin:20px 0;">
+              <p style="color:#a1a1aa;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Resumo do pedido</p>
+              <p style="color:#fff;margin:0 0 4px;"><strong>Tipo:</strong> {stype}</p>
+              <p style="color:#fff;margin:0 0 4px;"><strong>Morada:</strong> {order.get('address', '')}</p>
+              <p style="color:#fff;margin:0;"><strong>Descrição:</strong> {order.get('description', '')[:200]}</p>
+            </div>
+            <p style="color:#71717A;font-size:13px;margin-top:24px;">
+              Se precisar de algo urgente, ligue para <strong style="color:#FACC15;">+351 XXX XXX XXX</strong>.
+            </p>
+          </div>
+          <div style="background:#18181B;padding:16px 32px;border-top:1px solid #27272A;text-align:center;">
+            <p style="color:#52525B;font-size:11px;margin:0;">© {datetime.now().year} Obelisco Radical - Eletricidade</p>
+          </div>
+        </div>
+        """
+        resend.Emails.send({
+            "from": SENDER_EMAIL,
+            "to": [order['email']],
+            "subject": f"Obelisco Radical - Pedido de {stype} recebido",
+            "html": html,
+        })
+        logger.info(f"Confirmation email sent to {order['email']}")
+    except Exception as e:
+        logger.warning(f"Email send failed: {e}")
 
 
 def _get_calendar_service():
@@ -264,6 +315,9 @@ def create_service_orders_router(db, get_current_user):
         if data.preferred_date:
             msg += f"📅 Data preferida: {data.preferred_date}\n"
         background_tasks.add_task(send_telegram_notification, msg)
+
+        # Email confirmation to client
+        background_tasks.add_task(asyncio.to_thread, _send_confirmation_email, order)
 
         order.pop("_id", None)
         return order
