@@ -39,8 +39,8 @@ def create_client_profile_router(db, get_current_user):
 
     @router.get("/profile")
     async def client_profile(name: str, user=Depends(get_current_user)):
-        """Full 360° profile for a client by name (case-insensitive fuzzy)."""
-        pattern = re.compile(re.escape(name.strip()), re.IGNORECASE)
+        """Full 360° profile for a client by name (case-insensitive exact match)."""
+        pattern = re.compile(r'^' + re.escape(name.strip()) + r'$', re.IGNORECASE)
 
         # ── Proposals ─────────────────────────────────────────────
         proposals_cursor = db.proposals.find(

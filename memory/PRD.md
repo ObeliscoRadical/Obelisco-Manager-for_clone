@@ -11,11 +11,12 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Excel**: openpyxl (backend import/export)
 - **AI**: Emergent LLM Key → GPT-5.2 for price/margin lookup
 - **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
+- **Integrations**: Telegram Bot, Google Calendar (optional), Gemini AI (OCR/chat)
 
 ## User Personas
-- Admin/Owner: Manages budgets, proposals, works, and appointments
+- Admin/Owner: Manages budgets, proposals, works, appointments, client profiles
 - Team members (roles): View and manage assigned works
-- Técnicos: Use Portal Técnico for works, guides, attendance, service orders
+- Técnicos: Use Portal Técnico for works, guides, attendance, service orders, chat
 
 ## Core Requirements
 - [x] JWT login with admin seeding
@@ -31,36 +32,35 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - [x] Templates library
 - [x] Budget versioning + duplication
 - [x] Excel Import / Export
-- [x] Multi-role user management
+- [x] Multi-role user management with granular permissions
 - [x] Service Orders (Pedidos de Serviço) — migrated from Obelisco-Tecnicos-main
-- [x] Public Widget for client service requests
+- [x] Public Widget for client service requests (/pedido-servico)
 - [x] GPS Timeclock (Ponto GPS)
 - [x] Timeclock Reports with CSV export
+- [x] Telegram notifications (new orders + ponto entries)
+- [x] Google Calendar integration (availability check + auto-events)
+- [x] WhatsApp share link for widget
+- [x] Perfil 360° do Cliente (mini-CRM)
 
 ## Prioritized Backlog
 
-### P0 (Critical) - Done
-
 ### P1 (Important)
-- Perfil 360° do Cliente (mini-CRM): histórico, propostas, obras, faturas e prazo médio de pagamento
+- Google Calendar credentials file (google_credentials.json) — code is ready, needs Service Account file
 - Módulo Salarial Fase 2: recibos PDF por funcionário, envio email/WhatsApp
-- Google Calendar integration for service orders (availability checking, auto-events)
-- Telegram notifications (ponto + guias) — prepared, needs TELEGRAM_BOT_TOKEN in .env
 - Automação Máscara DIN (auto-atribuir cor por tipo de módulo ao importar da Legenda)
+- Email integration (Emergent Resend) for sending proposals and notifications
 
 ### P2 (Nice to have)
 - Hardening de segurança (CORS restrito, rate limiting login, limites upload, CSP)
 - Integração formal com TOC Online
 - RBAC integral no backend (endpoints não totalmente blindados)
-- Email integration (Emergent Resend) for sending proposals and notifications
 - Dashboard charts (Recharts)
 
 ### Refactoring
 - `/app/backend/server.py` >4300 lines — split into `routes/`, `models/`, `services/`
-- Add `/app/backend/tests` with pytest for regression
 
 ## Next Tasks
-1. Perfil 360° do Cliente (mini-CRM)
-2. Google Calendar integration for service orders
-3. Telegram bot configuration (user to provide tokens)
+1. Provide google_credentials.json to activate Google Calendar
+2. Módulo Salarial Fase 2
+3. Automação Máscara DIN
 4. Refactor server.py into modules
