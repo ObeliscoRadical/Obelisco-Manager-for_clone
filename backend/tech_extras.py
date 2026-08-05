@@ -31,6 +31,9 @@ class ClockPunch(BaseModel):
     action: Literal['in', 'out', 'break_start', 'break_end']
     work_id: Optional[str] = None
     note: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
 
 
 class TechMessageCreate(BaseModel):
@@ -118,6 +121,9 @@ def create_tech_extras_router(db, get_current_user):
             "at": now,
             "work_id": input.work_id,
             "note": input.note,
+            "latitude": input.latitude,
+            "longitude": input.longitude,
+            "address": input.address,
         })
 
         # Calcula horas trabalhadas somando pares in→out

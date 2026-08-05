@@ -18,7 +18,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - [x] Budget CRUD with AI price lookup
 - [x] 3-tier proposals with PDF + digital signature
 - [x] Works management with execution tracking
-- [x] Calendar/Agenda with **Google Calendar integration** (availability check + auto-events)
+- [x] Calendar/Agenda with Google Calendar integration
 - [x] Materials/Labor/Productivities DBs
 - [x] Stock management with invoice import (AI OCR)
 - [x] Transport Guides with tech portal
@@ -28,12 +28,13 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - [x] Payroll (employees, attendance, salary processing)
 - [x] Break-even calculator
 - [x] Accountant AI chat
-- [x] Service Orders (migrated from Obelisco-Tecnicos) with Telegram notifications
+- [x] Service Orders with Telegram + Google Calendar + WhatsApp updates
 - [x] Public widget for client service requests
-- [x] GPS Timeclock + Reports with CSV export
+- [x] GPS Timeclock in Tech Portal (Ponto GPS with location capture)
+- [x] Timeclock Reports with CSV export
 - [x] Perfil 360° do Cliente (mini-CRM)
 - [x] WhatsApp share link for service widget
-- [x] Email confirmation (Resend - needs API key)
+- [x] WhatsApp update button on order detail
 
 ## Prioritized Backlog
 
