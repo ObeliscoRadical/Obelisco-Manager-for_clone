@@ -4374,6 +4374,10 @@ app.include_router(create_tech_extras_router(db, get_current_user))
 from service_orders import create_service_orders_router
 app.include_router(create_service_orders_router(db, get_current_user))
 
+# Perfil 360° Cliente (mini-CRM)
+from client_profile import create_client_profile_router
+app.include_router(create_client_profile_router(db, get_current_user))
+
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
     "https://tech-app-obelisco.emergent.host",

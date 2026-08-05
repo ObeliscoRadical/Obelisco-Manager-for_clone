@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 
@@ -24,6 +24,7 @@ const navItems = [
   { path: '/relatorios', label: 'Relatórios', icon: FileBarChart, mod: 'relatorios' },
   { path: '/guias', label: 'Guias Transporte', icon: Truck, mod: 'transporte_guias' },
   { path: '/pipeline', label: 'Pipeline', icon: GitBranch, mod: 'obras' },
+  { path: '/perfil-cliente', label: 'Perfil Cliente', icon: UserCircle, mod: 'obras' },
   { path: '/tech', label: 'Portal Técnico', icon: Wrench, mod: 'tech_portal' },
 ];
 

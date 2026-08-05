@@ -1,0 +1,23 @@
+{
+  "summary": "Tested 4 new features (Telegram notifications, Google Calendar availability, /api/clients + /api/clients/profile, WhatsApp share widget, Perfil 360° page). All 6 backend tests pass, and all UI selectors verified in frontend. APEC profile shows 3 propostas exactly as expected. Cliente Teste Vencida returns non-zero total_invoiced.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/new_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "service_orders.py file is ~590 lines — approaching the recommended 700-line split threshold; consider splitting timeclock endpoints into a separate module for maintainability.",
+    "send_telegram_notification silently swallows any non-Exception outcome (e.g., a Telegram 400/401 HTTP error is not logged since httpx does not raise for status). Consider calling response.raise_for_status() and logging failure so notification issues are observable.",
+    "client_profile.py: regex matching via re.escape(name) will incorrectly match substrings (e.g., name='APEC' would also match 'APECS'). Consider exact match with case-insensitive collation for stricter matching, or anchor the regex."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (all selectors present)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Created 1 public service order 'TEST_Telegram_Client' via POST /api/service-orders to trigger Telegram notification (background task, no errors in backend logs).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_new_features.py — reuse for regression. UI verified via public URL. Telegram is real (no mocks); background_task fires with no visible error in backend logs = success. Google Calendar returns available=true because google_credentials.json is intentionally absent (by design).",
+  "rca of the issue": "N/A — no issues found."
+}

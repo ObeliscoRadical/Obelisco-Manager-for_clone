@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
+from pathlib import Path
 import uuid
 import logging
 import os
@@ -16,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Telegram config (optional)
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID')
+
+# Google Calendar config (optional)
+GOOGLE_CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID')
+_GCREDS_PATH = Path(__file__).parent / 'google_credentials.json'
 
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -33,6 +38,89 @@ async def send_telegram_notification(message: str):
             })
     except Exception as e:
         logger.warning(f"Telegram notification failed: {e}")
+
+
+def _get_calendar_service():
+    """Return Google Calendar API service or None if not configured."""
+    if not GOOGLE_CALENDAR_ID or not _GCREDS_PATH.exists():
+        return None
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        creds = service_account.Credentials.from_service_account_file(
+            str(_GCREDS_PATH), scopes=['https://www.googleapis.com/auth/calendar']
+        )
+        return build('calendar', 'v3', credentials=creds)
+    except Exception as e:
+        logger.warning(f"Google Calendar init failed: {e}")
+        return None
+
+
+def _create_calendar_event(order: dict):
+    """Create event in Google Calendar (fire-and-forget sync)."""
+    svc = _get_calendar_service()
+    if not svc or not order.get('preferred_date'):
+        return None
+    try:
+        pref = order['preferred_date']
+        start_dt = datetime.fromisoformat(pref.replace('Z', '+00:00')) if 'T' in pref else datetime.strptime(pref, '%Y-%m-%d').replace(hour=9, minute=0)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        end_dt = start_dt + timedelta(hours=2)
+        label = SERVICE_TYPES.get(order.get('service_type', ''), {}).get('label', order.get('service_type', ''))
+        event = {
+            'summary': f"⚡ {label} - {order['client_name']}",
+            'description': f"Cliente: {order['client_name']}\nTel: {order.get('phone','')}\nEmail: {order.get('email','')}\n\n{order.get('description','')}",
+            'location': order.get('address', ''),
+            'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Europe/Lisbon'},
+            'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Europe/Lisbon'},
+            'reminders': {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 60}, {'method': 'popup', 'minutes': 1440}]},
+        }
+        created = svc.events().insert(calendarId=GOOGLE_CALENDAR_ID, body=event).execute()
+        logger.info(f"Calendar event created: {created.get('id')}")
+        return created.get('htmlLink')
+    except Exception as e:
+        logger.warning(f"Calendar event creation failed: {e}")
+        return None
+
+
+def _check_calendar_availability(preferred_date: str, duration_hours: int = 2):
+    """Check availability and suggest alternatives. Returns (has_conflict, conflicts, suggestions)."""
+    svc = _get_calendar_service()
+    if not svc:
+        return False, [], []
+    try:
+        start_dt = datetime.fromisoformat(preferred_date.replace('Z', '+00:00')) if 'T' in preferred_date else datetime.strptime(preferred_date, '%Y-%m-%d').replace(hour=9, minute=0)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        end_dt = start_dt + timedelta(hours=duration_hours)
+        events = svc.events().list(calendarId=GOOGLE_CALENDAR_ID, timeMin=start_dt.isoformat(), timeMax=end_dt.isoformat(), singleEvents=True, orderBy='startTime').execute().get('items', [])
+        if not events:
+            return False, [], []
+        conflicts = [{'summary': e.get('summary', ''), 'start': e['start'].get('dateTime', e['start'].get('date')), 'end': e['end'].get('dateTime', e['end'].get('date'))} for e in events]
+        # Suggest 3 alternatives
+        suggestions = []
+        check = start_dt + timedelta(hours=duration_hours + 1)
+        for _ in range(100):
+            if len(suggestions) >= 3 or (check - start_dt).days > 14:
+                break
+            if check.weekday() >= 5:
+                check = check.replace(hour=9, minute=0) + timedelta(days=1)
+                continue
+            if check.hour < 9:
+                check = check.replace(hour=9, minute=0)
+            elif check.hour >= 18:
+                check = (check + timedelta(days=1)).replace(hour=9, minute=0)
+                continue
+            check_end = check + timedelta(hours=duration_hours)
+            evts = svc.events().list(calendarId=GOOGLE_CALENDAR_ID, timeMin=check.isoformat(), timeMax=check_end.isoformat(), singleEvents=True).execute().get('items', [])
+            if not evts:
+                suggestions.append({'datetime': check.isoformat(), 'display': check.strftime('%d/%m/%Y às %H:%M')})
+            check += timedelta(hours=1)
+        return True, conflicts, suggestions
+    except Exception as e:
+        logger.warning(f"Calendar check failed: {e}")
+        return False, [], []
 
 
 SERVICE_TYPES = {
@@ -127,6 +215,17 @@ def create_service_orders_router(db, get_current_user):
         cursor = db.service_orders.find({}, {"_id": 0}).sort("created_at", -1).limit(limit)
         return await cursor.to_list(length=limit)
 
+    # ── Calendar availability ─────────────────────────────────────
+    @router.get("/check-availability")
+    async def check_availability(preferred_date: str, duration_hours: int = 2):
+        """Public: check if a date/time is available on Google Calendar."""
+        has_conflict, conflicts, suggestions = _check_calendar_availability(preferred_date, duration_hours)
+        return {
+            "available": not has_conflict,
+            "conflicts": conflicts,
+            "suggested_times": suggestions,
+        }
+
     # ── CRUD ──────────────────────────────────────────────────────
     @router.post("")
     async def create_order_public(data: OrderCreate, background_tasks: BackgroundTasks):
@@ -149,6 +248,10 @@ def create_service_orders_router(db, get_current_user):
             "updated_at": _now(),
         }
         await db.service_orders.insert_one(order)
+
+        # Create Google Calendar event (background)
+        if data.preferred_date:
+            background_tasks.add_task(_create_calendar_event, order)
 
         stype = SERVICE_TYPES.get(data.service_type, {}).get("label", data.service_type)
         msg = (
@@ -189,6 +292,8 @@ def create_service_orders_router(db, get_current_user):
             "updated_at": _now(),
         }
         await db.service_orders.insert_one(order)
+        if data.preferred_date:
+            background_tasks.add_task(_create_calendar_event, order)
         order.pop("_id", None)
         return order
 
