@@ -19,9 +19,10 @@ logger = logging.getLogger(__name__)
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID')
 
-# Resend email config (optional)
-RESEND_API_KEY = os.environ.get('RESEND_API_KEY')
-SENDER_EMAIL = os.environ.get('SENDER_EMAIL', 'onboarding@resend.dev')
+# Emergent native email (same pattern as CEO AI)
+EMAIL_BASE_URL = "https://integrations.emergentagent.com"
+EMAIL_KEY = os.environ.get('EMERGENT_EMAIL_KEY')
+EMAIL_FROM_NAME = os.environ.get('EMAIL_FROM_NAME', 'Obelisco Radical')
 
 # Google Calendar config (optional)
 GOOGLE_CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID')
@@ -45,50 +46,124 @@ async def send_telegram_notification(message: str):
         logger.warning(f"Telegram notification failed: {e}")
 
 
-def _send_confirmation_email(order: dict):
-    """Send email confirmation to client (fire-and-forget sync)."""
-    if not RESEND_API_KEY:
-        return
+async def send_email_raw(to_email: str, subject: str, html: str):
+    """Send email via Emergent native email service (same as CEO AI)."""
+    if not EMAIL_KEY:
+        logger.warning("EMERGENT_EMAIL_KEY not set — email skipped")
+        return False
+    payload = {"to": [to_email], "subject": subject, "html": html, "from_name": EMAIL_FROM_NAME}
     try:
-        import resend
-        resend.api_key = RESEND_API_KEY
-        stype = SERVICE_TYPES.get(order.get('service_type', ''), {}).get('label', order.get('service_type', ''))
-        html = f"""
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#09090B;color:#fff;padding:0;">
-          <div style="background:#09090B;padding:24px 32px;border-bottom:3px solid #FACC15;">
-            <h1 style="color:#FACC15;margin:0;font-size:22px;">OBELISCO RADICAL</h1>
-            <p style="color:#a1a1aa;margin:4px 0 0;font-size:12px;">Eletricidade &amp; Telecomunicações</p>
-          </div>
-          <div style="padding:32px;">
-            <h2 style="color:#fff;margin:0 0 16px;">Pedido Recebido!</h2>
-            <p style="color:#a1a1aa;line-height:1.6;">
-              Olá <strong style="color:#fff;">{order['client_name']}</strong>,<br><br>
-              Recebemos o seu pedido de <strong style="color:#FACC15;">{stype}</strong> e entraremos em contacto brevemente.
-            </p>
-            <div style="background:#18181B;border:1px solid #27272A;border-radius:8px;padding:16px;margin:20px 0;">
-              <p style="color:#a1a1aa;margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Resumo do pedido</p>
-              <p style="color:#fff;margin:0 0 4px;"><strong>Tipo:</strong> {stype}</p>
-              <p style="color:#fff;margin:0 0 4px;"><strong>Morada:</strong> {order.get('address', '')}</p>
-              <p style="color:#fff;margin:0;"><strong>Descrição:</strong> {order.get('description', '')[:200]}</p>
-            </div>
-            <p style="color:#71717A;font-size:13px;margin-top:24px;">
-              Se precisar de algo urgente, ligue para <strong style="color:#FACC15;">+351 XXX XXX XXX</strong>.
-            </p>
-          </div>
-          <div style="background:#18181B;padding:16px 32px;border-top:1px solid #27272A;text-align:center;">
-            <p style="color:#52525B;font-size:11px;margin:0;">© {datetime.now().year} Obelisco Radical - Eletricidade</p>
-          </div>
-        </div>
-        """
-        resend.Emails.send({
-            "from": SENDER_EMAIL,
-            "to": [order['email']],
-            "subject": f"Obelisco Radical - Pedido de {stype} recebido",
-            "html": html,
-        })
-        logger.info(f"Confirmation email sent to {order['email']}")
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{EMAIL_BASE_URL}/api/v1/email/send",
+                headers={"X-Email-Key": EMAIL_KEY},
+                json=payload,
+            )
+        resp.raise_for_status()
+        logger.info(f"Email sent to {to_email}")
+        return True
     except Exception as e:
-        logger.warning(f"Email send failed: {e}")
+        logger.error(f"Email send error: {e}")
+        return False
+
+
+def _build_order_confirmation_html(order: dict) -> str:
+    stype = SERVICE_TYPES.get(order.get('service_type', ''), {}).get('label', order.get('service_type', ''))
+    return f"""<!DOCTYPE html><html><body style="margin:0;background:#09090B;font-family:Arial,Helvetica,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090B;padding:32px 0;">
+      <tr><td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#18181B;border-radius:18px;overflow:hidden;">
+          <tr><td style="background:#09090B;padding:24px 32px;border-bottom:3px solid #FACC15;">
+            <div style="color:#FACC15;font-size:22px;font-weight:700;letter-spacing:1px;">OBELISCO RADICAL</div>
+            <div style="color:#a1a1aa;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Eletricidade &amp; Telecomunicações</div>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <div style="font-size:22px;color:#ffffff;font-weight:700;line-height:1.35;margin-bottom:8px;">Pedido Recebido!</div>
+            <div style="font-size:14px;color:#a1a1aa;line-height:1.6;margin-bottom:20px;">
+              Olá <strong style="color:#ffffff;">{order['client_name']}</strong>,<br><br>
+              Recebemos o seu pedido de <strong style="color:#FACC15;">{stype}</strong> e entraremos em contacto brevemente.
+            </div>
+            <table width="100%" cellpadding="0" cellspacing="0" style="background:#27272A;border-radius:12px;">
+              <tr><td style="padding:16px 20px;">
+                <div style="font-size:11px;color:#71717A;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">Resumo do pedido</div>
+                <div style="font-size:14px;color:#ffffff;margin-bottom:6px;">⚡ <strong>Tipo:</strong> {stype}</div>
+                <div style="font-size:14px;color:#ffffff;margin-bottom:6px;">📍 <strong>Morada:</strong> {order.get('address', '')}</div>
+                <div style="font-size:14px;color:#ffffff;">📝 <strong>Descrição:</strong> {order.get('description', '')[:200]}</div>
+              </td></tr>
+            </table>
+          </td></tr>
+          <tr><td style="padding:20px 32px;background:#09090B;border-top:1px solid #27272A;">
+            <div style="font-size:11px;color:#52525B;text-align:center;">© {datetime.now().year} Obelisco Radical - Eletricidade</div>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table></body></html>"""
+
+
+def _build_daily_briefing_html(admin_name: str, agenda_items: list, orders_today: list, app_url: str) -> str:
+    hora = datetime.now(timezone.utc).hour
+    greeting = "Bom dia" if hora < 12 else ("Boa tarde" if hora < 19 else "Boa noite")
+
+    agenda_rows = ""
+    for a in agenda_items:
+        agenda_rows += f"""
+        <tr><td style="padding:0 0 8px 0;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#27272A;border-radius:8px;">
+            <tr>
+              <td width="4" style="background:#FACC15;border-radius:8px 0 0 8px;">&nbsp;</td>
+              <td style="padding:10px 14px;">
+                <div style="font-size:14px;font-weight:700;color:#ffffff;">{a.get('title','')}</div>
+                <div style="font-size:12px;color:#a1a1aa;margin-top:2px;">🕐 {a.get('time_start','')}–{a.get('time_end','')} · {a.get('client_name','')}</div>
+                {f'<div style="font-size:12px;color:#71717A;">📍 {a.get("location","")}</div>' if a.get('location') else ''}
+              </td>
+            </tr>
+          </table>
+        </td></tr>"""
+    if not agenda_items:
+        agenda_rows = '<tr><td style="padding:8px;color:#71717A;font-size:13px;">Sem agendamentos para hoje.</td></tr>'
+
+    orders_rows = ""
+    for o in orders_today:
+        stype = SERVICE_TYPES.get(o.get('service_type', ''), {}).get('label', o.get('service_type', ''))
+        orders_rows += f"""
+        <tr><td style="padding:0 0 8px 0;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background:#27272A;border-radius:8px;">
+            <tr>
+              <td width="4" style="background:#3B82F6;border-radius:8px 0 0 8px;">&nbsp;</td>
+              <td style="padding:10px 14px;">
+                <div style="font-size:14px;font-weight:700;color:#ffffff;">{o.get('client_name','')} — {stype}</div>
+                <div style="font-size:12px;color:#a1a1aa;margin-top:2px;">{o.get('description','')[:80]}</div>
+              </td>
+            </tr>
+          </table>
+        </td></tr>"""
+    if not orders_today:
+        orders_rows = '<tr><td style="padding:8px;color:#71717A;font-size:13px;">Sem novos pedidos hoje.</td></tr>'
+
+    return f"""<!DOCTYPE html><html><body style="margin:0;background:#09090B;font-family:Arial,Helvetica,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#09090B;padding:32px 0;">
+      <tr><td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#18181B;border-radius:18px;overflow:hidden;">
+          <tr><td style="background:#09090B;padding:24px 32px;border-bottom:3px solid #FACC15;">
+            <div style="color:#FACC15;font-size:22px;font-weight:700;letter-spacing:1px;">OBELISCO RADICAL</div>
+            <div style="color:#a1a1aa;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:2px;">Briefing Diário</div>
+          </td></tr>
+          <tr><td style="padding:32px;">
+            <div style="font-size:22px;color:#ffffff;font-weight:700;line-height:1.35;margin-bottom:20px;">{greeting}, {admin_name}!</div>
+            <div style="font-size:15px;color:#FACC15;font-weight:700;margin-bottom:10px;">📅 AGENDA DE HOJE</div>
+            <table width="100%" cellpadding="0" cellspacing="0">{agenda_rows}</table>
+            <div style="font-size:15px;color:#3B82F6;font-weight:700;margin:20px 0 10px;">⚡ NOVOS PEDIDOS</div>
+            <table width="100%" cellpadding="0" cellspacing="0">{orders_rows}</table>
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:24px;"><tr><td align="center">
+              <a href="{app_url}" style="display:inline-block;background:#FACC15;color:#09090B;text-decoration:none;font-weight:700;font-size:14px;padding:13px 28px;border-radius:999px;">Abrir Obelisco Manager</a>
+            </td></tr></table>
+          </td></tr>
+          <tr><td style="padding:20px 32px;background:#09090B;border-top:1px solid #27272A;">
+            <div style="font-size:11px;color:#52525B;text-align:center;">Briefing automático — Obelisco Radical © {datetime.now().year}</div>
+          </td></tr>
+        </table>
+      </td></tr>
+    </table></body></html>"""
 
 
 def _get_calendar_service():
@@ -316,8 +391,10 @@ def create_service_orders_router(db, get_current_user):
             msg += f"📅 Data preferida: {data.preferred_date}\n"
         background_tasks.add_task(send_telegram_notification, msg)
 
-        # Email confirmation to client
-        background_tasks.add_task(asyncio.to_thread, _send_confirmation_email, order)
+        # Email confirmation to client (Emergent native email)
+        html = _build_order_confirmation_html(order)
+        stype_label = SERVICE_TYPES.get(data.service_type, {}).get("label", data.service_type)
+        background_tasks.add_task(send_email_raw, data.email, f"Obelisco Radical — Pedido de {stype_label} recebido", html)
 
         order.pop("_id", None)
         return order
@@ -639,5 +716,48 @@ def create_service_orders_router(db, get_current_user):
             media_type="text/csv",
             headers={"Content-Disposition": f"attachment; filename=registos_ponto.csv"},
         )
+
+    # ── Daily Briefing Email ──────────────────────────────────────
+    @router.post("/briefing/send")
+    async def send_daily_briefing(user=Depends(get_current_user)):
+        """Send daily briefing email to admin with today's agenda + new orders."""
+        if not _is_admin(user):
+            raise HTTPException(403, "Apenas administradores")
+
+        admin_email = user.get("email")
+        admin_name = user.get("name", "Admin")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+        # Get today's agenda
+        agenda_cursor = db.appointments.find({"date": today}, {"_id": 0}).sort("time_start", 1)
+        agenda_items = await agenda_cursor.to_list(50)
+
+        # Get today's new orders
+        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        orders_cursor = db.service_orders.find(
+            {"created_at": {"$gte": today_start}}, {"_id": 0}
+        ).sort("created_at", -1)
+        orders_today = await orders_cursor.to_list(20)
+
+        app_url = os.environ.get("CORS_ORIGINS", "https://proposal-hub-56.emergent.host").split(",")[0].strip().strip('"')
+        html = _build_daily_briefing_html(admin_name, agenda_items, orders_today, app_url)
+        ok = await send_email_raw(admin_email, f"Obelisco Radical — Briefing de {today}", html)
+
+        if ok:
+            return {"sent": True, "to": admin_email}
+        raise HTTPException(500, "Falha ao enviar email. Verifique EMERGENT_EMAIL_KEY.")
+
+    @router.get("/email/test")
+    async def test_email(to: str, user=Depends(get_current_user)):
+        """Admin test — send a test email."""
+        if not _is_admin(user):
+            raise HTTPException(403, "Apenas administradores")
+        html = f"""<div style="font-family:Arial;padding:20px;background:#09090B;color:#fff;">
+            <h2 style="color:#FACC15;">Obelisco Radical — Teste de Email</h2>
+            <p>Se recebeu este email, o serviço está configurado correctamente.</p>
+            <p style="color:#71717A;font-size:12px;">Enviado em {datetime.now(timezone.utc).strftime('%d/%m/%Y %H:%M UTC')}</p>
+        </div>"""
+        ok = await send_email_raw(to, "Obelisco Radical — Teste de Email", html)
+        return {"sent": ok, "to": to}
 
     return router

@@ -110,6 +110,19 @@ export default function PedidosServicoPage() {
               Copiar Link
             </button>
             <button
+              data-testid="send-briefing-btn"
+              onClick={async () => {
+                try {
+                  const res = await axios.post(`${API}/api/service-orders/briefing/send`, {}, { headers });
+                  if (res.data.sent) toast.success(`Briefing enviado para ${res.data.to}`);
+                  else toast.error('Email não enviado — verifique EMERGENT_EMAIL_KEY');
+                } catch (err) { toast.error(err.response?.data?.detail || 'Erro ao enviar briefing'); }
+              }}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg hover:bg-blue-500/30 transition-colors text-sm"
+            >
+              <Mail size={16} /> Briefing Diário
+            </button>
+            <button
               data-testid="new-service-order-btn"
               onClick={() => setView('new')}
               className="flex items-center gap-2 px-4 py-2 bg-yellow-400 text-zinc-950 font-semibold rounded-lg hover:bg-yellow-300 transition-colors"
