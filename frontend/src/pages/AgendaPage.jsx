@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil, HardHat } from 'lucide-react';
+import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil, HardHat, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
@@ -23,6 +23,8 @@ export default function AgendaPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const [calendarCheck, setCalendarCheck] = useState(null); // null | 'checking' | {available, conflicts, suggested_times}
+  const [saving, setSaving] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -58,6 +60,7 @@ export default function AgendaPage() {
   const openNew = () => {
     setEditingId(null);
     setForm({ ...emptyForm, date: selectedDateStr });
+    setCalendarCheck(null);
     setDialogOpen(true);
   };
 
@@ -74,6 +77,7 @@ export default function AgendaPage() {
       location: a.location || '',
       work_id: a.work_id || '',
     });
+    setCalendarCheck(null);
     setDialogOpen(true);
   };
 
@@ -102,24 +106,59 @@ export default function AgendaPage() {
     }));
   };
 
+  const checkCalendar = async () => {
+    if (!form.date || !form.time_start || !form.time_end) return;
+    setCalendarCheck('checking');
+    try {
+      const res = await api.get('/appointments/check-calendar', { params: { date: form.date, time_start: form.time_start, time_end: form.time_end } });
+      setCalendarCheck(res.data);
+    } catch {
+      setCalendarCheck({ available: true, conflicts: [], suggested_times: [] }); // Fallback: assume available
+    }
+  };
+
+  const applySuggestion = (s) => {
+    // Parse suggestion datetime to set date and time_start
+    try {
+      const dt = new Date(s.datetime);
+      const date = dt.toISOString().split('T')[0];
+      const hours = String(dt.getHours()).padStart(2, '0');
+      const mins = String(dt.getMinutes()).padStart(2, '0');
+      // Calculate duration from current form
+      const [sh, sm] = form.time_start.split(':').map(Number);
+      const [eh, em] = form.time_end.split(':').map(Number);
+      const durMins = (eh * 60 + em) - (sh * 60 + sm);
+      const endH = dt.getHours() + Math.floor(durMins / 60);
+      const endM = dt.getMinutes() + (durMins % 60);
+      const newEnd = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+      setForm(prev => ({ ...prev, date, time_start: `${hours}:${mins}`, time_end: newEnd }));
+      setCalendarCheck(null);
+      toast.success(`Horário alterado para ${s.display}`);
+    } catch { /* ignore */ }
+  };
+
   const handleSave = async () => {
     if (!form.title || !form.date || !form.time_start || !form.time_end) {
       toast.error('Preencha título, data e horas');
       return;
     }
+    setSaving(true);
     try {
       if (editingId) {
         await api.put(`/appointments/${editingId}`, form);
         toast.success('Agendamento actualizado');
       } else {
         await api.post('/appointments', form);
-        toast.success('Agendamento criado');
+        toast.success('Agendamento criado + evento Google Calendar');
       }
       setDialogOpen(false);
+      setCalendarCheck(null);
       fetchAll();
     } catch (err) {
       const detail = err.response?.data?.detail;
       toast.error(typeof detail === 'string' ? detail : 'Erro ao guardar agendamento');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -292,8 +331,60 @@ export default function AgendaPage() {
               <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Observações…" className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl" />
             </div>
 
-            <Button data-testid="save-appointment-btn" onClick={handleSave} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
-              {editingId ? 'Guardar Alterações' : 'Criar Agendamento'}
+            {/* Calendar Availability Check */}
+            <div className="space-y-2">
+              <Button
+                type="button"
+                data-testid="check-calendar-btn"
+                onClick={checkCalendar}
+                disabled={!form.date || !form.time_start || !form.time_end || calendarCheck === 'checking'}
+                variant="outline"
+                className="w-full border-zinc-700 text-zinc-300 hover:text-yellow-400 hover:border-yellow-400/50 rounded-full h-10"
+              >
+                {calendarCheck === 'checking' ? (
+                  <><Loader2 size={16} className="mr-2 animate-spin" /> A verificar Google Calendar...</>
+                ) : (
+                  <><CalendarDays size={16} className="mr-2" /> Verificar Disponibilidade no Google Calendar</>
+                )}
+              </Button>
+
+              {calendarCheck && calendarCheck !== 'checking' && calendarCheck.available && (
+                <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 text-sm" data-testid="calendar-available-msg">
+                  <CheckCircle2 size={16} /> Horário livre no Google Calendar
+                </div>
+              )}
+
+              {calendarCheck && calendarCheck !== 'checking' && !calendarCheck.available && (
+                <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl space-y-2" data-testid="calendar-conflict-msg">
+                  <div className="flex items-center gap-2 text-red-400 text-sm font-medium">
+                    <AlertTriangle size={16} /> Conflito no Google Calendar
+                  </div>
+                  {calendarCheck.conflicts?.map((c, i) => (
+                    <p key={i} className="text-xs text-zinc-400 ml-6">
+                      {c.summary} ({new Date(c.start).toLocaleTimeString('pt-PT', {hour:'2-digit',minute:'2-digit'})} — {new Date(c.end).toLocaleTimeString('pt-PT', {hour:'2-digit',minute:'2-digit'})})
+                    </p>
+                  ))}
+                  {calendarCheck.suggested_times?.length > 0 && (
+                    <div className="mt-2 ml-6">
+                      <p className="text-xs text-zinc-500 mb-1">Horários alternativos sugeridos:</p>
+                      <div className="flex flex-wrap gap-1">
+                        {calendarCheck.suggested_times.map((s, i) => (
+                          <button key={i} type="button" onClick={() => applySuggestion(s)}
+                            className="px-2 py-1 text-xs bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-lg hover:bg-yellow-400/20"
+                            data-testid={`suggestion-${i}`}>
+                            {s.display}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-xs text-zinc-500 ml-6 mt-1">Pode criar mesmo assim — o conflito é apenas no Google Calendar.</p>
+                </div>
+              )}
+            </div>
+
+            <Button data-testid="save-appointment-btn" onClick={handleSave} disabled={saving} className="w-full bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold h-12">
+              {saving ? <><Loader2 size={16} className="mr-2 animate-spin" /> A guardar...</> : editingId ? 'Guardar Alterações' : 'Criar Agendamento'}
             </Button>
           </div>
         </DialogContent>

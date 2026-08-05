@@ -1492,6 +1492,64 @@ def _overlap_query(appt, exclude_id=None):
         q["employee_ids"] = {"$in": appt.employee_ids}
     return q
 
+# --- Google Calendar helpers for Agenda ---
+def _gcal_check_and_create(date_str, time_start, time_end, title, client_name="", location=""):
+    """Check Google Calendar and create event. Returns (created_event_id, conflicts, suggestions)."""
+    from service_orders import _get_calendar_service, _check_calendar_availability, GOOGLE_CALENDAR_ID
+    preferred = f"{date_str}T{time_start}"
+    # Calculate duration in hours
+    try:
+        from datetime import datetime as _dt
+        t1 = _dt.strptime(time_start, "%H:%M")
+        t2 = _dt.strptime(time_end, "%H:%M")
+        dur = max((t2 - t1).total_seconds() / 3600, 1)
+    except Exception:
+        dur = 2
+
+    has_conflict, conflicts, suggestions = _check_calendar_availability(preferred, int(dur))
+
+    # Create event regardless (admin chose to create it)
+    svc = _get_calendar_service()
+    event_id = None
+    if svc and GOOGLE_CALENDAR_ID:
+        try:
+            start_dt = datetime.strptime(f"{date_str}T{time_start}", "%Y-%m-%dT%H:%M")
+            end_dt = datetime.strptime(f"{date_str}T{time_end}", "%Y-%m-%dT%H:%M")
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+            event = {
+                'summary': f"📅 {title}" + (f" - {client_name}" if client_name else ""),
+                'description': f"Agendamento Obelisco Manager\nCliente: {client_name}\nNotas: criado via Agenda",
+                'location': location,
+                'start': {'dateTime': start_dt.isoformat(), 'timeZone': 'Europe/Lisbon'},
+                'end': {'dateTime': end_dt.isoformat(), 'timeZone': 'Europe/Lisbon'},
+                'reminders': {'useDefault': False, 'overrides': [{'method': 'popup', 'minutes': 60}]},
+            }
+            created = svc.events().insert(calendarId=GOOGLE_CALENDAR_ID, body=event).execute()
+            event_id = created.get('id')
+            logger.info(f"Agenda: Calendar event created: {event_id}")
+        except Exception as e:
+            logger.warning(f"Agenda: Calendar event creation failed: {e}")
+
+    return event_id, has_conflict, conflicts, suggestions
+
+@api_router.get("/appointments/check-calendar")
+async def check_calendar_for_appointment(date: str, time_start: str, time_end: str, user=Depends(get_current_user)):
+    """Check Google Calendar availability for a given slot."""
+    from service_orders import _check_calendar_availability
+    preferred = f"{date}T{time_start}"
+    try:
+        from datetime import datetime as _dt
+        t1 = _dt.strptime(time_start, "%H:%M")
+        t2 = _dt.strptime(time_end, "%H:%M")
+        dur = max((t2 - t1).total_seconds() / 3600, 1)
+    except Exception:
+        dur = 2
+    has_conflict, conflicts, suggestions = _check_calendar_availability(preferred, int(dur))
+    return {"available": not has_conflict, "conflicts": conflicts, "suggested_times": suggestions}
+
 @api_router.post("/appointments")
 async def create_appointment(input: AppointmentCreate, user=Depends(get_current_user)):
     _require_admin(user)
@@ -1503,6 +1561,17 @@ async def create_appointment(input: AppointmentCreate, user=Depends(get_current_
         **input.model_dump(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    # Create Google Calendar event (sync, fast)
+    try:
+        event_id, _, _, _ = _gcal_check_and_create(
+            input.date, input.time_start, input.time_end,
+            input.title, input.client_name, input.location
+        )
+        if event_id:
+            doc["gcal_event_id"] = event_id
+    except Exception as e:
+        logger.warning(f"Calendar event skipped: {e}")
+
     await db.appointments.insert_one(doc)
     doc.pop("_id", None)
     # Notificar os técnicos atribuídos

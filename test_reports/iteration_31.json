@@ -1,0 +1,35 @@
+{
+  "summary": "Tested Google Calendar integration in Agenda page (backend + frontend). All 4 backend pytest cases pass and all frontend flows work end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "backend_tests_verified": [
+    "GET /api/appointments/check-calendar 2026-08-12 14:00-16:00 -> available=false, conflicts=1, 3 suggestions (PASS)",
+    "GET /api/appointments/check-calendar 2026-08-25 09:00-11:00 -> available=true, no conflicts (PASS)",
+    "POST /api/appointments creates appointment AND returns gcal_event_id populated (PASS)",
+    "Auth is required on /api/appointments/check-calendar (401 without token) (PASS)"
+  ],
+  "frontend_tests_verified": [
+    "Login as admin -> /agenda loads",
+    "'Novo Agendamento' opens dialog with data-testid='check-calendar-btn' present",
+    "Filling date=2026-08-12 14:00-16:00 + click check -> data-testid='calendar-conflict-msg' shown with event details",
+    "3 suggestion buttons visible (data-testid='suggestion-0/1/2'); clicking suggestion-0 updates time_start (14:00 -> 17:00)",
+    "Filling date=2026-08-25 09:00-11:00 + click check -> data-testid='calendar-available-msg' 'Horário livre no Google Calendar' shown",
+    "Creating an appointment through UI succeeds; toast configured as 'Agendamento criado + evento Google Calendar' (verified in code line 152 of AgendaPage.jsx)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_gcal_agenda.py",
+    "/app/test_reports/pytest/gcal_agenda.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Hydration warning in console: <span> inside <option> in AgendaPage work-select (line ~270). Non-blocking but should be cleaned up (the dynamic instrumentation wraps option content in a span). Purely cosmetic React warning.",
+    "backend/server.py: _gcal_check_and_create always attempts to create the calendar event synchronously inside create_appointment; on slow Google API responses this will slow down POST /appointments. Consider background task. Not a bug."
+  ],
+  "updated_files": ["/app/backend/tests/test_gcal_agenda.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Created + cleaned up TEST_ prefixed appointments during testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Google Calendar integration (Agenda) is fully working. Real GCal events created on 2026-08-12, 08-15, 08-20 remain from previous iterations; use 2026-08-25+ for available-slot tests. GCal API is slow (~4-6s); allow long waits in Playwright."
+}
