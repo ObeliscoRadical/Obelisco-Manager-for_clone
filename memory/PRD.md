@@ -1,66 +1,51 @@
 # Obelisco Manager - PRD
 
 ## Problem Statement
-Build "Obelisco Manager" - an internal management panel for Obelisco Radical (electrical/telecom services company in Grande Lisboa). Features: Dashboard, Budgeting with margin calculation & AI price lookup, Proposal generation (3 tiers) with PDF export + QR code, Works management, Calendar/Agenda, Professional Engine (Materials DB, Labor DB, Productivities, Negotiation simulator, Templates, Versioning, Excel Import/Export).
+Build "Obelisco Manager" - an internal management panel for Obelisco Radical (electrical/telecom services company in Grande Lisboa).
 
 ## Architecture
 - **Frontend**: React + Tailwind CSS + Shadcn/UI (port 3000)
 - **Backend**: FastAPI + MongoDB (port 8001)
-- **Auth**: JWT cookie-based (httpOnly cookies, access+refresh)
+- **Auth**: JWT (access+refresh tokens, localStorage)
 - **PDF**: jsPDF + jspdf-autotable (frontend generation)
-- **Excel**: openpyxl (backend import/export)
-- **AI**: Emergent LLM Key → GPT-5.2 for price/margin lookup
+- **AI**: Emergent LLM Key → Gemini 3.1 Pro (OCR, chat)
+- **Integrations**: Telegram Bot, Google Calendar, Resend Email (optional)
 - **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
-- **Integrations**: Telegram Bot, Google Calendar (optional), Gemini AI (OCR/chat)
 
-## User Personas
-- Admin/Owner: Manages budgets, proposals, works, appointments, client profiles
-- Team members (roles): View and manage assigned works
-- Técnicos: Use Portal Técnico for works, guides, attendance, service orders, chat
-
-## Core Requirements
-- [x] JWT login with admin seeding
+## Core Requirements (All Complete)
+- [x] JWT login with admin seeding + granular module permissions
 - [x] Dashboard with KPIs
-- [x] Budget CRUD with dynamic items, categories, auto-save
-- [x] AI price lookup (individual + "Pesquisar Todos" batch)
-- [x] 3-tier proposals (Básico / Profissional / Premium)
-- [x] PDF export (PVP only, custom logo, payment terms, QR code)
-- [x] Works management with real vs estimated cost
-- [x] Calendar/Agenda with overlap detection
-- [x] Materials DB, Labor DB, Productivities
-- [x] Negotiation / Margin simulator
-- [x] Templates library
-- [x] Budget versioning + duplication
-- [x] Excel Import / Export
-- [x] Multi-role user management with granular permissions
-- [x] Service Orders (Pedidos de Serviço) — migrated from Obelisco-Tecnicos-main
-- [x] Public Widget for client service requests (/pedido-servico)
-- [x] GPS Timeclock (Ponto GPS)
-- [x] Timeclock Reports with CSV export
-- [x] Telegram notifications (new orders + ponto entries)
-- [x] Google Calendar integration (availability check + auto-events)
-- [x] WhatsApp share link for widget
+- [x] Budget CRUD with AI price lookup
+- [x] 3-tier proposals with PDF + digital signature
+- [x] Works management with execution tracking
+- [x] Calendar/Agenda with **Google Calendar integration** (availability check + auto-events)
+- [x] Materials/Labor/Productivities DBs
+- [x] Stock management with invoice import (AI OCR)
+- [x] Transport Guides with tech portal
+- [x] Invoices with WhatsApp reminders
+- [x] Expenses with AI OCR
+- [x] Financial dashboard + Annual reports
+- [x] Payroll (employees, attendance, salary processing)
+- [x] Break-even calculator
+- [x] Accountant AI chat
+- [x] Service Orders (migrated from Obelisco-Tecnicos) with Telegram notifications
+- [x] Public widget for client service requests
+- [x] GPS Timeclock + Reports with CSV export
 - [x] Perfil 360° do Cliente (mini-CRM)
+- [x] WhatsApp share link for service widget
+- [x] Email confirmation (Resend - needs API key)
 
 ## Prioritized Backlog
 
 ### P1 (Important)
-- Google Calendar credentials file (google_credentials.json) — code is ready, needs Service Account file
-- Módulo Salarial Fase 2: recibos PDF por funcionário, envio email/WhatsApp
-- Automação Máscara DIN (auto-atribuir cor por tipo de módulo ao importar da Legenda)
-- Email integration (Emergent Resend) for sending proposals and notifications
+- Resend API key for email confirmation (code ready, needs key)
+- Automação Máscara DIN (auto-atribuir cor por tipo de módulo)
+- Módulo Salarial Fase 2: recibos PDF por funcionário
 
 ### P2 (Nice to have)
-- Hardening de segurança (CORS restrito, rate limiting login, limites upload, CSP)
-- Integração formal com TOC Online
-- RBAC integral no backend (endpoints não totalmente blindados)
+- Hardening de segurança (CORS, rate limiting, CSP)
+- Integração TOC Online
 - Dashboard charts (Recharts)
 
 ### Refactoring
-- `/app/backend/server.py` >4300 lines — split into `routes/`, `models/`, `services/`
-
-## Next Tasks
-1. Provide google_credentials.json to activate Google Calendar
-2. Módulo Salarial Fase 2
-3. Automação Máscara DIN
-4. Refactor server.py into modules
+- `/app/backend/server.py` >4400 lines — split into modules
