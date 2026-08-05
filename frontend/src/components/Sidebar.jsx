@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 
@@ -27,9 +27,13 @@ const navItems = [
   { path: '/tech', label: 'Portal Técnico', icon: Wrench, mod: 'tech_portal' },
 ];
 
-const externalItems = [
-  { href: 'https://tech-app-obelisco.emergent.host/widget', label: 'Inserir Pedidos', icon: Inbox },
+const pedidosServicoItems = [
+  { path: '/pedidos-servico', label: 'Pedidos de Serviço', icon: Zap, mod: 'obras' },
+  { path: '/ponto-gps', label: 'Ponto GPS', icon: Clock, mod: 'assiduidade' },
+  { path: '/relatorios-ponto', label: 'Relatórios Ponto', icon: BarChart3, mod: 'assiduidade' },
 ];
+
+const externalItems = [];
 
 const salariosItems = [
   { path: '/funcionarios', label: 'Funcionários', icon: Wallet, mod: 'funcionarios' },
@@ -120,6 +124,30 @@ export default function Sidebar() {
             <ExternalLink size={14} className="text-zinc-600 group-hover:text-zinc-400" />
           </a>
         ))}
+
+        {pedidosServicoItems.filter(it => canSee(user, it.mod)).length > 0 && (
+          <div className="pt-3 mt-3 border-t border-zinc-800">
+            <p className="px-4 py-1 text-xs uppercase tracking-[0.2em] text-zinc-600 font-medium">Serviço Técnico</p>
+          </div>
+        )}
+        {pedidosServicoItems.filter(it => canSee(user, it.mod)).map(item => {
+          const isActive = location.pathname === item.path;
+          return (
+            <Link
+              key={item.path}
+              to={item.path}
+              data-testid={`nav-${item.path.replace('/', '')}`}
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
+                isActive
+                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                  : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
+              }`}
+            >
+              <item.icon size={18} />
+              <span className="text-xs font-medium">{item.label}</span>
+            </Link>
+          );
+        })}
 
         {salariosItems.filter(it => canSee(user, it.mod)).length > 0 && (
           <div className="pt-3 mt-3 border-t border-zinc-800">

@@ -1,0 +1,36 @@
+{
+  "summary": "Full backend + frontend testing of Service Orders module (Obelisco-Tecnicos-main fusion). 17/17 backend tests passed. All frontend pages render correctly: public widget /pedido-servico, /pedidos-servico dashboard with 4 stat cards (Total, Pendentes, Em Progresso, Concluídos), /ponto-gps entrada/saida flow, and sidebar 'SERVIÇO TÉCNICO' section with the 3 nav links.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/pedido-servico (widget)", "issues": ["Campo 'Data Preferida' usa o date-time picker nativo do browser (mm/dd/yyyy) em vez do calendar shadcn — formato pouco intuitivo para clientes PT."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_service_orders.py",
+    "/app/test_reports/pytest/service_orders_results.xml"
+  ],
+  "action_items": [
+    "(Opcional) Substituir o input datetime-local nativo por um DatePicker (shadcn) na página pública /pedido-servico para melhor UX."
+  ],
+  "critical_code_review_comments": [
+    "service_orders.py mistura autorização por email hardcoded ('d.oliveira1986@gmail.com' está em ADMIN_EMAILS) — este user é técnico, não admin. Se o intuito é dar-lhe acesso admin ao módulo, ok; caso contrário retirar da lista.",
+    "GET /timeclock/today devolve os registos de todos os users se _is_admin(user) mas o docstring do request diz 'admin returns all / self otherwise' — comportamento correcto no código, só faltam testes que confirmem o filtro para não-admin.",
+    "server.py > 4000 linhas — recomenda-se dividir em routers modulares (já foi feito para service_orders, aplicar padrão aos restantes recursos).",
+    "Endpoint POST /api/service-orders/{id}/photos/public permite upload sem qualquer rate-limit/tamanho máximo — potencial abuso; considerar limitar tamanho do base64 e/ou throttling."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_service_orders.py"
+  ],
+  "success_rate": {"backend": "100% (17/17)", "frontend": "100% (páginas críticas)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024 (admin); d.oliveira1986@gmail.com / A24d22r04 (tech).",
+  "seed_data_creation": "Foram criados alguns pedidos com prefixo TEST_ (TEST_Cliente, TEST_AdminCreated, TEST_Pub) e registos de entrada/saída no timeclock para o admin. Podem ser limpos com filter por prefixo se necessário.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Módulo Service Orders está totalmente funcional. Suite pytest em /app/backend/tests/test_service_orders.py cobre CRUD público/admin, notas, fotos, timeclock GPS. Frontend: widget público OK, dashboard admin OK, ponto GPS OK. Único ponto de UX é o date picker nativo no widget. Não é bloqueante."
+}

@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks } from 'lucide-react';
+import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks, Zap } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 import NotificationsBell from './NotificationsBell';
 
@@ -8,6 +8,7 @@ const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-46
 
 const NAV_ITEMS = [
   { path: '/tech',          label: 'Guias',    icon: Package,       testid: 'tech-nav-guias' },
+  { path: '/tech/pedidos',  label: 'Pedidos',  icon: Zap,           testid: 'tech-nav-pedidos' },
   { path: '/tech/execucao', label: 'Execução', icon: ListChecks,    testid: 'tech-nav-execucao' },
   { path: '/tech/agenda',   label: 'Agenda',   icon: Calendar,      testid: 'tech-nav-agenda' },
   { path: '/tech/ponto',    label: 'Ponto',    icon: Clock,         testid: 'tech-nav-ponto' },
@@ -33,7 +34,8 @@ export default function TechLayout({ children }) {
 
   const isActive = (path) => {
     if (path === '/tech') return location.pathname === '/tech' || location.pathname.startsWith('/tech/guias');
-    return location.pathname === path;
+    if (path === '/tech/pedidos') return location.pathname.startsWith('/tech/pedidos');
+    return location.pathname === path || location.pathname.startsWith(path + '/');
   };
 
   return (

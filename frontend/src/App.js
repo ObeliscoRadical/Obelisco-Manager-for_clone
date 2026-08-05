@@ -43,6 +43,11 @@ import TechChatPage from "./pages/TechChatPage";
 import TechPerfilPage from "./pages/TechPerfilPage";
 import AdminMensagensTecnicosPage from "./pages/AdminMensagensTecnicosPage";
 import CaixaObraPage from "./pages/CaixaObraPage";
+import PedidosServicoPage from "./pages/PedidosServicoPage";
+import WidgetPedidoPage from "./pages/WidgetPedidoPage";
+import RelatoriosPontoPage from "./pages/RelatoriosPontoPage";
+import PontoGPSPage from "./pages/PontoGPSPage";
+import TechPedidosPage from "./pages/TechPedidosPage";
 import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
@@ -154,8 +159,13 @@ function App() {
           <Route path="/definicoes" element={<ProtectedRoute module="configuracoes"><DefinicoesPage /></ProtectedRoute>} />
           <Route path="/mensagens-tecnicos" element={<ProtectedRoute module="funcionarios"><AdminMensagensTecnicosPage /></ProtectedRoute>} />
           <Route path="/caixa-obra" element={<ProtectedRoute module="obras"><CaixaObraPage /></ProtectedRoute>} />
+          <Route path="/pedidos-servico" element={<ProtectedRoute module="obras"><PedidosServicoPage /></ProtectedRoute>} />
+          <Route path="/ponto-gps" element={<ProtectedRoute module="assiduidade"><PontoGPSPage /></ProtectedRoute>} />
+          <Route path="/relatorios-ponto" element={<ProtectedRoute module="assiduidade"><RelatoriosPontoPage /></ProtectedRoute>} />
+          <Route path="/pedido-servico" element={<WidgetPedidoPage />} />
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
+          <Route path="/tech/pedidos" element={<TechProtectedRoute><TechPedidosPage /></TechProtectedRoute>} />
           <Route path="/tech/execucao" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
           <Route path="/tech/execucao/:workId" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
           <Route path="/tech/obra/:workId" element={<TechProtectedRoute><TechObraDetailPage /></TechProtectedRoute>} />
