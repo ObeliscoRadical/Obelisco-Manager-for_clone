@@ -378,29 +378,35 @@ function AnalysisDetail({ analysis, onBack }) {
               );
             })}
           </div>
-          {syncPreview?.duplicates?.length > 0 && (
-            <div className="mt-3 border-t border-zinc-800 pt-3">
-              <h5 className="text-xs text-orange-400 font-semibold mb-2 flex items-center gap-1">
-                <AlertTriangle size={12} /> {syncPreview.duplicates.length} possíveis duplicados detetados
-              </h5>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {syncPreview.duplicates.map((d, i) => (
-                  <div key={d.id || i} className="p-2 rounded-lg bg-orange-500/5 border border-orange-500/15">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-white truncate">Extrato: {d.description?.slice(0, 60)}</p>
-                        {d.expense_supplier && (
-                          <p className="text-xs text-orange-400 truncate mt-0.5">Despesa: {d.expense_supplier} {d.expense_date ? `(${d.expense_date})` : ''} {d.expense_value ? `— ${fmt(d.expense_value)}` : ''}</p>
-                        )}
-                        <p className="text-[10px] text-zinc-500 mt-0.5">{d.reason}</p>
-                      </div>
-                      <span className="text-xs text-red-400 font-mono flex-shrink-0 ml-3">{fmt(d.amount)}</span>
-                    </div>
+        </div>
+      )}
+
+      {/* Fuzzy Duplicates Panel (shown independently from pending) */}
+      {syncPreview?.duplicates?.length > 0 && (
+        <div className="p-4 rounded-xl border border-orange-500/20 bg-orange-500/5" data-testid="duplicates-panel">
+          <h5 className="text-sm text-orange-400 font-semibold mb-3 flex items-center gap-2">
+            <AlertTriangle size={14} /> {syncPreview.duplicates.length} possíveis duplicados detetados
+          </h5>
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {syncPreview.duplicates.map((d, i) => (
+              <div key={d.id || i} className="p-3 rounded-lg bg-orange-500/5 border border-orange-500/15">
+                <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-white truncate">Extrato: {d.description?.slice(0, 70)}</p>
+                    {d.expense_supplier && (
+                      <p className="text-xs text-orange-400 truncate mt-1">
+                        Despesa existente: <span className="font-semibold">{d.expense_supplier}</span>
+                        {d.expense_date ? ` (${d.expense_date})` : ''}
+                        {d.expense_value ? ` — ${fmt(d.expense_value)}` : ''}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-zinc-500 mt-0.5">{d.reason}</p>
                   </div>
-                ))}
+                  <span className="text-sm text-red-400 font-mono font-semibold flex-shrink-0 ml-3">{fmt(d.amount)}</span>
+                </div>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
         </div>
       )}
 

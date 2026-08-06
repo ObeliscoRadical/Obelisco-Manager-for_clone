@@ -2,6 +2,27 @@
 
 ---
 
+## Aug 06, 2026 (Fork 2d) — Duplicidade Fuzzy por Nome + PDF Stale Detection
+
+### Deteção de Duplicados Fuzzy por Nome de Fornecedor
+- **Backend** (`bank_analysis.py`): Nova lógica `_extract_significant_words()` + `_fuzzy_match_supplier()`
+  - Extrai palavras significativas (>=4 chars) da descrição do extrato, removendo prefixos bancários (COMPRA EL-E, TRF SEPA+), datas, números de referência e ruído (LDA, COMERCIO, PORTUGAL, LISBOA...)
+  - Compara com palavras do fornecedor nas despesas existentes
+  - Se houver match de nome + (mesma data OU valor similar ±5%) → marca como possível duplicado
+  - Exemplo: extrato "COMPRA EL-E 3148056/04 JOTEILUX LDA QUELUZ" ↔ despesa "JOTEILUX-COMERCIO DE MATERIAL ELECTRICO LDA" → **MATCH por JOTEILUX**
+- **Frontend**: Painel de duplicados separado (orange) mostra fornecedor da despesa existente, data e valor para comparação
+- Painel de duplicados agora visível independentemente de haver itens pendentes
+
+### PDF Stale Processing Detection
+- **Backend**: Endpoint `/status` agora deteta análises "presas" (>10 min) e marca-as automaticamente como falhadas
+- Mensagem: "Processamento expirou (>10 min). Por favor tente novamente."
+
+### Testes
+- **Iteration 43**: 11/11 backend aprovado
+- Cobertura: fuzzy matching JOTEILUX/ARMASUL/SONEPAR/SERVELEC, stale detection, CSV upload com duplicados fuzzy
+
+---
+
 ## Aug 06, 2026 (Fork 2c) — Aprendizagem de Categorias + Aprovação de Sync
 
 ### Category Learning (Aprendizagem)
