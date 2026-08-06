@@ -73,6 +73,95 @@ def _parse_excel(content: bytes, filename: str) -> list:
     raise ValueError("Formato Excel não reconhecido.")
 
 
+async def _parse_pdf(content: bytes, filename: str) -> list:
+    """Parse PDF bank statement using AI (Gemini) to extract transactions."""
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
+
+    api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+    if not api_key:
+        raise ValueError("EMERGENT_LLM_KEY não configurada para leitura de PDF.")
+
+    # Save temp file for Gemini
+    tmp_path = UPLOADS_DIR / f"_tmp_{uuid.uuid4().hex}.pdf"
+    tmp_path.write_bytes(content)
+
+    try:
+        system = (
+            "És um assistente especializado em ler extratos bancários portugueses em PDF. "
+            "Responde APENAS com JSON válido — um array de objetos. Sem texto antes ou depois."
+        )
+        prompt = (
+            "Analisa este extrato bancário em PDF e extrai TODAS as transações.\n"
+            "Para cada transação, devolve um objeto JSON com:\n"
+            '{\n'
+            '  "date": "YYYY-MM-DD",\n'
+            '  "description": "descrição/referência do movimento",\n'
+            '  "amount": número (positivo = crédito/entrada, negativo = débito/saída)\n'
+            '}\n\n'
+            "Regras:\n"
+            "- Datas em formato YYYY-MM-DD.\n"
+            "- Valores em euros como número (sem € nem texto).\n"
+            "- Débitos/saídas devem ser negativos.\n"
+            "- Créditos/entradas devem ser positivos.\n"
+            "- Inclui TODOS os movimentos visíveis, mesmo se forem muitos.\n"
+            "- Se houver colunas separadas de débito e crédito, combina-as.\n"
+            "- Ignora linhas de saldo, cabeçalhos e resumos.\n\n"
+            "Responde APENAS com o array JSON, sem markdown ```."
+        )
+
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=f"bank-pdf-{uuid.uuid4().hex[:8]}",
+            system_message=system,
+        ).with_model("gemini", "gemini-3.1-pro-preview")
+
+        attach = FileContentWithMimeType(file_path=str(tmp_path), mime_type="application/pdf")
+        response = await chat.send_message(UserMessage(text=prompt, file_contents=[attach]))
+
+        # Clean markdown fences
+        text = response.strip()
+        if text.startswith("```"):
+            text = text.split("```", 2)[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+        data = json.loads(text)
+        if not isinstance(data, list):
+            raise ValueError("Resposta da IA não é uma lista de transações.")
+
+        txns = []
+        for item in data:
+            try:
+                date_str = str(item.get("date", "")).strip()[:10]
+                desc = str(item.get("description", "")).strip()
+                amt = float(item.get("amount", 0) or 0)
+                if not date_str or not desc or amt == 0:
+                    continue
+                # Validate date format
+                datetime.strptime(date_str, "%Y-%m-%d")
+                txns.append({
+                    "date": date_str,
+                    "description": desc,
+                    "amount": round(amt, 2),
+                    "type": "credit" if amt > 0 else "debit",
+                })
+            except (ValueError, TypeError):
+                continue
+
+        if not txns:
+            raise ValueError("A IA não conseguiu extrair transações do PDF. Verifique se é um extrato bancário legível.")
+
+        return txns
+    finally:
+        try:
+            tmp_path.unlink()
+        except Exception:
+            pass
+
+
 def _parse_ofx(content: bytes, filename: str) -> list:
     """Parse OFX/QFX bank statement."""
     try:
@@ -487,14 +576,24 @@ def create_bank_analysis_router(db, get_current_user):
             raise HTTPException(400, "Ficheiro demasiado grande (máx 10MB)")
 
         # Parse file
-        if ext in (".csv", ".txt"):
-            transactions = _parse_csv(content, filename)
-        elif ext in (".xlsx", ".xls"):
-            transactions = _parse_excel(content, filename)
-        elif ext in (".ofx", ".qfx"):
-            transactions = _parse_ofx(content, filename)
-        else:
-            raise HTTPException(400, f"Formato não suportado: {ext}. Use CSV, Excel ou OFX.")
+        try:
+            if ext in (".csv", ".txt"):
+                transactions = _parse_csv(content, filename)
+            elif ext in (".xlsx", ".xls"):
+                transactions = _parse_excel(content, filename)
+            elif ext in (".ofx", ".qfx"):
+                transactions = _parse_ofx(content, filename)
+            elif ext == ".pdf":
+                transactions = await _parse_pdf(content, filename)
+            else:
+                raise HTTPException(400, f"Formato não suportado: {ext}. Use CSV, Excel, OFX ou PDF.")
+        except HTTPException:
+            raise
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        except Exception as e:
+            logger.error(f"Erro ao processar ficheiro {filename}: {e}")
+            raise HTTPException(400, f"Erro ao processar ficheiro: {str(e)}")
 
         if not transactions:
             raise HTTPException(400, "Nenhuma transação encontrada no ficheiro.")

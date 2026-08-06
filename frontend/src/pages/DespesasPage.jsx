@@ -44,6 +44,9 @@ export default function DespesasPage() {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterType, setFilterType] = useState('');
   const fileInputRef = useRef(null);
+  const [suggestions, setSuggestions] = useState(null);
+  const [categorySource, setCategorySource] = useState(null);
+  const [saveDuplicateConfirm, setSaveDuplicateConfirm] = useState(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -76,8 +79,8 @@ export default function DespesasPage() {
     };
   }, [fetchAll]);
 
-  const openNew = () => { setEditing(null); setForm(emptyForm); setDuplicateWarning(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
-  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDuplicateWarning(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setForm(emptyForm); setDuplicateWarning(null); setSuggestions(null); setCategorySource(null); setSaveDuplicateConfirm(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
+  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDuplicateWarning(null); setSuggestions(null); setCategorySource(null); setSaveDuplicateConfirm(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
 
   const setField = (k, v) => {
     setForm(prev => {
@@ -100,6 +103,8 @@ export default function DespesasPage() {
     if (!file) return;
     setExtracting(true);
     setDuplicateWarning(null);
+    setSuggestions(null);
+    setCategorySource(null);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -122,12 +127,15 @@ export default function DespesasPage() {
           vat_amount: ext.vat_amount || prev.vat_amount,
           value_gross: ext.value_gross || prev.value_gross,
           category: ext.category || prev.category,
+          type: ext.type || prev.type,
           notes: ext.description ? (prev.notes ? `${prev.notes} | ${ext.description}` : ext.description) : prev.notes,
           invoice_file: data.file_name,
         }));
+        setCategorySource(ext.category_source || null);
+        if (data.suggestions) setSuggestions(data.suggestions);
         if (data.duplicate) {
           setDuplicateWarning(data.duplicate);
-          toast.warning(`⚠️ Esta fatura já foi registada anteriormente em ${data.duplicate.date}`);
+          toast.warning('Possível fatura duplicada detetada — verifique antes de guardar.');
         } else {
           toast.success('Fatura lida por IA! Confira os dados antes de guardar.');
         }
@@ -136,7 +144,6 @@ export default function DespesasPage() {
       toast.error(err.response?.data?.detail || 'Erro ao processar fatura');
     } finally {
       setExtracting(false);
-      // Reset file input so the same or different file can be uploaded again
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -156,19 +163,12 @@ export default function DespesasPage() {
       toast.success(editing ? 'Despesa atualizada' : 'Despesa guardada');
       setDialogOpen(false);
       setDuplicateWarning(null);
+      setSaveDuplicateConfirm(null);
       fetchAll();
     } catch (err) {
       const detail = err.response?.data?.detail;
-      // Duplicate detected → ask user what to do
       if (err.response?.status === 409 && detail?.code === 'duplicate_invoice') {
-        const existing = detail.existing;
-        const msg =
-          `⚠️ Fatura duplicada\n\n` +
-          `Fatura ${existing.invoice_number} de ${existing.supplier} já foi registada em ${existing.date} (${formatEuro(existing.value_gross)}).\n\n` +
-          `Continuar a guardar mesmo assim?`;
-        if (window.confirm(msg)) {
-          await handleSave(true);    // re-tenta com force=true
-        }
+        setSaveDuplicateConfirm(detail);
         return;
       }
       toast.error(typeof detail === 'string' ? detail : 'Erro ao guardar');
@@ -436,16 +436,34 @@ export default function DespesasPage() {
             <div data-testid="duplicate-warning" className="rounded-xl border-2 border-orange-500/50 bg-orange-500/10 p-3 flex items-start gap-3">
               <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={20} />
               <div className="flex-1 min-w-0">
-                <p className="text-orange-400 font-bold text-sm">Possível fatura duplicada</p>
+                <p className="text-orange-400 font-bold text-sm">Possível Duplicado</p>
                 <p className="text-xs text-zinc-300 mt-1">
-                  A fatura <span className="font-semibold text-white">{duplicateWarning.invoice_number}</span>
-                  {' '}de <span className="font-semibold text-white">{duplicateWarning.supplier}</span>
-                  {' '}já foi registada em <span className="font-semibold text-white">{duplicateWarning.date}</span>
-                  {duplicateWarning.value_gross && <> ({formatEuro(duplicateWarning.value_gross)})</>}.
+                  {duplicateWarning.reason || 'Dados semelhantes encontrados'}:
+                  {duplicateWarning.supplier && <> <span className="font-semibold text-white">{duplicateWarning.supplier}</span></>}
+                  {duplicateWarning.date && <> em <span className="font-semibold text-white">{duplicateWarning.date}</span></>}
+                  {duplicateWarning.value_gross != null && <> ({formatEuro(duplicateWarning.value_gross)})</>}
+                  {duplicateWarning.invoice_number && <> — Fatura #{duplicateWarning.invoice_number}</>}
                 </p>
-                <p className="text-[10px] text-zinc-500 mt-1">Verifica se não estás a registar a mesma fatura duas vezes. Se tentares guardar, o sistema vai pedir-te confirmação.</p>
+                <p className="text-[10px] text-zinc-500 mt-1">Verifica se não estás a registar a mesma fatura duas vezes.</p>
               </div>
               <button onClick={() => setDuplicateWarning(null)} className="text-zinc-500 hover:text-white text-xs">✕</button>
+            </div>
+          )}
+
+          {/* Suggestion banner */}
+          {categorySource && !editing && (
+            <div data-testid="suggestion-banner" className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center gap-3">
+              <Sparkles className="text-emerald-400 shrink-0" size={18} />
+              <div className="flex-1 min-w-0">
+                <p className="text-emerald-400 font-semibold text-xs">Categorização automática</p>
+                <p className="text-[11px] text-zinc-300 mt-0.5">
+                  Categoria <span className="font-semibold text-white">{form.category}</span>
+                  {' '}e tipo <span className="font-semibold text-white">{TYPES.find(t => t.value === form.type)?.label || form.type}</span>
+                  {' '}sugeridos por <span className="font-medium text-emerald-300">{categorySource === 'histórico' ? 'histórico de despesas' : categorySource === 'palavras-chave' ? 'palavras-chave do fornecedor' : 'leitura IA'}</span>
+                  {suggestions?.confidence != null && <> ({suggestions.confidence}% confiança)</>}.
+                  {' '}<span className="text-zinc-500">Pode alterar manualmente.</span>
+                </p>
+              </div>
             </div>
           )}
 
@@ -455,13 +473,25 @@ export default function DespesasPage() {
             <div><Label className="text-zinc-400 text-xs">NIF</Label><Input value={form.nif} onChange={e => setField('nif', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Nº Fatura</Label><Input value={form.invoice_number} onChange={e => setField('invoice_number', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div>
-              <Label className="text-zinc-400 text-xs">Categoria</Label>
-              <select value={form.category} onChange={e => setField('category', e.target.value)} className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm">
+              <div className="flex items-center gap-2">
+                <Label className="text-zinc-400 text-xs">Categoria</Label>
+                {categorySource && !editing && (
+                  <span data-testid="category-source-badge" className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">
+                    {categorySource}
+                  </span>
+                )}
+              </div>
+              <select data-testid="exp-category" value={form.category} onChange={e => { setField('category', e.target.value); setCategorySource(null); }} className="w-full mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm">
                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <Label className="text-zinc-400 text-xs">Tipo</Label>
+              <div className="flex items-center gap-2">
+                <Label className="text-zinc-400 text-xs">Tipo</Label>
+                {categorySource && !editing && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-medium">auto</span>
+                )}
+              </div>
               <div className="flex gap-1 mt-1">
                 {TYPES.map(t => (
                   <button key={t.value} type="button" onClick={() => setField('type', t.value)} className={`flex-1 px-2 py-2 rounded-lg text-xs font-medium transition border ${form.type === t.value ? 'bg-yellow-400 text-zinc-950 border-yellow-400' : 'bg-zinc-800 text-zinc-400 border-zinc-700'}`}>
@@ -493,6 +523,37 @@ export default function DespesasPage() {
             <div><Label className="text-zinc-400 text-xs">Forma Pagamento</Label><Input value={form.payment_method} onChange={e => setField('payment_method', e.target.value)} placeholder="Transferência, MB Way, etc." className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
             <div><Label className="text-zinc-400 text-xs">Notas</Label><Input value={form.notes} onChange={e => setField('notes', e.target.value)} className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
           </div>
+
+          {/* Save-time duplicate confirmation panel */}
+          {saveDuplicateConfirm && (
+            <div data-testid="save-duplicate-confirm" className="rounded-xl border-2 border-red-500/50 bg-red-500/10 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="text-red-400 shrink-0 mt-0.5" size={22} />
+                <div>
+                  <p className="text-red-400 font-bold text-sm">Fatura Duplicada Detetada</p>
+                  <p className="text-xs text-zinc-300 mt-1">{saveDuplicateConfirm.message}</p>
+                </div>
+              </div>
+              {saveDuplicateConfirm.existing && (
+                <div className="bg-zinc-900/80 rounded-lg p-3 text-xs space-y-1 border border-zinc-800">
+                  <p className="text-zinc-500 uppercase tracking-wider font-semibold text-[10px]">Despesa existente</p>
+                  <div className="flex gap-4 text-zinc-300">
+                    <span>Fornecedor: <span className="text-white font-medium">{saveDuplicateConfirm.existing.supplier || '—'}</span></span>
+                    <span>Data: <span className="text-white font-medium">{saveDuplicateConfirm.existing.date || '—'}</span></span>
+                    <span>Valor: <span className="text-yellow-400 font-semibold">{formatEuro(saveDuplicateConfirm.existing.value_gross)}</span></span>
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2 justify-end">
+                <Button data-testid="cancel-duplicate-btn" variant="outline" size="sm" onClick={() => setSaveDuplicateConfirm(null)} className="border-zinc-700 text-zinc-300 rounded-full text-xs">
+                  Cancelar
+                </Button>
+                <Button data-testid="force-save-btn" size="sm" onClick={() => { setSaveDuplicateConfirm(null); handleSave(true); }} className="bg-red-500 text-white hover:bg-red-600 rounded-full text-xs font-semibold">
+                  Criar Mesmo Assim
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 mt-4 pt-4 border-t border-zinc-800">
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="border-zinc-700 text-zinc-300">Cancelar</Button>

@@ -105,7 +105,7 @@ export default function AnaliseBancariaPage() {
           <p className="text-sm text-zinc-500 mt-1">Extratos bancários, categorização IA, projeções e impostos</p>
         </div>
         <div className="flex gap-2">
-          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ofx,.qfx,.txt" onChange={e => handleUpload(e.target.files?.[0])} className="hidden" />
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ofx,.qfx,.txt,.pdf" onChange={e => handleUpload(e.target.files?.[0])} className="hidden" />
           <button
             data-testid="upload-statement-btn"
             onClick={() => fileRef.current?.click()}
@@ -165,7 +165,7 @@ export default function AnaliseBancariaPage() {
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center">
           <BarChart3 className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
           <p className="text-zinc-500 mb-2">Nenhuma análise ainda</p>
-          <p className="text-xs text-zinc-600">Carregue um extrato bancário (CSV, Excel ou OFX) para começar.</p>
+          <p className="text-xs text-zinc-600">Carregue um extrato bancário (CSV, Excel, OFX ou PDF) para começar.</p>
         </div>
       ) : (
         <div className="space-y-3">

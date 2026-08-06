@@ -80,7 +80,7 @@ class ExpenseUpdate(BaseModel):
 
 
 async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
-    """Use Gemini 2.5 Pro to extract structured data from a PT invoice."""
+    """Use Gemini to extract structured data from a PT invoice."""
     api_key = os.environ.get("EMERGENT_LLM_KEY", "")
     if not api_key:
         return {"error": "EMERGENT_LLM_KEY not set"}
@@ -103,7 +103,7 @@ async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
         '  "vat_rate": taxa de IVA em % (6, 13 ou 23),\n'
         '  "vat_amount": valor do IVA (number),\n'
         '  "value_gross": valor total com IVA (number),\n'
-        '  "category": "uma de: Combustível, Material, Fornecedor, Serviços, Comunicações, Rendas, Seguros, Contabilidade/Advogado, Ferramentas, Viatura, Alimentação, Imposto/Taxa, Outros",\n'
+        '  "category": "uma de: Combustível, Material Elétrico, Material de Obra, Fornecedor, Serviços, Comunicações, Rendas, Seguros, Contabilidade/Advogado, Ferramentas, Viatura, Alimentação, Imposto/Taxa, Outros",\n'
         '  "description": "breve descrição do que foi faturado"\n'
         "}\n\n"
         "Responde APENAS com o JSON, sem markdown ```."
@@ -130,8 +130,7 @@ async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
             text = text[:-3].strip()
 
         data = json.loads(text)
-        # Normalize
-        return {
+        result = {
             "supplier": str(data.get("supplier", "")).strip(),
             "nif": str(data.get("nif", "")).strip().replace(" ", ""),
             "invoice_number": str(data.get("invoice_number", "")).strip(),
@@ -143,9 +142,118 @@ async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
             "category": str(data.get("category", "Outros")).strip() or "Outros",
             "description": str(data.get("description", "")).strip(),
         }
+
+        # Smart categorization: apply bank analysis patterns
+        result["type"] = _smart_type_from_supplier(result["supplier"], result["category"])
+        # Smart category from keywords (override AI if AI gave generic/Outros)
+        kw_cat = _smart_category_from_supplier(result["supplier"])
+        if kw_cat:
+            if result["category"] in ("Outros", ""):
+                result["category"] = kw_cat
+                result["category_source"] = "palavras-chave"
+            else:
+                result["category_source"] = "IA"
+        else:
+            result["category_source"] = "IA" if result["category"] != "Outros" else "genérico"
+        return result
     except Exception as e:
         logger.error(f"Invoice extraction failed: {e}")
         return {"error": str(e)}
+
+
+# ── Smart categorization (same intelligence as bank analysis) ──────
+_SUPPLIER_TYPE_MAP = {
+    # Obra (electrical/construction suppliers)
+    "worten": "obra", "leroy merlin": "obra", "aki": "obra", "bricomarche": "obra",
+    "megaelectro": "obra", "janz": "obra", "schneider": "obra", "hager": "obra",
+    "legrand": "obra", "abb": "obra", "siemens": "obra", "efapel": "obra",
+    "cembre": "obra", "general cable": "obra", "cabelte": "obra", "solidal": "obra",
+    "philips": "obra", "osram": "obra", "ledvance": "obra", "gewiss": "obra",
+    "maxmat": "obra", "bigmat": "obra", "sotecnisol": "obra", "saint-gobain": "obra",
+    # Fixo (utilities, insurance, rent)
+    "vodafone": "fixo", "meo": "fixo", "nos ": "fixo", "nowo": "fixo",
+    "edp": "fixo", "galp energia": "fixo", "endesa": "fixo", "iberdrola": "fixo",
+    "epal": "fixo", "fidelidade": "fixo", "allianz": "fixo", "tranquilidade": "fixo",
+    "ageas": "fixo", "ok teleseguros": "fixo", "contabilidade": "fixo",
+    "contabilista": "fixo", "seguro": "fixo",
+    # Variavel (fuel, meals, parking)
+    "bp ": "variavel", "cepsa": "variavel", "repsol": "variavel", "prio": "variavel",
+    "via verde": "variavel", "restaurante": "variavel", "estacionamento": "variavel",
+}
+
+_CATEGORY_TYPE_MAP = {
+    "Material Elétrico": "obra", "Material de Obra": "obra", "Material": "obra",
+    "Ferramentas": "obra", "Fornecedor": "obra",
+    "Combustível": "variavel", "Viatura": "variavel", "Alimentação": "variavel",
+    "Comunicações": "fixo", "Rendas": "fixo", "Seguros": "fixo",
+    "Contabilidade/Advogado": "fixo", "Imposto/Taxa": "fixo",
+    "Serviços": "variavel", "Outros": "variavel",
+}
+
+
+def _smart_type_from_supplier(supplier: str, ai_category: str) -> str:
+    """Determine expense type (fixo/variavel/obra) from supplier name and AI category."""
+    s = (supplier or "").lower()
+    # 1. Check supplier name against known patterns
+    for pattern, etype in _SUPPLIER_TYPE_MAP.items():
+        if pattern in s:
+            return etype
+    # 2. Fall back to AI category mapping
+    return _CATEGORY_TYPE_MAP.get(ai_category, "variavel")
+
+
+# ── Smart category from supplier keywords ──────────────────────
+_SUPPLIER_CATEGORY_MAP = {
+    # Combustível
+    "bp ": "Combustível", "cepsa": "Combustível", "repsol": "Combustível",
+    "prio": "Combustível", "gasolina": "Combustível", "gasoleo": "Combustível",
+    "combustivel": "Combustível", "galp": "Combustível",
+    # Material (electrical/construction suppliers)
+    "leroy merlin": "Material", "aki": "Material", "bricomarche": "Material",
+    "worten": "Material", "megaelectro": "Material", "maxmat": "Material",
+    "bigmat": "Material", "janz": "Material", "schneider": "Material",
+    "hager": "Material", "legrand": "Material", "abb": "Material",
+    "siemens": "Material", "efapel": "Material", "gewiss": "Material",
+    "cembre": "Material", "general cable": "Material", "cabelte": "Material",
+    "solidal": "Material", "philips": "Material", "osram": "Material",
+    "ledvance": "Material", "sotecnisol": "Fornecedor", "saint-gobain": "Fornecedor",
+    "material electrico": "Material", "material eletrico": "Material",
+    # Ferramentas
+    "ferramentas": "Ferramentas", "bosch": "Ferramentas", "dewalt": "Ferramentas",
+    "makita": "Ferramentas", "hilti": "Ferramentas", "stanley": "Ferramentas",
+    # Comunicações
+    "vodafone": "Comunicações", "meo": "Comunicações", "nos ": "Comunicações", "nowo": "Comunicações",
+    # Rendas
+    "renda": "Rendas", "aluguer": "Rendas", "arrendamento": "Rendas",
+    # Seguros
+    "fidelidade": "Seguros", "allianz": "Seguros", "tranquilidade": "Seguros",
+    "ageas": "Seguros", "ok teleseguros": "Seguros", "seguro": "Seguros",
+    # Contabilidade/Advogado
+    "contabilidade": "Contabilidade/Advogado", "contabilista": "Contabilidade/Advogado",
+    "advogado": "Contabilidade/Advogado", "advocacia": "Contabilidade/Advogado",
+    # Imposto/Taxa
+    "at.gov": "Imposto/Taxa", "autoridade tributaria": "Imposto/Taxa",
+    "impostos": "Imposto/Taxa", "seg social": "Imposto/Taxa",
+    "seguranca social": "Imposto/Taxa",
+    # Alimentação
+    "restaurante": "Alimentação", "refeicao": "Alimentação", "cafe": "Alimentação",
+    "supermercado": "Alimentação", "pingo doce": "Alimentação",
+    "continente": "Alimentação", "lidl": "Alimentação",
+    # Viatura (portagens, estacionamento)
+    "via verde": "Viatura", "portagem": "Viatura", "estacionamento": "Viatura",
+    "parking": "Viatura", "scut": "Viatura",
+    # Serviços (energia/água)
+    "edp": "Serviços", "endesa": "Serviços", "iberdrola": "Serviços", "epal": "Serviços",
+}
+
+
+def _smart_category_from_supplier(supplier: str) -> Optional[str]:
+    """Determine expense category from supplier name using keyword matching."""
+    s = (supplier or "").lower()
+    for pattern, cat in _SUPPLIER_CATEGORY_MAP.items():
+        if pattern in s:
+            return cat
+    return None
 
 
 def _month_prefix(year: int, month: int) -> str:
@@ -182,7 +290,7 @@ def create_expenses_router(db, get_current_user):
 
     @expenses_router.post("/extract")
     async def extract_from_upload(file: UploadFile = File(...), user=Depends(get_current_user)):
-        """Upload a file and get AI-extracted invoice data. Does NOT save the expense yet."""
+        """Upload a file and get AI-extracted invoice data with smart categorization and duplicate detection."""
         filename = file.filename or "invoice"
         ext = Path(filename).suffix.lower() or ".bin"
         if ext not in [".pdf", ".jpg", ".jpeg", ".png", ".webp"]:
@@ -206,8 +314,43 @@ def create_expenses_router(db, get_current_user):
         # Call AI
         extracted = await extract_invoice_data(saved_path, mime)
 
-        # Check for duplicate based on AI-extracted fields (warning, not blocking)
+        if isinstance(extracted, dict) and extracted.get("error"):
+            return {"file_name": saved_name, "original_name": filename, "file_size": len(content), "extracted": extracted, "duplicate": None, "suggestions": None}
+
+        # ── Smart suggestions from expense history ──────────────
+        suggestions = None
+        if isinstance(extracted, dict) and extracted.get("supplier"):
+            supplier_lower = extracted["supplier"].lower()
+            # Check historical expenses for this supplier
+            hist = await db.expenses.find(
+                {"supplier": {"$regex": extracted["supplier"][:20], "$options": "i"}},
+                {"_id": 0, "category": 1, "type": 1, "obra_id": 1, "obra_name": 1}
+            ).sort("created_at", -1).to_list(5)
+            if hist:
+                from collections import Counter
+                cats = Counter(h.get("category", "Outros") for h in hist)
+                types = Counter(h.get("type", "variavel") for h in hist)
+                most_cat = cats.most_common(1)[0][0]
+                most_type = types.most_common(1)[0][0]
+                last_obra = next((h for h in hist if h.get("obra_id")), None)
+                suggestions = {
+                    "category": most_cat,
+                    "type": most_type,
+                    "source": "histórico",
+                    "confidence": round(cats.most_common(1)[0][1] / len(hist) * 100),
+                    "obra_id": last_obra.get("obra_id") if last_obra else None,
+                    "obra_name": last_obra.get("obra_name") if last_obra else None,
+                }
+                # History overrides AI/keywords if AI didn't have a strong opinion
+                if most_cat != "Outros":
+                    extracted["category"] = most_cat
+                    extracted["category_source"] = "histórico"
+                if most_type:
+                    extracted["type"] = most_type
+
+        # ── Duplicate detection (3 layers) ──────────────────────
         duplicate = None
+        # Layer 1: Exact invoice number match
         if isinstance(extracted, dict) and extracted.get("invoice_number"):
             dup = await _find_duplicate(
                 extracted.get("invoice_number", ""),
@@ -221,6 +364,43 @@ def create_expenses_router(db, get_current_user):
                     "invoice_number": dup.get("invoice_number"),
                     "date": dup.get("date"),
                     "value_gross": dup.get("value_gross"),
+                    "reason": "Mesmo número de fatura e fornecedor",
+                }
+
+        # Layer 2: Date + amount + supplier similarity (fuzzy)
+        if not duplicate and isinstance(extracted, dict) and extracted.get("date") and extracted.get("value_gross"):
+            fuzzy_q = {"date": extracted["date"]}
+            gross = extracted["value_gross"]
+            # Match within 1% of amount
+            fuzzy_q["value_gross"] = {"$gte": gross * 0.99, "$lte": gross * 1.01}
+            if extracted.get("supplier"):
+                import re as _re
+                fuzzy_q["supplier"] = {"$regex": _re.escape(extracted["supplier"][:15]), "$options": "i"}
+            match = await db.expenses.find_one(fuzzy_q, {"_id": 0, "id": 1, "supplier": 1, "date": 1, "value_gross": 1, "invoice_number": 1})
+            if match:
+                duplicate = {
+                    "id": match.get("id"),
+                    "supplier": match.get("supplier"),
+                    "invoice_number": match.get("invoice_number"),
+                    "date": match.get("date"),
+                    "value_gross": match.get("value_gross"),
+                    "reason": "Mesma data, valor e fornecedor similar",
+                }
+
+        # Layer 3: Bank sync check (bank_txn_id)
+        if not duplicate and isinstance(extracted, dict) and extracted.get("date") and extracted.get("value_gross"):
+            bank_match = await db.expenses.find_one(
+                {"bank_txn_id": {"$exists": True, "$ne": None}, "date": extracted["date"],
+                 "value_gross": {"$gte": extracted["value_gross"] * 0.99, "$lte": extracted["value_gross"] * 1.01}},
+                {"_id": 0, "id": 1, "supplier": 1, "date": 1, "value_gross": 1}
+            )
+            if bank_match:
+                duplicate = {
+                    "id": bank_match.get("id"),
+                    "supplier": bank_match.get("supplier"),
+                    "date": bank_match.get("date"),
+                    "value_gross": bank_match.get("value_gross"),
+                    "reason": "Já importado do extrato bancário",
                 }
 
         return {
@@ -229,6 +409,7 @@ def create_expenses_router(db, get_current_user):
             "file_size": len(content),
             "extracted": extracted,
             "duplicate": duplicate,
+            "suggestions": suggestions,
         }
 
     @expenses_router.post("")
