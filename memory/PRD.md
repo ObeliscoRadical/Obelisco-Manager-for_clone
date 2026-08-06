@@ -9,7 +9,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Auth**: JWT (access+refresh tokens, localStorage)
 - **PDF**: jsPDF + jspdf-autotable (frontend generation)
 - **AI**: Emergent LLM Key → Gemini 3.1 Pro (OCR, chat)
-- **Integrations**: Telegram Bot, Google Calendar, Resend Email (optional)
+- **Integrations**: Telegram Bot, Google Calendar, Emergent Email, Web Push (VAPID)
 - **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
 
 ## Core Requirements (All Complete)
@@ -30,16 +30,18 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - [x] Accountant AI chat
 - [x] Service Orders with Telegram + Google Calendar + WhatsApp updates
 - [x] Public widget for client service requests
-- [x] GPS Timeclock in Tech Portal (Ponto GPS with location capture)
+- [x] GPS Timeclock in Tech Portal
 - [x] Timeclock Reports with CSV export
 - [x] Perfil 360° do Cliente (mini-CRM)
-- [x] WhatsApp share link for service widget
-- [x] WhatsApp update button on order detail
+- [x] WhatsApp share + update buttons
+- [x] Email system (Emergent native — pending EMERGENT_EMAIL_KEY auto-provision on deploy)
+- [x] Web Push Notifications (VAPID) — smartwatch, phone, desktop compatible
+  - Push on: new order assigned, agenda appointment, chat message, daily briefing
 
 ## Prioritized Backlog
 
 ### P1 (Important)
-- Resend API key for email confirmation (code ready, needs key)
+- Deploy to provision EMERGENT_EMAIL_KEY (auto-created on deploy)
 - Automação Máscara DIN (auto-atribuir cor por tipo de módulo)
 - Módulo Salarial Fase 2: recibos PDF por funcionário
 
@@ -47,6 +49,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Hardening de segurança (CORS, rate limiting, CSP)
 - Integração TOC Online
 - Dashboard charts (Recharts)
+- Mapa de equipa em tempo real (GPS dos técnicos)
 
 ### Refactoring
 - `/app/backend/server.py` >4400 lines — split into modules

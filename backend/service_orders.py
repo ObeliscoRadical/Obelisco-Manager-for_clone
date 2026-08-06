@@ -561,7 +561,7 @@ def create_service_orders_router(db, get_current_user):
 
     # ── Reassign / Reschedule ─────────────────────────────────────
     @router.put("/{order_id}/reassign")
-    async def reassign_order(order_id: str, technician_id: str, technician_name: str, user=Depends(get_current_user)):
+    async def reassign_order(order_id: str, technician_id: str, technician_name: str, background_tasks: BackgroundTasks, user=Depends(get_current_user)):
         if not _is_admin(user):
             raise HTTPException(403, "Apenas administradores")
         order = await db.service_orders.find_one({"id": order_id})
@@ -575,6 +575,20 @@ def create_service_orders_router(db, get_current_user):
         if order.get("status") == "pendente":
             update["status"] = "em_progresso"
         await db.service_orders.update_one({"id": order_id}, {"$set": update})
+
+        # Push notification to assigned technician
+        from push_notifications import send_push_to_user, PushMessage
+        stype = SERVICE_TYPES.get(order.get("service_type", ""), {}).get("label", "Serviço")
+        background_tasks.add_task(
+            send_push_to_user, db, technician_id,
+            PushMessage(
+                title="Novo Pedido Atribuído",
+                body=f"{stype} — {order.get('client_name', '')} · {order.get('address', '')[:50]}",
+                tag=f"order-assign-{order_id}",
+                url="/tech/pedidos",
+            )
+        )
+
         return {"message": f"Pedido atribuído a {technician_name}"}
 
     # ── Technicians list (for assignment dropdown) ────────────────
@@ -742,6 +756,17 @@ def create_service_orders_router(db, get_current_user):
         app_url = os.environ.get("CORS_ORIGINS", "https://proposal-hub-56.emergent.host").split(",")[0].strip().strip('"')
         html = _build_daily_briefing_html(admin_name, agenda_items, orders_today, app_url)
         ok = await send_email_raw(admin_email, f"Obelisco Radical — Briefing de {today}", html)
+
+        # Also send push to all techs with briefing summary
+        from push_notifications import send_push_to_all_techs, PushMessage
+        n_agenda = len(agenda_items)
+        n_orders = len(orders_today)
+        await send_push_to_all_techs(db, PushMessage(
+            title="Bom dia! Briefing Diário",
+            body=f"📅 {n_agenda} agendamento{'s' if n_agenda != 1 else ''} · ⚡ {n_orders} pedido{'s' if n_orders != 1 else ''} novo{'s' if n_orders != 1 else ''}",
+            tag="daily-briefing",
+            url="/tech/pedidos",
+        ))
 
         if ok:
             return {"sent": True, "to": admin_email}

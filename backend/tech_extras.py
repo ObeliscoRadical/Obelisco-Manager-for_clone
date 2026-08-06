@@ -324,6 +324,19 @@ def create_tech_extras_router(db, get_current_user):
         except Exception as e:
             import logging as _log
             _log.getLogger(__name__).warning(f"notify admins on tech message failed: {e}")
+        # Push notification to admins
+        try:
+            from push_notifications import send_push_to_role, PushMessage
+            import asyncio
+            preview = (input.text or "")[:60]
+            asyncio.ensure_future(send_push_to_role(db, "admin", PushMessage(
+                title=f"💬 {user.get('name', 'Técnico')}",
+                body=preview,
+                tag=f"chat-{emp_id}",
+                url="/mensagens-tecnicos",
+            )))
+        except Exception:
+            pass
         return doc
 
     # Admin: ver todas as threads
@@ -391,6 +404,19 @@ def create_tech_extras_router(db, get_current_user):
         except Exception as e:
             import logging as _log
             _log.getLogger(__name__).warning(f"notify tech on admin message failed: {e}")
+        # Push notification to the technician
+        try:
+            from push_notifications import send_push_to_user, PushMessage
+            import asyncio
+            preview = (input.text or "")[:60]
+            asyncio.ensure_future(send_push_to_user(db, employee_id, PushMessage(
+                title=f"💬 {user.get('name', 'Escritório')}",
+                body=preview,
+                tag=f"chat-admin-{employee_id}",
+                url="/tech/chat",
+            )))
+        except Exception:
+            pass
         return doc
 
     # ============================================================

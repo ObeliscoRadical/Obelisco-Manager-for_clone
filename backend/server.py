@@ -1584,6 +1584,18 @@ async def create_appointment(input: AppointmentCreate, user=Depends(get_current_
             link="/tech/agenda",
             meta={"appointment_id": doc["id"]},
         )
+        # Push notification
+        try:
+            from push_notifications import send_push_to_user, PushMessage
+            import asyncio
+            asyncio.ensure_future(send_push_to_user(db, emp_id, PushMessage(
+                title="📅 Nova Marcação",
+                body=f"{input.title} — {when_label}" + (f" · {input.client_name}" if input.client_name else ""),
+                tag=f"agenda-{doc['id']}",
+                url="/tech/agenda",
+            )))
+        except Exception:
+            pass
     return doc
 
 @api_router.put("/appointments/{appointment_id}")
@@ -4446,6 +4458,10 @@ app.include_router(create_service_orders_router(db, get_current_user))
 # Perfil 360° Cliente (mini-CRM)
 from client_profile import create_client_profile_router
 app.include_router(create_client_profile_router(db, get_current_user))
+
+# Push Notifications (Web Push API — smartwatches, phones, desktop)
+from push_notifications import create_push_router
+app.include_router(create_push_router(db, get_current_user))
 
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),

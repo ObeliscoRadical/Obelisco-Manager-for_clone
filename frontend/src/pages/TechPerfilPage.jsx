@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+import { usePushNotifications } from '../hooks/usePushNotifications';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { User, Mail, Phone, MapPin, Building, Briefcase, Calendar, Euro, Clock, Sandwich, FileText } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { User, Mail, Phone, MapPin, Building, Briefcase, Calendar, Euro, Clock, Sandwich, FileText, Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Row = ({ icon: Icon, label, value }) => (
   <div className="flex items-start gap-3 py-2 border-b border-zinc-800/60 last:border-0">
@@ -17,8 +21,10 @@ const Row = ({ icon: Icon, label, value }) => (
 const fmt = (v) => v != null ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v) : '—';
 
 export default function TechPerfilPage() {
+  const { token } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const push = usePushNotifications(token);
 
   useEffect(() => {
     (async () => {
@@ -114,6 +120,48 @@ export default function TechPerfilPage() {
       )}
 
       <p className="text-[11px] text-zinc-500 text-center pt-2">Para alterar os seus dados, contacte o escritório.</p>
+
+      {/* Push Notifications */}
+      {push.supported && (
+        <Card className="bg-zinc-900 border-zinc-800" data-testid="push-notifications-card">
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-white flex items-center gap-2"><Bell className="h-4 w-4 text-yellow-400" /> Notificações Push</CardTitle></CardHeader>
+          <CardContent className="pt-0 space-y-3">
+            <p className="text-xs text-zinc-500">Receba alertas de agenda, pedidos e tarefas no telemóvel, relógio e desktop.</p>
+            {push.isSubscribed ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-green-400 text-sm">
+                  <BellRing className="h-4 w-4" /> Notificações activas
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" onClick={async () => { await push.testPush(); toast.success('Push de teste enviada!'); }} className="text-xs" data-testid="test-push-btn">
+                    Testar
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={async () => { await push.unsubscribe(); toast.success('Notificações desactivadas'); }} className="text-xs text-red-400 border-red-500/30 hover:bg-red-500/10" data-testid="disable-push-btn">
+                    <BellOff className="h-3 w-3 mr-1" /> Desactivar
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                data-testid="enable-push-btn"
+                onClick={async () => {
+                  const ok = await push.subscribe();
+                  if (ok) toast.success('Notificações push activadas!');
+                  else toast.error('Não foi possível activar. Verifique as permissões do browser.');
+                }}
+                disabled={push.loading}
+                className="bg-yellow-400 text-zinc-950 hover:bg-yellow-300 font-semibold"
+              >
+                {push.loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
+                Activar Notificações Push
+              </Button>
+            )}
+            {push.permission === 'denied' && (
+              <p className="text-xs text-red-400">Notificações bloqueadas pelo browser. Vá às definições do browser para permitir.</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
