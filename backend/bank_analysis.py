@@ -322,8 +322,6 @@ def _detect_recurring(transactions: list) -> list:
             frequency = "mensal"
         elif 80 <= avg_interval <= 100:
             frequency = "trimestral"
-        elif 15 <= avg_interval <= 45:
-            frequency = "mensal"
         else:
             continue  # Not a recognisable pattern
 
