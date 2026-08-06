@@ -76,8 +76,8 @@ export default function DespesasPage() {
     };
   }, [fetchAll]);
 
-  const openNew = () => { setEditing(null); setForm(emptyForm); setDuplicateWarning(null); setDialogOpen(true); };
-  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDuplicateWarning(null); setDialogOpen(true); };
+  const openNew = () => { setEditing(null); setForm(emptyForm); setDuplicateWarning(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
+  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setDuplicateWarning(null); if (fileInputRef.current) fileInputRef.current.value = ''; setDialogOpen(true); };
 
   const setField = (k, v) => {
     setForm(prev => {
@@ -134,7 +134,11 @@ export default function DespesasPage() {
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao processar fatura');
-    } finally { setExtracting(false); }
+    } finally {
+      setExtracting(false);
+      // Reset file input so the same or different file can be uploaded again
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
   };
 
   const handleSave = async (force = false) => {
@@ -390,9 +394,10 @@ export default function DespesasPage() {
             <div className="rounded-2xl border-2 border-dashed border-yellow-400/30 bg-yellow-400/5 p-6 text-center">
               <input
                 ref={fileInputRef}
+                key={dialogOpen ? 'file-input-open' : 'file-input-closed'}
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png,.webp"
-                onChange={e => handleUpload(e.target.files?.[0])}
+                onChange={e => { if (e.target.files?.[0]) handleUpload(e.target.files[0]); }}
                 className="hidden"
                 data-testid="invoice-file-input"
               />

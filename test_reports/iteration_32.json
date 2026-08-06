@@ -1,0 +1,30 @@
+{
+  "summary": "Verified bug fix for Despesas page invoice re-upload issue. Backend /api/expenses/extract handles two sequential uploads correctly (both return 200 with file_name + extracted). Frontend fix confirmed: file input value is reset to '' after each upload, 'Fatura carregada' + 'Carregar outra' UI is shown, and a second file selection triggers a new extraction without closing the dialog.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sequential_extract.py",
+    "/app/test_reports/pytest/sequential_extract.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is correctly applied in 3 places (openNew/openEdit reset fileInputRef, handleUpload finally block resets, input has key prop tied to dialogOpen). Behavior verified end-to-end.",
+    "Minor: The `key={dialogOpen ? 'file-input-open' : 'file-input-closed'}` prop causes React to remount the input on open/close which alone would fix the issue; the ref clear is a belt-and-suspenders approach and does no harm."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sequential_extract.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100% (core fix)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "None — used in-memory PNG bytes generated with PIL, uploaded via /api/expenses/extract (does not persist an expense record).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Playwright verified: first upload triggers OCR (spinner -> 'Fatura carregada'), file input.value becomes '' after upload, second file selection via the same hidden input triggers OCR again without dialog close. Backend sequential extract test lives at /app/backend/tests/test_sequential_extract.py."
+}
