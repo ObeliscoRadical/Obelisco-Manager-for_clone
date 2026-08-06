@@ -225,7 +225,7 @@ function OverviewTab({ taxes, catData, monthData, recurring }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
           <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold mb-3">Despesas por Categoria</h3>
-          <div className="h-64">
+          <div className="h-64" style={{ minHeight: '256px', minWidth: '100px' }}>
             <ResponsiveContainer>
               <BarChart data={catData} layout="vertical" margin={{ left: 80, right: 10 }}>
                 <XAxis type="number" stroke="#52525b" fontSize={10} tickFormatter={v => `${(v/1000).toFixed(0)}k`} />
@@ -241,7 +241,7 @@ function OverviewTab({ taxes, catData, monthData, recurring }) {
 
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
           <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold mb-3">Receitas vs Despesas Mensais</h3>
-          <div className="h-64">
+          <div className="h-64" style={{ minHeight: '256px', minWidth: '100px' }}>
             <ResponsiveContainer>
               <BarChart data={monthData} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
                 <XAxis dataKey="name" stroke="#52525b" fontSize={10} />
@@ -358,7 +358,7 @@ function CashflowTab({ cashflow }) {
     <div className="space-y-4" data-testid="cashflow-tab">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
         <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold mb-3">Projeção de Fluxo de Caixa (6 meses)</h3>
-        <div className="h-80">
+        <div className="h-80" style={{ minHeight: '320px', minWidth: '100px' }}>
           <ResponsiveContainer>
             <AreaChart data={cashflow} margin={{ top: 5, right: 20, left: -10, bottom: 0 }}>
               <defs>
