@@ -66,9 +66,17 @@ export default function AnaliseBancariaPage() {
           pollRef.current = null;
           setProcessingId(null);
           setUploading(false);
-          toast.success(`${data.transaction_count} transações analisadas!`);
+          const syncInfo = data.transaction_count ? `${data.transaction_count} transações analisadas` : 'Análise concluída';
+          toast.success(syncInfo + '!');
           const full = await api.get(`/bank-analysis/${analysisId}`);
-          setCurrent(full.data);
+          const fullData = full.data;
+          if (fullData.auto_sync?.created > 0) {
+            toast.success(`${fullData.auto_sync.created} despesas importadas automaticamente!`);
+          }
+          if (fullData.auto_calendar?.created > 0) {
+            toast.success(`${fullData.auto_calendar.created} contas previstas adicionadas ao calendário!`);
+          }
+          setCurrent(fullData);
           setView('detail');
           fetchList();
         } else if (data.status === 'failed') {
@@ -101,6 +109,12 @@ export default function AnaliseBancariaPage() {
         fetchList();
       } else {
         toast.success(`${data.transaction_count} transações analisadas!`);
+        if (data.auto_sync?.created > 0) {
+          toast.success(`${data.auto_sync.created} despesas importadas automaticamente!`);
+        }
+        if (data.auto_calendar?.created > 0) {
+          toast.success(`${data.auto_calendar.created} contas previstas adicionadas ao calendário!`);
+        }
         setCurrent(data);
         setView('detail');
         setUploading(false);
@@ -263,6 +277,8 @@ function AnalysisDetail({ analysis, onBack }) {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const { taxes, recurring, cashflow, by_category, by_month, transactions } = analysis;
+  const autoSync = analysis.auto_sync;
+  const autoCalendar = analysis.auto_calendar;
 
   const catData = Object.entries(by_category || {})
     .filter(([k]) => k !== 'receita')
@@ -306,6 +322,36 @@ function AnalysisDetail({ analysis, onBack }) {
           Sincronizar com Despesas
         </button>
       </div>
+
+      {/* Auto-sync results */}
+      {(autoSync || autoCalendar) && (
+        <div className="p-4 rounded-xl border bg-green-500/5 border-green-500/20" data-testid="auto-sync-banner">
+          <h4 className="text-sm text-green-400 font-semibold mb-2 flex items-center gap-2">
+            <Receipt size={14} /> Sincronização Automática
+          </h4>
+          <div className="flex flex-wrap gap-4 text-xs">
+            {autoSync && (
+              <div className="flex gap-3">
+                <span className="text-green-400">{autoSync.created} despesas importadas</span>
+                {autoSync.skipped > 0 && <span className="text-yellow-400">{autoSync.skipped} duplicados ignorados</span>}
+              </div>
+            )}
+            {autoCalendar && autoCalendar.created > 0 && (
+              <span className="text-blue-400">{autoCalendar.created} contas previstas no calendário</span>
+            )}
+          </div>
+          {autoSync?.duplicates?.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">Ver duplicados ignorados ({autoSync.duplicates.length})</summary>
+              <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                {autoSync.duplicates.map((d, i) => (
+                  <p key={i} className="text-xs text-zinc-500">{d.description?.slice(0, 50)} · {fmt(d.amount)} — {d.reason}</p>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Sync result */}
       {syncResult && (

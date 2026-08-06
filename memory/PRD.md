@@ -39,7 +39,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Expenses Smart Categorization** (auto-category from supplier keywords + AI + history, auto-type fixo/variavel/obra)
 - **Expenses Duplicate Detection** (3 layers: invoice number, date+amount+supplier fuzzy, bank sync)
 - **Expenses Suggestion System** (historical supplier pattern, keyword match, AI fallback with category_source tracking)
-- **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements)
+- **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements, async background processing with polling)
 
 ## Backlog
 ### P1

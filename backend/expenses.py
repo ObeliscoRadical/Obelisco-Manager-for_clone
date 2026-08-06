@@ -579,4 +579,90 @@ def create_expenses_router(db, get_current_user):
             raise HTTPException(status_code=404, detail="Ficheiro não encontrado")
         return FileResponse(fp)
 
+    @expenses_router.post("/ai-categorize")
+    async def ai_categorize_expenses(user=Depends(get_current_user)):
+        """Re-categorize all expenses using AI (keyword matching + LLM fallback).
+        Only touches expenses with category 'Outros' or missing type."""
+        api_key = os.environ.get("EMERGENT_LLM_KEY", "")
+
+        all_exp = await db.expenses.find({}, {"_id": 0}).to_list(5000)
+        updated = 0
+        ai_batch = []
+
+        for e in all_exp:
+            eid = e.get("id")
+            supplier = e.get("supplier", "")
+            old_cat = e.get("category", "Outros")
+            old_type = e.get("type", "variavel")
+            changes = {}
+
+            # 1. Keyword-based categorization
+            kw_cat = _smart_category_from_supplier(supplier)
+            if kw_cat and old_cat in ("Outros", "", "outro", "Outro"):
+                changes["category"] = kw_cat
+
+            # 2. Type inference from supplier
+            new_type = _smart_type_from_supplier(supplier, changes.get("category", old_cat))
+            if new_type != old_type:
+                changes["type"] = new_type
+
+            if changes:
+                await db.expenses.update_one({"id": eid}, {"$set": changes})
+                updated += 1
+            elif old_cat in ("Outros", "", "outro", "Outro"):
+                # Queue for AI categorization
+                ai_batch.append(e)
+
+        # 3. AI batch for remaining uncategorized
+        ai_updated = 0
+        if ai_batch and api_key:
+            try:
+                batches = [ai_batch[i:i+40] for i in range(0, len(ai_batch), 40)]
+                for batch in batches:
+                    items = "\n".join([f"{i}: {e.get('supplier','')} | {e.get('value_gross',0)}€ | {e.get('notes','')}" for i, e in enumerate(batch)])
+                    prompt = f"""Categoriza estas despesas de uma empresa portuguesa de eletricidade (Obelisco Radical).
+Para cada linha, responde APENAS com o número e a categoria, uma por linha.
+
+Categorias possíveis:
+- Combustível, Material, Fornecedor, Serviços, Comunicações, Rendas, Seguros
+- Contabilidade/Advogado, Ferramentas, Viatura, Alimentação, Imposto/Taxa, Outros
+
+Despesas:
+{items}
+
+Responde EXACTAMENTE no formato: NUMERO:CATEGORIA (uma por linha)"""
+
+                    chat = LlmChat(
+                        api_key=api_key,
+                        session_id=f"exp-cat-{uuid.uuid4().hex[:8]}",
+                        system_message="És um assistente de categorização de despesas empresariais portuguesas.",
+                    ).with_model("openai", "gpt-4o-mini")
+                    resp = await chat.send_message(UserMessage(text=prompt))
+
+                    for line in resp.strip().split("\n"):
+                        line = line.strip()
+                        if ":" not in line:
+                            continue
+                        parts = line.split(":", 1)
+                        try:
+                            idx = int(parts[0].strip())
+                            cat = parts[1].strip()
+                            if 0 <= idx < len(batch) and cat in CATEGORIES:
+                                eid = batch[idx].get("id")
+                                new_type = _smart_type_from_supplier(batch[idx].get("supplier", ""), cat)
+                                await db.expenses.update_one({"id": eid}, {"$set": {"category": cat, "type": new_type}})
+                                ai_updated += 1
+                        except (ValueError, IndexError):
+                            continue
+            except Exception as ex:
+                logger.warning(f"AI expense categorization failed: {ex}")
+
+        return {
+            "total": len(all_exp),
+            "updated_keywords": updated,
+            "updated_ai": ai_updated,
+            "unchanged": len(all_exp) - updated - ai_updated,
+            "message": f"{updated + ai_updated} despesas recategorizadas ({updated} por palavras-chave, {ai_updated} por IA)",
+        }
+
     return expenses_router

@@ -1,5 +1,34 @@
 # Obelisco Manager - CHANGELOG
 
+---
+
+## Aug 06, 2026 (Fork 2) — Fix: PDF Upload Assíncrono
+
+### Bug
+- **Problema**: Upload de PDF no módulo Análise Bancária dava sempre "Erro ao processar extrato" (502 Cloudflare timeout — Gemini demora 2-4 min)
+- **Causa raiz**: O endpoint `/api/bank-analysis/upload` era síncrono; o proxy Cloudflare tem timeout ~60s
+
+### Solução
+- **Backend** (`bank_analysis.py`): Upload de PDF agora é assíncrono:
+  - Cria registo com `status: "processing"` na DB e retorna imediatamente
+  - Processamento Gemini AI executa em `asyncio.create_task` (background)
+  - Novo endpoint `GET /api/bank-analysis/{id}/status` para polling
+  - Listing endpoint agora inclui campos `status` e `error`
+  - Quando termina: actualiza DB para `status: "completed"` ou `status: "failed"`
+- **Backend**: Corrigido `_ai_categorize_batch()` — faltava `system_message` no `LlmChat` constructor
+- **Frontend** (`AnaliseBancariaPage.jsx`):
+  - Ao receber `status: "processing"`, mostra banner com animação e mensagem específica para PDF
+  - Polling automático a cada 5s até `completed` ou `failed`
+  - Lista mostra badge "A processar..." com spinner para items em processamento
+  - Items `processing`/`failed` não são clicáveis
+- **Uploads CSV/Excel/OFX**: Continuam síncronos (rápidos, sem alteração)
+
+### Testes
+- **Iteration 40**: 10/10 backend + 100% frontend aprovado
+- Teste manual com PDF real BPI: 134 transações extraídas com sucesso em ~3 min
+
+---
+
 ## Aug 06, 2026 — Despesas: Categorização IA + Duplicados + Extratos PDF
 
 ### Despesas — Auto-Categorização Inteligente

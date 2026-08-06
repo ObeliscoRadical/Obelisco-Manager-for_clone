@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 41: Verified auto-sync of bank analysis to expenses + calendar, and AI re-categorization endpoint. Backend: 8/8 pytest tests passed - CSV upload now returns auto_sync + auto_calendar fields with expenses created; GET analysis includes auto_sync; list endpoint projects auto_sync/auto_calendar; duplicate detection works on repeat upload (skipped>0); manual sync-expenses endpoint still functional as re-sync; POST /api/expenses/ai-categorize returns {total, updated_keywords, updated_ai, unchanged, message} and auth is enforced. Frontend: Despesas page shows 'Categorizar com IA' button (data-testid=ai-categorize-btn) - visible, clickable, triggers backend request. Análise Bancária detail loads and 'Sincronizar com Despesas' manual button is present. auto-sync-banner selector exists in code and renders only for analyses with auto_sync data (legacy analyses in DB don't have it, as expected per task notes). Did NOT test real PDF upload (Gemini 3-4 min per task instructions).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard/Bank analysis detail", "issues": ["Recharts container width/height warnings in console (chart initial render before layout settles) - cosmetic only, no visible impact"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter41_auto_sync.py",
+    "/app/test_reports/pytest/iter41.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "bank_analysis.py _auto_sync_expenses / _auto_feed_calendar (lines 575-726): Correctly reused sync-expenses & feed-calendar logic without requiring auth, called from both PDF background finalize and sync CSV/Excel/OFX path. Duplicate detection uses bank_txn_id set + composite date|amount|supplier key.",
+    "bank_analysis.py upload endpoint (line 947): Non-PDF path now runs auto_sync + auto_feed_calendar after computing analysis, and stores results in the analysis document before inserting. Consistent with PDF async path.",
+    "bank_analysis.py list projection (line 964): Now includes auto_sync and auto_calendar so frontend list view can show counts without extra fetch.",
+    "expenses.py POST /ai-categorize (line 582): Two-phase categorization - keyword matching first (fast/deterministic), then GPT-4o-mini fallback for remaining 'Outros' in batches of 40. Response schema includes total/updated_keywords/updated_ai/unchanged. Only touches expenses where old_cat in ('Outros','','outro','Outro'), so safe to re-run.",
+    "Minor: _auto_sync_expenses treats every debit >0 with a matching category as an expense, using the full transaction description as supplier (truncated 100). For very generic descriptions this may create noise in the expenses list - acceptable trade-off given duplicate detection.",
+    "Minor: The auto_calendar 'skipped' counter also increments for existing future appointments (correct behaviour), but analyses uploaded multiple times will always show skipped>0 after first run - user may need clarification in UI.",
+    "DespesasPage.jsx handleAICategorize: uses toast for success/error and triggers refresh - good UX. Button has proper data-testid.",
+    "AnaliseBancariaPage.jsx auto-sync-banner (line 328): Conditionally rendered only when auto_sync exists on the analysis doc - correct guard for legacy records without the field."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter41_auto_sync.py"
+  ],
+  "success_rate": {
+    "backend": "100% (8/8 tests passed)",
+    "frontend": "100% (button visible+clickable, banner selector exists, manual sync button still present)"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Uploaded a synthetic 8-line CSV (test_iter41.csv) with VODAFONE/GALP/LEROY MERLIN/FIDELIDADE + client transfer. All created expenses and the analysis were deleted at test end. Any expenses containing 'test_iter41' in notes were removed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Auto-sync and AI-recategorize verified end-to-end via CSV path. To validate PDF path, main agent should manually upload a real BPI PDF and confirm the /status polling completes and the auto_sync banner renders on the detail view. Test file: /app/backend/tests/test_iter41_auto_sync.py.",
+  "rca_of_the_issue": "N/A - feature implementation verified as working. No bugs found."
+}

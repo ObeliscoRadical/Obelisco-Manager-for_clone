@@ -572,8 +572,163 @@ def _build_analysis_data(transactions, filename, user_name):
     return transactions
 
 
+async def _auto_sync_expenses(db, analysis_id, analysis_doc):
+    """Automatically sync debit transactions to expenses module with duplicate detection."""
+    try:
+        expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
+        to_sync = [t for t in analysis_doc.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
+
+        existing_expenses = await db.expenses.find(
+            {}, {"_id": 0, "date": 1, "supplier": 1, "value_gross": 1, "invoice_number": 1, "bank_txn_id": 1}
+        ).to_list(5000)
+
+        existing_by_txn = {e.get("bank_txn_id") for e in existing_expenses if e.get("bank_txn_id")}
+        existing_by_match = set()
+        for e in existing_expenses:
+            key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
+            existing_by_match.add(key)
+
+        created = 0
+        skipped = 0
+        duplicates = []
+        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
+
+        for t in to_sync:
+            if t["id"] in existing_by_txn:
+                skipped += 1
+                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Já sincronizado (ID)"})
+                continue
+            match_key = f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}"
+            if match_key in existing_by_match:
+                skipped += 1
+                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Duplicado (data + valor + fornecedor)"})
+                continue
+
+            expense = {
+                "id": str(uuid.uuid4()),
+                "date": t["date"],
+                "supplier": t["description"][:100],
+                "nif": "",
+                "invoice_number": "",
+                "category": t.get("category", "outro").capitalize(),
+                "type": cat_to_type.get(t.get("category", ""), "variavel"),
+                "obra_id": None,
+                "obra_name": None,
+                "value_net": round(abs(t["amount"]) / 1.23, 2),
+                "vat_rate": 23,
+                "vat_amount": round(abs(t["amount"]) - abs(t["amount"]) / 1.23, 2),
+                "value_gross": round(abs(t["amount"]), 2),
+                "payment_method": "Transferência Bancária",
+                "notes": f"Importado do extrato bancário: {analysis_doc.get('filename', '')}",
+                "invoice_file": None,
+                "bank_txn_id": t["id"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.expenses.insert_one(expense)
+            existing_by_txn.add(t["id"])
+            existing_by_match.add(match_key)
+            created += 1
+
+        result = {"created": created, "skipped": skipped, "duplicates": duplicates, "total_processed": len(to_sync)}
+        logger.info(f"Auto-sync expenses for {analysis_id}: {created} created, {skipped} skipped")
+        return result
+    except Exception as e:
+        logger.error(f"Auto-sync expenses failed for {analysis_id}: {e}")
+        return {"created": 0, "skipped": 0, "duplicates": [], "total_processed": 0, "error": str(e)}
+
+
+async def _auto_feed_calendar(db, analysis_id, analysis_doc, months_ahead=6):
+    """Automatically create calendar appointments for predicted recurring expenses."""
+    try:
+        recurring = analysis_doc.get("recurring", [])
+        if not recurring:
+            return {"created": 0, "skipped": 0, "total_recurring": 0, "message": "Nenhum pagamento recorrente detectado"}
+
+        today = datetime.now(timezone.utc)
+        created = 0
+        skipped = 0
+        today_naive = today.replace(tzinfo=None)
+
+        for r in recurring:
+            typical_day = r.get("typical_day", 15)
+            freq = r.get("frequency", "mensal")
+            desc = r.get("description", "")[:60]
+            amount = r.get("avg_amount", 0)
+            cat = r.get("category", "outro")
+
+            future_dates = []
+            if freq == "mensal":
+                for i in range(1, months_ahead + 1):
+                    m = today.month + i
+                    y = today.year
+                    while m > 12:
+                        m -= 12
+                        y += 1
+                    try:
+                        future_dates.append(datetime(y, m, min(typical_day, 28)))
+                    except ValueError:
+                        future_dates.append(datetime(y, m, 28))
+            elif freq == "trimestral":
+                for i in range(1, (months_ahead // 3) + 2):
+                    m = today.month + (3 * i)
+                    y = today.year
+                    while m > 12:
+                        m -= 12
+                        y += 1
+                    try:
+                        future_dates.append(datetime(y, m, min(typical_day, 28)))
+                    except ValueError:
+                        future_dates.append(datetime(y, m, 28))
+
+            for fd in future_dates:
+                if fd <= today_naive:
+                    continue
+                date_str = fd.strftime("%Y-%m-%d")
+
+                existing = await db.appointments.find_one({
+                    "date": date_str,
+                    "title": {"$regex": re.escape(desc[:30]), "$options": "i"},
+                    "notes": {"$regex": "Conta Prevista"},
+                })
+                if existing:
+                    skipped += 1
+                    continue
+
+                CAT_LABELS = {"fixo": "Custo Fixo", "variavel": "Variável", "obra": "Obra", "imposto": "Imposto", "financeiro": "Financeiro"}
+                cat_label = CAT_LABELS.get(cat, cat)
+
+                appointment = {
+                    "id": str(uuid.uuid4()),
+                    "title": f"💰 {desc}",
+                    "client_name": "",
+                    "date": date_str,
+                    "time_start": "09:00",
+                    "time_end": "09:30",
+                    "notes": f"Conta Prevista ({cat_label}) · Valor estimado: {amount:.2f}€ · {freq} · Dia típico: {typical_day}",
+                    "employee_ids": [],
+                    "location": "",
+                    "work_id": None,
+                    "is_predicted_bill": True,
+                    "predicted_amount": amount,
+                    "predicted_category": cat,
+                    "source_analysis_id": analysis_id,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await db.appointments.insert_one(appointment)
+                created += 1
+
+        result = {"created": created, "skipped": skipped, "total_recurring": len(recurring),
+                  "message": f"{created} contas previstas adicionadas ao calendário"}
+        logger.info(f"Auto-feed calendar for {analysis_id}: {created} created, {skipped} skipped")
+        return result
+    except Exception as e:
+        logger.error(f"Auto-feed calendar failed for {analysis_id}: {e}")
+        return {"created": 0, "skipped": 0, "total_recurring": 0, "error": str(e)}
+
+
 async def _finalize_analysis(db, analysis_id, transactions, filename, user_name):
-    """Run AI categorization and compute all analytics, then update the DB record."""
+    """Run AI categorization and compute all analytics, then update the DB record.
+    Also auto-syncs to expenses and feeds the recurring calendar."""
     try:
         # AI categorization for unknowns
         transactions = await _ai_categorize_batch(transactions)
@@ -611,6 +766,25 @@ async def _finalize_analysis(db, analysis_id, transactions, filename, user_name)
                 by_month[m]["expenses"] += abs(t["amount"])
         by_month = {k: {"income": round(v["income"], 2), "expenses": round(v["expenses"], 2)} for k, v in sorted(by_month.items())}
 
+        analysis_doc = {
+            "id": analysis_id,
+            "filename": filename,
+            "transactions": transactions,
+            "recurring": recurring,
+            "cashflow": cashflow,
+            "taxes": taxes,
+            "by_category": by_category,
+            "by_month": by_month,
+            "date_from": date_from,
+            "date_to": date_to,
+            "transaction_count": len(transactions),
+        }
+
+        # Auto-sync to expenses
+        sync_result = await _auto_sync_expenses(db, analysis_id, analysis_doc)
+        # Auto-feed recurring calendar
+        calendar_result = await _auto_feed_calendar(db, analysis_id, analysis_doc)
+
         await db.bank_analyses.update_one(
             {"id": analysis_id},
             {"$set": {
@@ -624,9 +798,11 @@ async def _finalize_analysis(db, analysis_id, transactions, filename, user_name)
                 "taxes": taxes,
                 "by_category": by_category,
                 "by_month": by_month,
+                "auto_sync": sync_result,
+                "auto_calendar": calendar_result,
             }}
         )
-        logger.info(f"Analysis {analysis_id} completed: {len(transactions)} transactions")
+        logger.info(f"Analysis {analysis_id} completed: {len(transactions)} txns, sync={sync_result.get('created',0)} created/{sync_result.get('skipped',0)} skipped, calendar={calendar_result.get('created',0)}")
     except Exception as e:
         logger.error(f"Background analysis {analysis_id} failed: {e}")
         await db.bank_analyses.update_one(
@@ -766,6 +942,13 @@ def create_bank_analysis_router(db, get_current_user):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": user_name,
         }
+
+        # Auto-sync to expenses + calendar
+        sync_result = await _auto_sync_expenses(db, analysis_id, analysis)
+        calendar_result = await _auto_feed_calendar(db, analysis_id, analysis)
+        analysis["auto_sync"] = sync_result
+        analysis["auto_calendar"] = calendar_result
+
         await db.bank_analyses.insert_one(analysis)
         analysis.pop("_id", None)
 
@@ -778,6 +961,7 @@ def create_bank_analysis_router(db, get_current_user):
             {}, {"_id": 0, "id": 1, "filename": 1, "date_from": 1, "date_to": 1,
                  "transaction_count": 1, "created_at": 1, "created_by": 1,
                  "status": 1, "error": 1,
+                 "auto_sync": 1, "auto_calendar": 1,
                  "taxes.total_income": 1, "taxes.total_expenses": 1}
         ).sort("created_at", -1)
         return await cursor.to_list(50)

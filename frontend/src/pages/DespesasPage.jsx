@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw, AlertTriangle, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -47,6 +47,7 @@ export default function DespesasPage() {
   const [suggestions, setSuggestions] = useState(null);
   const [categorySource, setCategorySource] = useState(null);
   const [saveDuplicateConfirm, setSaveDuplicateConfirm] = useState(null);
+  const [categorizing, setCategorizing] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -190,6 +191,21 @@ export default function DespesasPage() {
     window.open(url, '_blank');
   };
 
+  const handleAICategorize = async () => {
+    setCategorizing(true);
+    try {
+      const { data } = await api.post('/expenses/ai-categorize');
+      if (data.updated_keywords + data.updated_ai > 0) {
+        toast.success(data.message);
+        fetchAll();
+      } else {
+        toast.info('Todas as despesas já estão categorizadas.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro na categorização IA');
+    } finally { setCategorizing(false); }
+  };
+
   const topCats = summary ? Object.entries(summary.by_category || {}).sort((a, b) => b[1] - a[1]).slice(0, 5) : [];
   const monthlyChartData = summary ? Object.entries(summary.by_month || {}).map(([m, v]) => ({
     name: monthName(parseInt(m)),
@@ -207,6 +223,16 @@ export default function DespesasPage() {
           <p className="text-zinc-400 mt-1 font-medium">Controlo de custos mensais com extração IA de faturas</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            data-testid="ai-categorize-btn"
+            onClick={handleAICategorize}
+            disabled={categorizing}
+            className="h-10 px-4 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 hover:bg-purple-500/20 text-xs font-semibold flex items-center gap-1.5 disabled:opacity-50"
+            title="Categorizar despesas com IA"
+          >
+            {categorizing ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+            {categorizing ? 'A categorizar...' : 'Categorizar com IA'}
+          </button>
           <button
             data-testid="refresh-expenses"
             onClick={fetchAll}
