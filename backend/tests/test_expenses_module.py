@@ -453,8 +453,8 @@ def api_client():
 def auth_token(api_client):
     """Get authentication token"""
     response = api_client.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     if response.status_code == 200:
         return response.json().get("access_token")
@@ -476,8 +476,8 @@ def cleanup_test_expenses():
     session = requests.Session()
     session.headers.update({"Content-Type": "application/json"})
     login_resp = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     if login_resp.status_code == 200:
         token = login_resp.json().get("access_token")

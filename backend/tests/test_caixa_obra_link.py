@@ -7,10 +7,10 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/") or "http://localhost:8001"
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
-TECH_EMAIL = "d.oliveira1986@gmail.com"
-TECH_PASSWORD = "A24d22r04"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
+TECH_EMAIL = os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com")
+TECH_PASSWORD = os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")
 
 
 # ---------- Fixtures ----------

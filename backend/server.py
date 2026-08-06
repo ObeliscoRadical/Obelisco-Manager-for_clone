@@ -1117,7 +1117,7 @@ async def get_work_caixa(work_id: str, user=Depends(get_current_user)):
 
     # (d) Despesas por pagar em atraso (>30 dias após data da despesa e não pagas)
     def _exp_paid(e):
-        if e.get("paid") is True:
+        if e.get("paid") == True:
             return True
         st = (e.get("payment_status") or "").lower()
         return st in ("pago", "paid")

@@ -439,7 +439,7 @@ export default function GuiasPage() {
                   </p>
                 )}
                 {form.items.map((it, idx) => (
-                  <div key={idx} className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl ${it._selected === false ? 'opacity-40' : 'bg-zinc-950'}`}>
+                  <div key={it.material_id || it.name || idx} className={`grid grid-cols-12 gap-2 items-center p-2 rounded-xl ${it._selected === false ? 'opacity-40' : 'bg-zinc-950'}`}>
                     <input
                       type="checkbox"
                       checked={it._selected !== false}
@@ -623,7 +623,7 @@ export default function GuiasPage() {
                     {detailGuide.reception.photos && detailGuide.reception.photos.length > 0 && (
                       <div className="mt-3 grid grid-cols-3 md:grid-cols-6 gap-2">
                         {detailGuide.reception.photos.map((p, i) => (
-                          <img key={i} src={p} alt={`Foto ${i + 1}`} className="rounded-lg w-full h-20 object-cover" />
+                          <img key={p} src={p} alt={`Foto ${i + 1}`} className="rounded-lg w-full h-20 object-cover" />
                         ))}
                       </div>
                     )}

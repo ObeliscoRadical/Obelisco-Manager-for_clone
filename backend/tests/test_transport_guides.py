@@ -16,8 +16,8 @@ import uuid
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
 # Test credentials
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
 # Tech credentials (will be set during tests)
 TECH_EMAIL = "tecnico@obelisco.pt"

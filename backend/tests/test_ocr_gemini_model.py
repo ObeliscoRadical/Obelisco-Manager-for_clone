@@ -24,8 +24,8 @@ if not BASE_URL:
                 BASE_URL = line.split("=", 1)[1].strip().rstrip("/")
                 break
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
 
 # ------------------------- fixtures -------------------------

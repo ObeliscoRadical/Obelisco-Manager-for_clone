@@ -15,8 +15,8 @@ if not BASE:
             if line.startswith("REACT_APP_BACKEND_URL="):
                 BASE = line.strip().split("=", 1)[1].rstrip("/")
 
-ADMIN = {"email": "admin@obelisco.pt", "password": "obelisco2024"}
-TECH = {"email": "d.oliveira1986@gmail.com", "password": "A24d22r04"}
+ADMIN = {"email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"), "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")}
+TECH = {"email": os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com"), "password": os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")}
 
 
 @pytest.fixture(scope="module")

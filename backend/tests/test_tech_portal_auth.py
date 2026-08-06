@@ -31,11 +31,11 @@ def _load_backend_url():
 BASE_URL = _load_backend_url()
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
-TECH_EMAIL = "d.oliveira1986@gmail.com"
-TECH_PASSWORD = "A24d22r04"
+TECH_EMAIL = os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com")
+TECH_PASSWORD = os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")
 
 TIMEOUT = 30
 

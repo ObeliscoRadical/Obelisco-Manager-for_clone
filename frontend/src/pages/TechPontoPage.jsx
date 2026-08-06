@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,7 @@ export default function TechPontoPage() {
   const [saving, setSaving] = useState(false);
   const [locationError, setLocationError] = useState('');
 
-  const reload = async () => {
+  const reload = useCallback(async () => {
     try {
       const [t, w] = await Promise.all([
         api.get('/tech/timesheet/today'),
@@ -27,9 +27,9 @@ export default function TechPontoPage() {
     } catch (err) {
       console.debug('[ponto]', err.message);
     } finally { setLoading(false); }
-  };
+  }, []);
 
-  useEffect(() => { reload(); }, []);
+  useEffect(() => { reload(); }, [reload]);
 
   const getLocation = () => new Promise((resolve, reject) => {
     if (!navigator.geolocation) { reject(new Error('Geolocalização não suportada')); return; }

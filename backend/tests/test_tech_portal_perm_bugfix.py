@@ -17,8 +17,8 @@ import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://eletro-manager-1.preview.emergentagent.com").rstrip("/")
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
 TS = int(time.time())
 TEC_EMAIL = f"testtec_{TS}@obelisco.pt"
@@ -163,7 +163,7 @@ class TestRegressions:
     def test_22_real_tech_still_works(self):
         # Real employee tech via /tech/auth/login
         r = requests.post(f"{BASE_URL}/api/tech/auth/login",
-                          json={"email": "d.oliveira1986@gmail.com", "password": "A24d22r04"})
+                          json={"email": os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com"), "password": os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")})
         assert r.status_code == 200, f"Real tech login broken: {r.text}"
         tok = r.json()["access_token"]
         # can see own guides

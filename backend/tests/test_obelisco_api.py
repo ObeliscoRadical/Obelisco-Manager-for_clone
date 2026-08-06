@@ -15,13 +15,13 @@ class TestAuth:
     def test_login_success(self):
         """Test login with valid credentials"""
         response = requests.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@obelisco.pt",
-            "password": "obelisco2024"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
         })
         assert response.status_code == 200, f"Login failed: {response.text}"
         data = response.json()
         assert "id" in data
-        assert data["email"] == "admin@obelisco.pt"
+        assert data["email"] == os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
         assert data["name"] == "Admin"
         assert data["role"] == "admin"
         # Check cookies are set
@@ -30,7 +30,7 @@ class TestAuth:
     def test_login_invalid_credentials(self):
         """Test login with wrong password"""
         response = requests.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@obelisco.pt",
+            "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
             "password": "wrongpassword"
         })
         assert response.status_code == 401
@@ -55,8 +55,8 @@ class TestAuth:
         session = requests.Session()
         # Login first
         login_resp = session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@obelisco.pt",
-            "password": "obelisco2024"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
         })
         assert login_resp.status_code == 200
         
@@ -72,8 +72,8 @@ def auth_session():
     """Create authenticated session"""
     session = requests.Session()
     response = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     if response.status_code != 200:
         pytest.skip("Authentication failed")

@@ -360,7 +360,7 @@ export default function AgendaPage() {
                     <AlertTriangle size={16} /> Conflito no Google Calendar
                   </div>
                   {calendarCheck.conflicts?.map((c, i) => (
-                    <p key={i} className="text-xs text-zinc-400 ml-6">
+                    <p key={c.summary + i} className="text-xs text-zinc-400 ml-6">
                       {c.summary} ({new Date(c.start).toLocaleTimeString('pt-PT', {hour:'2-digit',minute:'2-digit'})} — {new Date(c.end).toLocaleTimeString('pt-PT', {hour:'2-digit',minute:'2-digit'})})
                     </p>
                   ))}
@@ -369,7 +369,7 @@ export default function AgendaPage() {
                       <p className="text-xs text-zinc-500 mb-1">Horários alternativos sugeridos:</p>
                       <div className="flex flex-wrap gap-1">
                         {calendarCheck.suggested_times.map((s, i) => (
-                          <button key={i} type="button" onClick={() => applySuggestion(s)}
+                          <button key={s.datetime || i} type="button" onClick={() => applySuggestion(s)}
                             className="px-2 py-1 text-xs bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 rounded-lg hover:bg-yellow-400/20"
                             data-testid={`suggestion-${i}`}>
                             {s.display}

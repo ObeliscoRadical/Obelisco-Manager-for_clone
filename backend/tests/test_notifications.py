@@ -16,10 +16,10 @@ import requests
 from datetime import datetime, timedelta, timezone
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASS = "obelisco2024"
-TECH_EMAIL = "d.oliveira1986@gmail.com"
-TECH_PASS = "A24d22r04"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
+TECH_EMAIL = os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com")
+TECH_PASS = os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")
 TECH_EMP_ID = "4d357339-7b7e-40bb-91fe-93109060cbda"
 
 

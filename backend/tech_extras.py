@@ -5,7 +5,7 @@ Endpoints extra do Portal Técnico:
 - Agenda (obras/appointments do técnico)
 - Perfil pessoal + upload de fotos
 """
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, BackgroundTasks
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Literal
@@ -108,7 +108,7 @@ def create_tech_extras_router(db, get_current_user):
         return att or {"employee_id": emp_id, "date": today, "punches": [], "total_hours": 0}
 
     @tech_extra_router.post("/timesheet/punch")
-    async def punch_timesheet(input: ClockPunch, user=Depends(get_tech_user)):
+    async def punch_timesheet(input: ClockPunch, background_tasks: BackgroundTasks, user=Depends(get_tech_user)):
         emp_id = user.get("id")
         today = _today_iso()
         now = _now_iso()
@@ -152,6 +152,25 @@ def create_tech_extras_router(db, get_current_user):
             await db.attendance.insert_one(doc)
 
         doc.pop("_id", None)
+
+        # Telegram notification for ponto entries
+        try:
+            from service_orders import send_telegram_notification
+            ACTION_LABELS = {"in": "ENTRADA", "out": "SAÍDA", "break_start": "INÍCIO PAUSA", "break_end": "FIM PAUSA"}
+            ACTION_EMOJIS = {"in": "🟢", "out": "🔴", "break_start": "☕", "break_end": "🔵"}
+            emoji = ACTION_EMOJIS.get(input.action, "📍")
+            label = ACTION_LABELS.get(input.action, input.action.upper())
+            hora = datetime.fromisoformat(now).strftime("%H:%M")
+            msg = f"{emoji} <b>{user.get('name', '')}</b> registou <b>{label}</b>\n⏰ Hora: {hora}"
+            if input.address:
+                msg += f"\n📍 Local: {input.address}"
+            elif input.latitude and input.longitude:
+                msg += f"\n📍 GPS: {input.latitude:.5f}, {input.longitude:.5f}"
+            await send_telegram_notification(msg)
+        except Exception as e:
+            import logging as _log
+            _log.getLogger(__name__).warning(f"Telegram ponto notification failed: {e}")
+
         return doc
 
     @tech_extra_router.get("/timesheet/week")
@@ -290,7 +309,7 @@ def create_tech_extras_router(db, get_current_user):
         return msgs
 
     @tech_extra_router.post("/messages")
-    async def create_tech_message(input: TechMessageCreate, user=Depends(get_tech_user)):
+    async def create_tech_message(input: TechMessageCreate, background_tasks: BackgroundTasks, user=Depends(get_tech_user)):
         emp_id = user.get("id")
         doc = {
             "id": str(uuid.uuid4()),
@@ -327,14 +346,13 @@ def create_tech_extras_router(db, get_current_user):
         # Push notification to admins
         try:
             from push_notifications import send_push_to_role, PushMessage
-            import asyncio
             preview = (input.text or "")[:60]
-            asyncio.ensure_future(send_push_to_role(db, "admin", PushMessage(
+            background_tasks.add_task(send_push_to_role, db, "admin", PushMessage(
                 title=f"💬 {user.get('name', 'Técnico')}",
                 body=preview,
                 tag=f"chat-{emp_id}",
                 url="/mensagens-tecnicos",
-            )))
+            ))
         except Exception:
             pass
         return doc
@@ -373,7 +391,7 @@ def create_tech_extras_router(db, get_current_user):
         return msgs
 
     @tech_extra_router.post("/admin/messages/{employee_id}")
-    async def create_admin_message(employee_id: str, input: TechMessageCreate, user=Depends(get_current_user)):
+    async def create_admin_message(employee_id: str, input: TechMessageCreate, background_tasks: BackgroundTasks, user=Depends(get_current_user)):
         emp = await db.employees.find_one({"id": employee_id}, {"_id": 0, "name": 1})
         if not emp:
             raise HTTPException(status_code=404, detail="Funcionário não encontrado")
@@ -407,14 +425,13 @@ def create_tech_extras_router(db, get_current_user):
         # Push notification to the technician
         try:
             from push_notifications import send_push_to_user, PushMessage
-            import asyncio
             preview = (input.text or "")[:60]
-            asyncio.ensure_future(send_push_to_user(db, employee_id, PushMessage(
+            background_tasks.add_task(send_push_to_user, db, employee_id, PushMessage(
                 title=f"💬 {user.get('name', 'Escritório')}",
                 body=preview,
                 tag=f"chat-admin-{employee_id}",
                 url="/tech/chat",
-            )))
+            ))
         except Exception:
             pass
         return doc

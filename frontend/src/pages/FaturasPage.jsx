@@ -401,7 +401,7 @@ export default function FaturasPage() {
             className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[140px]"
           >
             <option value="">Todos</option>
-            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[220px]">

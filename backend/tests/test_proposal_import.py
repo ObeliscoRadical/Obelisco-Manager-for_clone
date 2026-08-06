@@ -13,8 +13,8 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://eletro-manager-1.pre
 API = f"{BASE_URL}/api"
 LLM_TIMEOUT = 120
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
 
 @pytest.fixture(scope="module")

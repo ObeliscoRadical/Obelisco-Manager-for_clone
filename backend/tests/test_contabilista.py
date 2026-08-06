@@ -13,8 +13,8 @@ if not BASE_URL:
             if line.startswith("REACT_APP_BACKEND_URL="):
                 BASE_URL = line.split("=", 1)[1].strip().rstrip("/")
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
 
 
 @pytest.fixture(scope="module")

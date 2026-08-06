@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import TechLayout from '../components/TechLayout';
@@ -41,7 +41,7 @@ export default function TechPedidosPage() {
   const [selectedId, setSelectedId] = useState(null);
   const headers = { Authorization: `Bearer ${token}` };
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
       const params = filter !== 'all' ? { status: filter } : {};
@@ -49,9 +49,9 @@ export default function TechPedidosPage() {
       setOrders(res.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  };
+  }, [filter, token]);
 
-  useEffect(() => { fetchOrders(); }, [filter]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   if (selectedId) {
     return <TechOrderDetail orderId={selectedId} onBack={() => { setSelectedId(null); fetchOrders(); }} />;

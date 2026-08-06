@@ -25,8 +25,8 @@ def auth_session():
     
     # Login
     response = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     assert response.status_code == 200, f"Login failed: {response.text}"
     data = response.json()

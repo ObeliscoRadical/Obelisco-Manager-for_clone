@@ -20,8 +20,8 @@ class TestSignatureFeature:
         
         # Login
         login_resp = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@obelisco.pt",
-            "password": "obelisco2024"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
         })
         assert login_resp.status_code == 200, f"Login failed: {login_resp.text}"
         
@@ -204,8 +204,8 @@ class TestRegressionExistingEndpoints:
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
         login_resp = self.session.post(f"{BASE_URL}/api/auth/login", json={
-            "email": "admin@obelisco.pt",
-            "password": "obelisco2024"
+            "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+            "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
         })
         assert login_resp.status_code == 200
         yield

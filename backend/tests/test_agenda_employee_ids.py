@@ -6,10 +6,10 @@ from datetime import date, timedelta
 BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://eletro-manager-1.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASS = "obelisco2024"
-TECH_EMAIL = "d.oliveira1986@gmail.com"
-TECH_PASS = "A24d22r04"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
+ADMIN_PASS = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
+TECH_EMAIL = os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com")
+TECH_PASS = os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")
 DANIEL_ID = "4d357339-7b7e-40bb-91fe-93109060cbda"
 
 

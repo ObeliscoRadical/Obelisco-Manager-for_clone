@@ -15,8 +15,8 @@ def auth_session():
     """Create authenticated session"""
     session = requests.Session()
     response = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     if response.status_code != 200:
         pytest.skip("Authentication failed")

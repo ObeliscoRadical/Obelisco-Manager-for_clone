@@ -16,7 +16,7 @@ if not BASE_URL:
 @pytest.fixture(scope="module")
 def auth_headers():
     r = requests.post(f"{BASE_URL}/api/auth/login",
-                      json={"email": "admin@obelisco.pt", "password": "obelisco2024"})
+                      json={"email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"), "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")})
     assert r.status_code == 200, f"Login failed: {r.status_code} {r.text}"
     token = r.json().get("access_token") or r.json().get("token")
     assert token, f"No token in login: {r.json()}"

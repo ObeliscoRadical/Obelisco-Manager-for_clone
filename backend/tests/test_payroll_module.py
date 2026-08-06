@@ -574,8 +574,8 @@ def auth_session():
     
     # Login
     login_resp = session.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt"),
+        "password": os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
     })
     
     if login_resp.status_code != 200:

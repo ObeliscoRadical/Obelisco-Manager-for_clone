@@ -461,7 +461,7 @@ function ChatContabilista() {
         </CardHeader>
         <CardContent className="flex-1 overflow-y-auto py-4 space-y-3" data-testid="chat-messages">
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div key={m.id || i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
                 m.role === 'user'
                   ? 'bg-yellow-500 text-zinc-900 rounded-br-sm'
@@ -487,7 +487,7 @@ function ChatContabilista() {
         <div className="border-t border-zinc-800 p-3 space-y-2">
           <div className="flex flex-wrap gap-1">
             {suggestions.map((s, i) => (
-              <button key={i} onClick={() => setInput(s)} data-testid={`suggestion-${i}`}
+              <button key={s} onClick={() => setInput(s)} data-testid={`suggestion-${i}`}
                 className="text-[10px] px-2 py-1 rounded-full border border-zinc-700 text-zinc-400 hover:bg-zinc-800 hover:text-yellow-400 transition-colors">
                 {s}
               </button>
