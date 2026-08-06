@@ -345,7 +345,7 @@ Transações:
 
 Responde EXACTAMENTE no formato: NUMERO:CATEGORIA (uma por linha, sem espaços extra)"""
 
-            chat = LlmChat(api_key=EKEY, session_id=f"bank-{uuid.uuid4()}")
+            chat = LlmChat(api_key=EKEY, session_id=f"bank-{uuid.uuid4()}", system_message="És um assistente de categorização de transações bancárias portuguesas.")
             chat = chat.with_model("openai", "gpt-4o-mini")
             resp = await chat.send_message(UserMessage(text=prompt))
 
@@ -559,7 +559,104 @@ def _estimate_taxes(transactions: list, year: int) -> dict:
     }
 
 
+def _build_analysis_data(transactions, filename, user_name):
+    """Build the full analysis dict from parsed transactions."""
+    # Pre-categorize with known patterns
+    for t in transactions:
+        cat = _pre_categorize(t["description"])
+        if cat:
+            t["category"] = cat
+        if "id" not in t:
+            t["id"] = str(uuid.uuid4())
+
+    return transactions
+
+
+async def _finalize_analysis(db, analysis_id, transactions, filename, user_name):
+    """Run AI categorization and compute all analytics, then update the DB record."""
+    try:
+        # AI categorization for unknowns
+        transactions = await _ai_categorize_batch(transactions)
+
+        # Detect recurring payments
+        recurring = _detect_recurring(transactions)
+
+        # Date range
+        dates = [t["date"] for t in transactions]
+        date_from = min(dates)
+        date_to = max(dates)
+        year = int(date_to[:4])
+
+        # Cash flow projection
+        cashflow = _project_cashflow(transactions, months_ahead=6)
+
+        # Tax estimation
+        taxes = _estimate_taxes(transactions, year)
+
+        # Summary by category
+        by_category = defaultdict(lambda: {"count": 0, "total": 0})
+        for t in transactions:
+            cat = t.get("category", "outro")
+            by_category[cat]["count"] += 1
+            by_category[cat]["total"] += t["amount"]
+        by_category = {k: {"count": v["count"], "total": round(v["total"], 2)} for k, v in by_category.items()}
+
+        # Monthly summary
+        by_month = defaultdict(lambda: {"income": 0, "expenses": 0})
+        for t in transactions:
+            m = t["date"][:7]
+            if t["amount"] > 0:
+                by_month[m]["income"] += t["amount"]
+            else:
+                by_month[m]["expenses"] += abs(t["amount"])
+        by_month = {k: {"income": round(v["income"], 2), "expenses": round(v["expenses"], 2)} for k, v in sorted(by_month.items())}
+
+        await db.bank_analyses.update_one(
+            {"id": analysis_id},
+            {"$set": {
+                "status": "completed",
+                "date_from": date_from,
+                "date_to": date_to,
+                "transaction_count": len(transactions),
+                "transactions": transactions,
+                "recurring": recurring,
+                "cashflow": cashflow,
+                "taxes": taxes,
+                "by_category": by_category,
+                "by_month": by_month,
+            }}
+        )
+        logger.info(f"Analysis {analysis_id} completed: {len(transactions)} transactions")
+    except Exception as e:
+        logger.error(f"Background analysis {analysis_id} failed: {e}")
+        await db.bank_analyses.update_one(
+            {"id": analysis_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+
+
+async def _process_pdf_background(db, analysis_id, content, filename, user_name):
+    """Background task: parse PDF with AI, then finalize."""
+    try:
+        transactions = await _parse_pdf(content, filename)
+        if not transactions:
+            await db.bank_analyses.update_one(
+                {"id": analysis_id},
+                {"$set": {"status": "failed", "error": "Nenhuma transação encontrada no PDF."}}
+            )
+            return
+        transactions = _build_analysis_data(transactions, filename, user_name)
+        await _finalize_analysis(db, analysis_id, transactions, filename, user_name)
+    except Exception as e:
+        logger.error(f"PDF background processing failed for {analysis_id}: {e}")
+        await db.bank_analyses.update_one(
+            {"id": analysis_id},
+            {"$set": {"status": "failed", "error": str(e)}}
+        )
+
+
 def create_bank_analysis_router(db, get_current_user):
+    import asyncio
     router = APIRouter(prefix="/api/bank-analysis", tags=["bank-analysis"])
 
     @router.post("/upload")
@@ -575,7 +672,25 @@ def create_bank_analysis_router(db, get_current_user):
         if len(content) > 10 * 1024 * 1024:
             raise HTTPException(400, "Ficheiro demasiado grande (máx 10MB)")
 
-        # Parse file
+        analysis_id = str(uuid.uuid4())
+        user_name = user.get("name", "")
+
+        # PDF: async background processing (Gemini takes 2-4 min)
+        if ext == ".pdf":
+            pending = {
+                "id": analysis_id,
+                "filename": filename,
+                "status": "processing",
+                "transaction_count": 0,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "created_by": user_name,
+            }
+            await db.bank_analyses.insert_one(pending)
+            asyncio.create_task(_process_pdf_background(db, analysis_id, content, filename, user_name))
+            pending.pop("_id", None)
+            return pending
+
+        # Non-PDF: synchronous (fast)
         try:
             if ext in (".csv", ".txt"):
                 transactions = _parse_csv(content, filename)
@@ -583,8 +698,6 @@ def create_bank_analysis_router(db, get_current_user):
                 transactions = _parse_excel(content, filename)
             elif ext in (".ofx", ".qfx"):
                 transactions = _parse_ofx(content, filename)
-            elif ext == ".pdf":
-                transactions = await _parse_pdf(content, filename)
             else:
                 raise HTTPException(400, f"Formato não suportado: {ext}. Use CSV, Excel, OFX ou PDF.")
         except HTTPException:
@@ -598,12 +711,7 @@ def create_bank_analysis_router(db, get_current_user):
         if not transactions:
             raise HTTPException(400, "Nenhuma transação encontrada no ficheiro.")
 
-        # Pre-categorize with known patterns
-        for t in transactions:
-            cat = _pre_categorize(t["description"])
-            if cat:
-                t["category"] = cat
-            t["id"] = str(uuid.uuid4())
+        transactions = _build_analysis_data(transactions, filename, user_name)
 
         # AI categorization for unknowns
         transactions = await _ai_categorize_batch(transactions)
@@ -643,8 +751,9 @@ def create_bank_analysis_router(db, get_current_user):
 
         # Save analysis
         analysis = {
-            "id": str(uuid.uuid4()),
+            "id": analysis_id,
             "filename": filename,
+            "status": "completed",
             "date_from": date_from,
             "date_to": date_to,
             "transaction_count": len(transactions),
@@ -655,7 +764,7 @@ def create_bank_analysis_router(db, get_current_user):
             "by_category": by_category,
             "by_month": by_month,
             "created_at": datetime.now(timezone.utc).isoformat(),
-            "created_by": user.get("name", ""),
+            "created_by": user_name,
         }
         await db.bank_analyses.insert_one(analysis)
         analysis.pop("_id", None)
@@ -668,9 +777,21 @@ def create_bank_analysis_router(db, get_current_user):
         cursor = db.bank_analyses.find(
             {}, {"_id": 0, "id": 1, "filename": 1, "date_from": 1, "date_to": 1,
                  "transaction_count": 1, "created_at": 1, "created_by": 1,
+                 "status": 1, "error": 1,
                  "taxes.total_income": 1, "taxes.total_expenses": 1}
         ).sort("created_at", -1)
         return await cursor.to_list(50)
+
+    @router.get("/{analysis_id}/status")
+    async def get_analysis_status(analysis_id: str, user=Depends(get_current_user)):
+        """Check processing status of an analysis (used for PDF polling)."""
+        doc = await db.bank_analyses.find_one(
+            {"id": analysis_id},
+            {"_id": 0, "id": 1, "status": 1, "error": 1, "transaction_count": 1, "filename": 1}
+        )
+        if not doc:
+            raise HTTPException(404, "Análise não encontrada")
+        return doc
 
     @router.get("/{analysis_id}")
     async def get_analysis(analysis_id: str, user=Depends(get_current_user)):

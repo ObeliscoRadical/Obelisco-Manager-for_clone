@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 40: Verified async PDF bank statement upload fix. Backend: 10/10 pytest tests passed - CSV upload still synchronous returning status=completed with full analysis data; PDF async flow verified by inserting a mock 'processing' record in DB and confirming /status endpoint returns processing/failed correctly; listing endpoint includes 'status' field; 404 and auth checks pass. Frontend: Análise Bancária page loads; upload button present; mock processing item renders with 'A processar...' spinner badge, is non-clickable (no cursor-pointer, opacity-70), does NOT navigate to detail on click, and shows a delete button. Existing legacy CSV analyses render normally alongside. Did NOT test real PDF upload end-to-end (Gemini takes 3-4 min per task instructions).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_async_pdf.py",
+    "/app/test_reports/pytest/iter40_async_pdf.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "bank_analysis.py upload endpoint (line ~679): PDF branch correctly inserts pending record with status='processing' and spawns background task via asyncio.create_task before returning immediately - no more 502 timeouts.",
+    "bank_analysis.py _finalize_analysis / _process_pdf_background: properly wrap the whole flow in try/except and update DB with status='failed' + error message on any exception, so frontend polling can surface errors gracefully.",
+    "bank_analysis.py list endpoint projection now includes 'status' and 'error' fields - needed by frontend for badge rendering.",
+    "bank_analysis.py _ai_categorize_batch (line ~348): system_message argument now correctly passed to LlmChat constructor (previously missing per problem statement).",
+    "AnaliseBancariaPage.jsx startPolling: correctly polls every 5s, clears interval on completed/failed, fetches full analysis on completion, and handles transient errors silently.",
+    "AnaliseBancariaPage.jsx list rendering (line ~229): properly guards click handler with a.status !== 'processing' && a.status !== 'failed' and applies opacity + border color to indicate non-clickable state. Delete button uses e.stopPropagation.",
+    "AnaliseBancariaPage.jsx handleUpload timeout=120000 (2 min) - could be too short if backend is slow to respond even to the immediate insert; but in practice DB insert is <1s so acceptable.",
+    "Minor: pollRef.current interval keeps running if user navigates away from page - the useEffect cleanup handles it on unmount but not on refresh; low priority since polling stops on completion/failure anyway."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter40_async_pdf.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (all UI behaviours for processing/completed rendering verified)"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Mocked processing/failed PDF records inserted directly via pymongo to simulate async flow without invoking Gemini; all TEST_ITER40 records cleaned up at end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Iteration 40 verified the PDF async upload fix. Real PDF upload → Gemini extraction was NOT tested end-to-end (takes 3-4 min). To validate that path, main agent should manually upload a real BPI PDF and confirm: (1) immediate 200 response with status=processing, (2) frontend banner shows 'A extrair transações do PDF com IA...' with dots animation, (3) after 2-4 minutes the polling detects completion and opens the analysis detail. The mock-DB approach used here validates all UI branches and endpoint contracts without paying the Gemini latency cost. Test file: /app/backend/tests/test_iter40_async_pdf.py.",
+  "rca_of_the_issue": "Original bug: PDF uploads failed with 'Erro ao processar extrato' due to Cloudflare ~60s proxy timeout while Gemini took 2-4 min → 502. Fix decouples response from work: PDF branch inserts a pending record and spawns asyncio.create_task(_process_pdf_background) then returns {status: 'processing', id}. Frontend polls /status every 5s until status=completed|failed, then fetches full analysis. Also fixed silent AI-categorization failure (missing system_message in LlmChat)."
+}

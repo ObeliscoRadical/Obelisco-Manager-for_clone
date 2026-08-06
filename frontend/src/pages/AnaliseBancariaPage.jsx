@@ -29,13 +29,16 @@ export default function AnaliseBancariaPage() {
   const [current, setCurrent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [processingId, setProcessingId] = useState(null);
   const [view, setView] = useState('list'); // list | detail
   const [taxAlerts, setTaxAlerts] = useState(null);
   const fileRef = useRef(null);
+  const pollRef = useRef(null);
 
   useEffect(() => {
     fetchList();
     fetchAlerts();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, []);
 
   const fetchList = async () => {
@@ -52,6 +55,36 @@ export default function AnaliseBancariaPage() {
     } catch { }
   };
 
+  const startPolling = (analysisId) => {
+    setProcessingId(analysisId);
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/bank-analysis/${analysisId}/status`);
+        if (data.status === 'completed') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setProcessingId(null);
+          setUploading(false);
+          toast.success(`${data.transaction_count} transações analisadas!`);
+          const full = await api.get(`/bank-analysis/${analysisId}`);
+          setCurrent(full.data);
+          setView('detail');
+          fetchList();
+        } else if (data.status === 'failed') {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setProcessingId(null);
+          setUploading(false);
+          toast.error(data.error || 'Erro ao processar PDF');
+          fetchList();
+        }
+      } catch {
+        // Ignore transient polling errors
+      }
+    }, 5000);
+  };
+
   const handleUpload = async (file) => {
     if (!file) return;
     setUploading(true);
@@ -62,14 +95,21 @@ export default function AnaliseBancariaPage() {
         headers: { 'Content-Type': 'multipart/form-data' },
         timeout: 120000,
       });
-      toast.success(`${data.transaction_count} transações analisadas!`);
-      setCurrent(data);
-      setView('detail');
-      fetchList();
+      if (data.status === 'processing') {
+        toast.info('PDF recebido! A IA está a extrair as transações... Pode demorar 2-4 minutos.');
+        startPolling(data.id);
+        fetchList();
+      } else {
+        toast.success(`${data.transaction_count} transações analisadas!`);
+        setCurrent(data);
+        setView('detail');
+        setUploading(false);
+        fetchList();
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao processar extrato');
-    } finally {
       setUploading(false);
+    } finally {
       if (fileRef.current) fileRef.current.value = '';
     }
   };
@@ -119,10 +159,26 @@ export default function AnaliseBancariaPage() {
       </div>
 
       {uploading && (
-        <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-xl p-6 text-center">
+        <div className="bg-yellow-400/10 border border-yellow-400/30 rounded-xl p-6 text-center" data-testid="upload-processing-banner">
           <Loader2 className="w-10 h-10 text-yellow-400 animate-spin mx-auto mb-3" />
-          <p className="text-yellow-400 font-semibold">A processar extrato com IA...</p>
-          <p className="text-xs text-zinc-500 mt-1">Leitura, categorização, detecção de recorrentes e cálculo de impostos. Pode demorar 30-60 segundos.</p>
+          <p className="text-yellow-400 font-semibold">
+            {processingId ? 'A extrair transações do PDF com IA...' : 'A processar extrato com IA...'}
+          </p>
+          <p className="text-xs text-zinc-500 mt-1">
+            {processingId
+              ? 'O PDF está a ser analisado pelo Gemini. Isto pode demorar 2-4 minutos. Pode navegar e voltar — o processamento continua em segundo plano.'
+              : 'Leitura, categorização, detecção de recorrentes e cálculo de impostos. Pode demorar 30-60 segundos.'}
+          </p>
+          {processingId && (
+            <div className="mt-3 flex items-center justify-center gap-2">
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '200ms' }} />
+                <span className="w-2 h-2 bg-yellow-400 rounded-full animate-bounce" style={{ animationDelay: '400ms' }} />
+              </div>
+              <span className="text-xs text-zinc-600">A verificar progresso a cada 5s</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -170,19 +226,27 @@ export default function AnaliseBancariaPage() {
       ) : (
         <div className="space-y-3">
           {analyses.map(a => (
-            <div key={a.id} onClick={() => openAnalysis(a.id)} className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 cursor-pointer hover:border-yellow-400/30 transition-all" data-testid={`analysis-${a.id}`}>
+            <div key={a.id} onClick={() => a.status !== 'processing' && a.status !== 'failed' && openAnalysis(a.id)} className={`bg-zinc-900 border rounded-xl p-4 transition-all ${a.status === 'processing' ? 'border-yellow-400/30 opacity-70' : a.status === 'failed' ? 'border-red-500/30 opacity-70' : 'border-zinc-800 cursor-pointer hover:border-yellow-400/30'}`} data-testid={`analysis-${a.id}`}>
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-white font-medium">{a.filename}</h3>
-                  <p className="text-xs text-zinc-500">{a.date_from} → {a.date_to} · {a.transaction_count} transações</p>
+                  <h3 className="text-white font-medium flex items-center gap-2">
+                    {a.filename}
+                    {a.status === 'processing' && <span className="text-xs text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-full flex items-center gap-1"><Loader2 size={12} className="animate-spin" /> A processar...</span>}
+                    {a.status === 'failed' && <span className="text-xs text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full">Erro</span>}
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    {a.status === 'processing' ? 'A extrair transações do PDF...' : a.status === 'failed' ? (a.error || 'Erro no processamento') : `${a.date_from} → ${a.date_to} · ${a.transaction_count} transações`}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <div className="text-right">
-                    <p className="text-sm text-green-400">{fmt(a.taxes?.total_income)}</p>
-                    <p className="text-xs text-red-400">{fmt(a.taxes?.total_expenses)}</p>
-                  </div>
+                  {a.status !== 'processing' && a.status !== 'failed' && (
+                    <div className="text-right">
+                      <p className="text-sm text-green-400">{fmt(a.taxes?.total_income)}</p>
+                      <p className="text-xs text-red-400">{fmt(a.taxes?.total_expenses)}</p>
+                    </div>
+                  )}
                   <button onClick={e => { e.stopPropagation(); deleteAnalysis(a.id); }} className="text-zinc-600 hover:text-red-400 p-1"><Trash2 size={16} /></button>
-                  <ChevronRight size={16} className="text-zinc-600" />
+                  {a.status !== 'processing' && a.status !== 'failed' && <ChevronRight size={16} className="text-zinc-600" />}
                 </div>
               </div>
             </div>
