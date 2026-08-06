@@ -1,0 +1,23 @@
+{
+  "summary": "Validated enhanced recurring pattern detection (day intelligence) and auto-feed calendar functionality. Backend: 7/7 pytest tests passed against public URL. Recurring detection returns typical_day, day_consistency (%), next_expected (YYYY-MM-DD), avg_interval_days, frequency. All 5 expected patterns detected on /tmp/extrato_teste.csv with correct typical days (Diego/Carlos salary=15, TSU=25, EDP=10, Vodafone=10), all at 100% consistency. POST /api/bank-analysis/{id}/feed-calendar?months_ahead=6 created 30 appointments (5 recurring x 6 months) with is_predicted_bill=true, source_analysis_id set, notes starting with 'Conta Prevista', title prefixed with 💰. Second call returned created=0 skipped=30 (idempotent via date+title+notes regex duplicate check). DELETE /api/bank-analysis/{id}/calendar-predictions removed all 30 predicted appointments (removed=30) and subsequent GET /api/appointments confirmed zero remaining. Frontend: /analise-bancaria detail page → Recorrentes tab renders each recurring row with 'Dia N (X% consistência)' and 'Próximo previsto: DD/MM/YYYY'. 'Alimentar Calendário' button (data-testid=feed-calendar-btn) is visible, enabled and correctly labelled.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_bank_feed_calendar.py",
+    "/app/test_reports/pytest/iter36_feed_calendar.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "feed_calendar duplicate detection uses date + title regex + notes regex 'Conta Prevista' — this correctly deduplicates cross-analysis but means seeded predictions from a prior analysis will block a new analysis from feeding the same dates (observed during testing: 30 stale predictions from previous analysis id b45fee48 caused first run to skip all 30). Consider (a) exposing 'force=true' to override, or (b) scoping dedup to same source_analysis_id when caller explicitly wants a re-feed.",
+    "In _detect_recurring, the 'mensal' bucket has overlapping conditions (25-35 and 15-45) — the second elif can never be reached for values 25-35 but catches 15-24 and 36-45 which are quite loose for 'monthly'. Acceptable but worth tightening to avoid false positives.",
+    "typical_day is capped at 28 via min(typical_day, 28) when building future dates — bills that historically fall on 29/30/31 will silently shift to day 28. Consider using calendar.monthrange to use the actual last day of each month.",
+    "feed_calendar iterates months from today.month+i without inspecting analysis last_date; if today is before the analysis period ends, some 'future' dates could still be inside the analysis window. Low impact but semantically off."
+  ],
+  "updated_files": ["/app/backend/tests/test_bank_feed_calendar.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Uploaded /tmp/extrato_teste.csv via POST /api/bank-analysis/upload (creates a new analysis each run). Cleaned pre-existing 30 predicted-bill appointments from a stale prior analysis (source b45fee48) via direct DB delete_many to allow the create-count assertion to pass — this is one-off env cleanup, not required for production.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Recurring detection + feed-calendar + delete-predictions fully validated (7 pytest tests + UI screenshot). Note: fresh bank-analysis uploads accumulate in DB; feed_calendar dedups across analyses by (date, title, 'Conta Prevista' notes). To rerun the creation test cleanly, either delete existing predicted-bill appointments or expect skipped>0 & created=0."
+}

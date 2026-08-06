@@ -257,7 +257,7 @@ Transações:
 Responde EXACTAMENTE no formato: NUMERO:CATEGORIA (uma por linha, sem espaços extra)"""
 
             chat = LlmChat(api_key=EKEY, session_id=f"bank-{uuid.uuid4()}")
-            chat = chat.with_model("openai", "gpt-5.4-mini")
+            chat = chat.with_model("openai", "gpt-4o-mini")
             resp = await chat.send_message(UserMessage(text=prompt))
 
             for line in resp.strip().split("\n"):
@@ -288,11 +288,13 @@ Responde EXACTAMENTE no formato: NUMERO:CATEGORIA (uma por linha, sem espaços e
 
 
 def _detect_recurring(transactions: list) -> list:
-    """Detect recurring payments (same supplier, similar amount, monthly pattern)."""
+    """Detect recurring payments with day-of-month intelligence.
+    Groups by normalised supplier, checks amount similarity and date regularity.
+    Outputs: frequency (mensal/trimestral/irregular), typical_day, next_expected_date.
+    """
     by_desc = defaultdict(list)
     for t in transactions:
         if t["type"] == "debit":
-            # Normalize description
             key = re.sub(r'[0-9/\-]+', '', t["description"].lower()).strip()[:40]
             by_desc[key].append(t)
 
@@ -300,28 +302,75 @@ def _detect_recurring(transactions: list) -> list:
     for key, txns in by_desc.items():
         if len(txns) < 2:
             continue
-        # Check if amounts are similar (within 15%)
         amounts = [abs(t["amount"]) for t in txns]
         avg = sum(amounts) / len(amounts)
         if avg == 0:
             continue
-        similar = all(abs(a - avg) / avg < 0.15 for a in amounts)
+        similar = all(abs(a - avg) / avg < 0.20 for a in amounts)
         if not similar:
             continue
-        # Check regularity (monthly-ish: 20-40 day intervals)
+
         dates = sorted([datetime.strptime(t["date"], "%Y-%m-%d") for t in txns])
-        if len(dates) >= 2:
-            intervals = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
-            avg_interval = sum(intervals) / len(intervals)
-            if 15 <= avg_interval <= 45:
-                recurring.append({
-                    "description": txns[0]["description"],
-                    "avg_amount": round(avg, 2),
-                    "frequency": "mensal" if 25 <= avg_interval <= 35 else "irregular",
-                    "occurrences": len(txns),
-                    "category": txns[0].get("category", "outro"),
-                    "last_date": max(t["date"] for t in txns),
-                })
+        if len(dates) < 2:
+            continue
+
+        intervals = [(dates[i+1] - dates[i]).days for i in range(len(dates)-1)]
+        avg_interval = sum(intervals) / len(intervals)
+
+        # Determine frequency
+        if 25 <= avg_interval <= 35:
+            frequency = "mensal"
+        elif 80 <= avg_interval <= 100:
+            frequency = "trimestral"
+        elif 15 <= avg_interval <= 45:
+            frequency = "mensal"
+        else:
+            continue  # Not a recognisable pattern
+
+        # Day-of-month intelligence
+        days_of_month = [d.day for d in dates]
+        from collections import Counter
+        day_counts = Counter(days_of_month)
+        typical_day = day_counts.most_common(1)[0][0]
+        day_consistency = day_counts.most_common(1)[0][1] / len(days_of_month)
+
+        # Calculate next expected date
+        last_date = dates[-1]
+        if frequency == "mensal":
+            next_month = last_date.month + 1
+            next_year = last_date.year
+            if next_month > 12:
+                next_month = 1
+                next_year += 1
+            try:
+                next_expected = datetime(next_year, next_month, min(typical_day, 28))
+            except ValueError:
+                next_expected = datetime(next_year, next_month, 28)
+        elif frequency == "trimestral":
+            next_month = last_date.month + 3
+            next_year = last_date.year
+            while next_month > 12:
+                next_month -= 12
+                next_year += 1
+            try:
+                next_expected = datetime(next_year, next_month, min(typical_day, 28))
+            except ValueError:
+                next_expected = datetime(next_year, next_month, 28)
+        else:
+            next_expected = last_date + timedelta(days=int(avg_interval))
+
+        recurring.append({
+            "description": txns[0]["description"],
+            "avg_amount": round(avg, 2),
+            "frequency": frequency,
+            "occurrences": len(txns),
+            "category": txns[0].get("category", "outro"),
+            "last_date": max(t["date"] for t in txns),
+            "typical_day": typical_day,
+            "day_consistency": round(day_consistency * 100),  # % consistency
+            "next_expected": next_expected.strftime("%Y-%m-%d"),
+            "avg_interval_days": round(avg_interval),
+        })
 
     return sorted(recurring, key=lambda r: r["avg_amount"], reverse=True)
 
@@ -723,5 +772,120 @@ def create_bank_analysis_router(db, get_current_user):
                 new_items.append(t)
 
         return {"new": new_items, "duplicates": dup_items, "new_count": len(new_items), "dup_count": len(dup_items)}
+
+    # ── Auto-feed Calendar with predicted bills ───────────────────
+    @router.post("/{analysis_id}/feed-calendar")
+    async def feed_calendar(analysis_id: str, months_ahead: int = 6, user=Depends(get_current_user)):
+        """Create calendar appointments for predicted recurring expenses (Contas Previstas).
+        Projects each recurring pattern forward for `months_ahead` months."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+
+        analysis = await db.bank_analyses.find_one({"id": analysis_id}, {"_id": 0})
+        if not analysis:
+            raise HTTPException(404, "Análise não encontrada")
+
+        recurring = analysis.get("recurring", [])
+        if not recurring:
+            return {"created": 0, "message": "Nenhum pagamento recorrente detectado"}
+
+        today = datetime.now(timezone.utc)
+        created = 0
+        skipped = 0
+        appointments_created = []
+        today_naive = today.replace(tzinfo=None)  # for comparison with naive datetimes
+
+        for r in recurring:
+            typical_day = r.get("typical_day", 15)
+            freq = r.get("frequency", "mensal")
+            desc = r.get("description", "")[:60]
+            amount = r.get("avg_amount", 0)
+            cat = r.get("category", "outro")
+
+            # Generate future dates
+            future_dates = []
+            if freq == "mensal":
+                for i in range(1, months_ahead + 1):
+                    m = today.month + i
+                    y = today.year
+                    while m > 12:
+                        m -= 12
+                        y += 1
+                    try:
+                        future_dates.append(datetime(y, m, min(typical_day, 28)))
+                    except ValueError:
+                        future_dates.append(datetime(y, m, 28))
+            elif freq == "trimestral":
+                for i in range(1, (months_ahead // 3) + 2):
+                    m = today.month + (3 * i)
+                    y = today.year
+                    while m > 12:
+                        m -= 12
+                        y += 1
+                    try:
+                        future_dates.append(datetime(y, m, min(typical_day, 28)))
+                    except ValueError:
+                        future_dates.append(datetime(y, m, 28))
+
+            for fd in future_dates:
+                if fd <= today_naive:
+                    continue
+                date_str = fd.strftime("%Y-%m-%d")
+
+                # Check if already exists in calendar
+                existing = await db.appointments.find_one({
+                    "date": date_str,
+                    "title": {"$regex": re.escape(desc[:30]), "$options": "i"},
+                    "notes": {"$regex": "Conta Prevista"},
+                })
+                if existing:
+                    skipped += 1
+                    continue
+
+                CAT_LABELS = {"fixo": "Custo Fixo", "variavel": "Variável", "obra": "Obra", "imposto": "Imposto", "financeiro": "Financeiro"}
+                cat_label = CAT_LABELS.get(cat, cat)
+
+                appointment = {
+                    "id": str(uuid.uuid4()),
+                    "title": f"💰 {desc}",
+                    "client_name": "",
+                    "date": date_str,
+                    "time_start": "09:00",
+                    "time_end": "09:30",
+                    "notes": f"Conta Prevista ({cat_label}) · Valor estimado: {amount:.2f}€ · {freq} · Dia típico: {typical_day}",
+                    "employee_ids": [],
+                    "location": "",
+                    "work_id": None,
+                    "is_predicted_bill": True,
+                    "predicted_amount": amount,
+                    "predicted_category": cat,
+                    "source_analysis_id": analysis_id,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                }
+                await db.appointments.insert_one(appointment)
+                created += 1
+                appointments_created.append({
+                    "title": appointment["title"],
+                    "date": date_str,
+                    "amount": amount,
+                    "frequency": freq,
+                })
+
+        return {
+            "created": created,
+            "skipped": skipped,
+            "total_recurring": len(recurring),
+            "appointments": appointments_created[:20],
+            "message": f"{created} contas previstas adicionadas ao calendário para os próximos {months_ahead} meses",
+        }
+
+    # ── Remove predicted bills from calendar ──────────────────────
+    @router.delete("/{analysis_id}/calendar-predictions")
+    async def remove_calendar_predictions(analysis_id: str, user=Depends(get_current_user)):
+        """Remove all predicted bills from calendar for this analysis."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        result = await db.appointments.delete_many({"source_analysis_id": analysis_id, "is_predicted_bill": True})
+        return {"removed": result.deleted_count}
 
     return router

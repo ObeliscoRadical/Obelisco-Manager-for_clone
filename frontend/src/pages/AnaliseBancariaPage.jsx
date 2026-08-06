@@ -286,7 +286,7 @@ function AnalysisDetail({ analysis, onBack }) {
 
       {tab === 'overview' && <OverviewTab taxes={taxes} catData={catData} monthData={monthData} recurring={recurring} />}
       {tab === 'taxes' && <TaxesTab taxes={taxes} />}
-      {tab === 'recurring' && <RecurringTab recurring={recurring} />}
+      {tab === 'recurring' && <RecurringTab recurring={recurring} analysisId={analysis.id} />}
       {tab === 'cashflow' && <CashflowTab cashflow={cashflow} />}
       {tab === 'transactions' && <TransactionsTab transactions={transactions} analysisId={analysis.id} />}
     </div>
@@ -401,15 +401,57 @@ function TaxesTab({ taxes }) {
 }
 
 /* ─── Recurring Tab ─────────────────────────────────────────────── */
-function RecurringTab({ recurring }) {
+function RecurringTab({ recurring, analysisId }) {
   const total = recurring?.reduce((s, r) => s + r.avg_amount, 0) || 0;
+  const [feeding, setFeeding] = useState(false);
+  const [feedResult, setFeedResult] = useState(null);
+
+  const feedCalendar = async () => {
+    setFeeding(true);
+    try {
+      const { data } = await api.post(`/bank-analysis/${analysisId}/feed-calendar?months_ahead=6`);
+      setFeedResult(data);
+      if (data.created > 0) toast.success(`${data.created} contas previstas adicionadas ao calendário!`);
+      else toast.info('Calendário já actualizado. Nenhuma nova conta adicionada.');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
+    finally { setFeeding(false); }
+  };
+
   return (
     <div className="space-y-4" data-testid="recurring-tab">
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold">Pagamentos Recorrentes Detectados</h3>
-          <span className="text-yellow-400 font-bold">{fmt(total)}/mês</span>
+          <div>
+            <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold">Pagamentos Recorrentes Detectados</h3>
+            <p className="text-xs text-zinc-600 mt-1">Padrões detectados por IA com inteligência de datas</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-yellow-400 font-bold">{fmt(total)}/mês</span>
+            <button
+              data-testid="feed-calendar-btn"
+              onClick={feedCalendar}
+              disabled={feeding || !recurring?.length}
+              className="flex items-center gap-2 px-3 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-medium hover:bg-blue-500/30 disabled:opacity-50"
+            >
+              {feeding ? <Loader2 size={14} className="animate-spin" /> : <Calendar size={14} />}
+              Alimentar Calendário
+            </button>
+          </div>
         </div>
+
+        {feedResult && (
+          <div className={`mb-4 p-3 rounded-lg border text-sm ${feedResult.created > 0 ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-zinc-800 border-zinc-700 text-zinc-400'}`}>
+            {feedResult.message}
+            {feedResult.appointments?.length > 0 && (
+              <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                {feedResult.appointments.map((a, i) => (
+                  <p key={a.date + i} className="text-xs opacity-70">{a.date} · {a.title} · {fmt(a.amount)}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {!recurring?.length ? (
           <p className="text-zinc-500 text-center py-4">Nenhum pagamento recorrente detectado</p>
         ) : (
@@ -417,15 +459,32 @@ function RecurringTab({ recurring }) {
             {recurring.map((r, i) => {
               const cat = CAT_LABELS[r.category] || CAT_LABELS.outro;
               return (
-                <div key={r.description + i} className="flex items-center justify-between p-3 bg-zinc-800/50 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-2 h-8 rounded" style={{ backgroundColor: cat.color }} />
-                    <div>
-                      <p className="text-sm text-white">{r.description.slice(0, 60)}</p>
-                      <p className="text-xs text-zinc-500">{cat.label} · {r.frequency} · {r.occurrences}x · Último: {r.last_date}</p>
+                <div key={r.description + i} className="p-3 bg-zinc-800/50 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-2 h-10 rounded" style={{ backgroundColor: cat.color }} />
+                      <div>
+                        <p className="text-sm text-white">{r.description.slice(0, 60)}</p>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          <span className="text-xs text-zinc-500">{cat.label}</span>
+                          <span className="text-xs text-zinc-500">·</span>
+                          <span className="text-xs text-yellow-400 font-medium">{r.frequency}</span>
+                          <span className="text-xs text-zinc-500">·</span>
+                          <span className="text-xs text-zinc-500">{r.occurrences}x</span>
+                          {r.typical_day && (
+                            <>
+                              <span className="text-xs text-zinc-500">·</span>
+                              <span className="text-xs text-blue-400">Dia {r.typical_day} ({r.day_consistency}% consistência)</span>
+                            </>
+                          )}
+                        </div>
+                        {r.next_expected && (
+                          <p className="text-xs text-green-400 mt-0.5">Próximo previsto: {new Date(r.next_expected).toLocaleDateString('pt-PT')}</p>
+                        )}
+                      </div>
                     </div>
+                    <span className="text-sm text-red-400 font-mono font-semibold flex-shrink-0 ml-4">{fmt(r.avg_amount)}</span>
                   </div>
-                  <span className="text-sm text-red-400 font-mono font-semibold">{fmt(r.avg_amount)}</span>
                 </div>
               );
             })}
