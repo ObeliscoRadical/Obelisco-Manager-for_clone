@@ -3,7 +3,7 @@ Bank Statement Analysis module.
 Uploads bank statements (CSV/Excel/OFX), uses AI to categorize transactions,
 detects recurring payments, projects cash flow, and estimates Portuguese taxes (IRC).
 """
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Request
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -263,9 +263,34 @@ def _parse_amount(s: str) -> float:
     return float(s)
 
 
-def _pre_categorize(desc: str) -> Optional[str]:
-    """Pre-categorize based on known supplier patterns. More specific matches first."""
+def _normalize_desc_key(desc: str) -> str:
+    """Normalize a transaction description to a stable key for learning overrides.
+    Removes dates, numbers/refs, and lowercases."""
+    d = re.sub(r'\d{2}/\d{2}', '', desc)           # Remove dd/mm dates
+    d = re.sub(r'\d{4,}[/\-]?\d*', '', d)          # Remove long numbers (refs, card numbers)
+    d = re.sub(r'\s+', ' ', d).strip().lower()[:60]
+    return d
+
+
+async def _get_user_overrides(db) -> dict:
+    """Load all user category overrides as {normalized_key: category}."""
+    overrides = await db.category_overrides.find({}, {"_id": 0}).to_list(5000)
+    return {o["desc_key"]: o["category"] for o in overrides}
+
+
+def _pre_categorize(desc: str, user_overrides: dict = None) -> Optional[str]:
+    """Pre-categorize based on user overrides first, then known supplier patterns."""
     d = desc.lower()
+
+    # 0. User overrides (learned from manual corrections) — HIGHEST PRIORITY
+    if user_overrides:
+        norm_key = _normalize_desc_key(desc)
+        if norm_key in user_overrides:
+            return user_overrides[norm_key]
+        # Also try partial matching (first 20 chars of normalized key)
+        for ok, ov in user_overrides.items():
+            if len(ok) >= 8 and ok[:20] in norm_key:
+                return ov
 
     # Revenue patterns (check first — transfers from clients)
     revenue_patterns = ["transferencia de cliente", "transf cliente", "pagamento recebido", "deposito", "cobranca"]
@@ -559,11 +584,11 @@ def _estimate_taxes(transactions: list, year: int) -> dict:
     }
 
 
-def _build_analysis_data(transactions, filename, user_name):
+def _build_analysis_data(transactions, filename, user_name, user_overrides=None):
     """Build the full analysis dict from parsed transactions."""
-    # Pre-categorize with known patterns
+    # Pre-categorize with known patterns + user overrides
     for t in transactions:
-        cat = _pre_categorize(t["description"])
+        cat = _pre_categorize(t["description"], user_overrides)
         if cat:
             t["category"] = cat
         if "id" not in t:
@@ -572,8 +597,8 @@ def _build_analysis_data(transactions, filename, user_name):
     return transactions
 
 
-async def _auto_sync_expenses(db, analysis_id, analysis_doc):
-    """Automatically sync debit transactions to expenses module with duplicate detection."""
+async def _prepare_sync_preview(db, analysis_id, analysis_doc):
+    """Prepare sync preview — does NOT create expenses. Returns pending items + duplicates for user review."""
     try:
         expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
         to_sync = [t for t in analysis_doc.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
@@ -588,53 +613,31 @@ async def _auto_sync_expenses(db, analysis_id, analysis_doc):
             key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
             existing_by_match.add(key)
 
-        created = 0
-        skipped = 0
+        pending = []
         duplicates = []
-        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
 
         for t in to_sync:
             if t["id"] in existing_by_txn:
-                skipped += 1
-                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Já sincronizado (ID)"})
+                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"], "category": t.get("category", "outro"), "reason": "Já sincronizado (ID)"})
                 continue
             match_key = f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}"
             if match_key in existing_by_match:
-                skipped += 1
-                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Duplicado (data + valor + fornecedor)"})
+                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"], "category": t.get("category", "outro"), "reason": "Duplicado (data + valor + fornecedor)"})
                 continue
-
-            expense = {
-                "id": str(uuid.uuid4()),
+            pending.append({
+                "id": t["id"],
                 "date": t["date"],
-                "supplier": t["description"][:100],
-                "nif": "",
-                "invoice_number": "",
-                "category": t.get("category", "outro").capitalize(),
-                "type": cat_to_type.get(t.get("category", ""), "variavel"),
-                "obra_id": None,
-                "obra_name": None,
-                "value_net": round(abs(t["amount"]) / 1.23, 2),
-                "vat_rate": 23,
-                "vat_amount": round(abs(t["amount"]) - abs(t["amount"]) / 1.23, 2),
-                "value_gross": round(abs(t["amount"]), 2),
-                "payment_method": "Transferência Bancária",
-                "notes": f"Importado do extrato bancário: {analysis_doc.get('filename', '')}",
-                "invoice_file": None,
-                "bank_txn_id": t["id"],
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            await db.expenses.insert_one(expense)
-            existing_by_txn.add(t["id"])
-            existing_by_match.add(match_key)
-            created += 1
+                "description": t["description"],
+                "amount": t["amount"],
+                "category": t.get("category", "outro"),
+            })
 
-        result = {"created": created, "skipped": skipped, "duplicates": duplicates, "total_processed": len(to_sync)}
-        logger.info(f"Auto-sync expenses for {analysis_id}: {created} created, {skipped} skipped")
+        result = {"pending": pending, "duplicates": duplicates, "pending_count": len(pending), "duplicate_count": len(duplicates), "total_processed": len(to_sync)}
+        logger.info(f"Sync preview for {analysis_id}: {len(pending)} pending, {len(duplicates)} duplicates")
         return result
     except Exception as e:
-        logger.error(f"Auto-sync expenses failed for {analysis_id}: {e}")
-        return {"created": 0, "skipped": 0, "duplicates": [], "total_processed": 0, "error": str(e)}
+        logger.error(f"Sync preview failed for {analysis_id}: {e}")
+        return {"pending": [], "duplicates": [], "pending_count": 0, "duplicate_count": 0, "error": str(e)}
 
 
 async def _auto_feed_calendar(db, analysis_id, analysis_doc, months_ahead=6):
@@ -780,9 +783,9 @@ async def _finalize_analysis(db, analysis_id, transactions, filename, user_name)
             "transaction_count": len(transactions),
         }
 
-        # Auto-sync to expenses
-        sync_result = await _auto_sync_expenses(db, analysis_id, analysis_doc)
-        # Auto-feed recurring calendar
+        # Prepare sync preview (pending user approval — NOT auto-imported)
+        sync_preview = await _prepare_sync_preview(db, analysis_id, analysis_doc)
+        # Auto-feed recurring calendar (this is safe to auto-run)
         calendar_result = await _auto_feed_calendar(db, analysis_id, analysis_doc)
 
         await db.bank_analyses.update_one(
@@ -798,11 +801,11 @@ async def _finalize_analysis(db, analysis_id, transactions, filename, user_name)
                 "taxes": taxes,
                 "by_category": by_category,
                 "by_month": by_month,
-                "auto_sync": sync_result,
+                "sync_preview": sync_preview,
                 "auto_calendar": calendar_result,
             }}
         )
-        logger.info(f"Analysis {analysis_id} completed: {len(transactions)} txns, sync={sync_result.get('created',0)} created/{sync_result.get('skipped',0)} skipped, calendar={calendar_result.get('created',0)}")
+        logger.info(f"Analysis {analysis_id} completed: {len(transactions)} txns, pending_sync={sync_preview.get('pending_count',0)}, calendar={calendar_result.get('created',0)}")
     except Exception as e:
         logger.error(f"Background analysis {analysis_id} failed: {e}")
         await db.bank_analyses.update_one(
@@ -821,7 +824,8 @@ async def _process_pdf_background(db, analysis_id, content, filename, user_name)
                 {"$set": {"status": "failed", "error": "Nenhuma transação encontrada no PDF."}}
             )
             return
-        transactions = _build_analysis_data(transactions, filename, user_name)
+        user_overrides = await _get_user_overrides(db)
+        transactions = _build_analysis_data(transactions, filename, user_name, user_overrides)
         await _finalize_analysis(db, analysis_id, transactions, filename, user_name)
     except Exception as e:
         logger.error(f"PDF background processing failed for {analysis_id}: {e}")
@@ -887,7 +891,7 @@ def create_bank_analysis_router(db, get_current_user):
         if not transactions:
             raise HTTPException(400, "Nenhuma transação encontrada no ficheiro.")
 
-        transactions = _build_analysis_data(transactions, filename, user_name)
+        transactions = _build_analysis_data(transactions, filename, user_name, await _get_user_overrides(db))
 
         # AI categorization for unknowns
         transactions = await _ai_categorize_batch(transactions)
@@ -943,10 +947,10 @@ def create_bank_analysis_router(db, get_current_user):
             "created_by": user_name,
         }
 
-        # Auto-sync to expenses + calendar
-        sync_result = await _auto_sync_expenses(db, analysis_id, analysis)
+        # Prepare sync preview (pending user approval) + auto calendar
+        sync_preview = await _prepare_sync_preview(db, analysis_id, analysis)
         calendar_result = await _auto_feed_calendar(db, analysis_id, analysis)
-        analysis["auto_sync"] = sync_result
+        analysis["sync_preview"] = sync_preview
         analysis["auto_calendar"] = calendar_result
 
         await db.bank_analyses.insert_one(analysis)
@@ -961,7 +965,8 @@ def create_bank_analysis_router(db, get_current_user):
             {}, {"_id": 0, "id": 1, "filename": 1, "date_from": 1, "date_to": 1,
                  "transaction_count": 1, "created_at": 1, "created_by": 1,
                  "status": 1, "error": 1,
-                 "auto_sync": 1, "auto_calendar": 1,
+                 "sync_preview.pending_count": 1, "sync_preview.duplicate_count": 1,
+                 "sync_approved": 1, "auto_calendar": 1,
                  "taxes.total_income": 1, "taxes.total_expenses": 1}
         ).sort("created_at", -1)
         return await cursor.to_list(50)
@@ -996,17 +1001,121 @@ def create_bank_analysis_router(db, get_current_user):
 
     @router.patch("/{analysis_id}/transactions/{txn_id}")
     async def update_transaction_category(analysis_id: str, txn_id: str, category: str, user=Depends(get_current_user)):
-        """Manually override a transaction's category."""
+        """Manually override a transaction's category AND save as learned rule for future extracts."""
         valid = ("fixo", "variavel", "obra", "receita", "imposto", "salario", "financeiro", "outro")
         if category not in valid:
             raise HTTPException(400, f"Categoria inválida. Use: {', '.join(valid)}")
+
+        # Update the transaction
         result = await db.bank_analyses.update_one(
             {"id": analysis_id, "transactions.id": txn_id},
             {"$set": {"transactions.$.category": category}},
         )
         if result.matched_count == 0:
             raise HTTPException(404, "Transação não encontrada")
+
+        # Learn: save override for future use
+        analysis = await db.bank_analyses.find_one({"id": analysis_id}, {"_id": 0, "transactions": 1})
+        txn = next((t for t in (analysis or {}).get("transactions", []) if t.get("id") == txn_id), None)
+        if txn:
+            desc_key = _normalize_desc_key(txn["description"])
+            if desc_key and len(desc_key) >= 4:
+                await db.category_overrides.update_one(
+                    {"desc_key": desc_key},
+                    {"$set": {
+                        "desc_key": desc_key,
+                        "category": category,
+                        "original_description": txn["description"][:100],
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_by": user.get("name", ""),
+                    }},
+                    upsert=True,
+                )
+                logger.info(f"Category override learned: '{desc_key}' → {category}")
+
+        return {"ok": True, "learned": True}
+
+    @router.get("/category-overrides/list")
+    async def list_category_overrides(user=Depends(get_current_user)):
+        """List all learned category overrides."""
+        overrides = await db.category_overrides.find({}, {"_id": 0}).sort("updated_at", -1).to_list(500)
+        return overrides
+
+    @router.delete("/category-overrides/{desc_key}")
+    async def delete_category_override(desc_key: str, user=Depends(get_current_user)):
+        """Delete a learned category override."""
+        result = await db.category_overrides.delete_one({"desc_key": desc_key})
+        if result.deleted_count == 0:
+            raise HTTPException(404, "Override não encontrado")
         return {"ok": True}
+
+    @router.post("/{analysis_id}/approve-sync")
+    async def approve_sync(analysis_id: str, request: Request, user=Depends(get_current_user)):
+        """Approve selected transactions for import into expenses.
+        Body: {"approved_ids": ["txn_id1", "txn_id2", ...]}
+        If approved_ids is empty or missing, imports ALL pending items."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+
+        body = await request.json()
+        approved_ids = set(body.get("approved_ids", []))
+
+        analysis = await db.bank_analyses.find_one({"id": analysis_id}, {"_id": 0})
+        if not analysis:
+            raise HTTPException(404, "Análise não encontrada")
+
+        # Get pending items from sync_preview
+        preview = analysis.get("sync_preview", {})
+        pending = preview.get("pending", [])
+        if not pending:
+            return {"created": 0, "message": "Nenhuma transação pendente para importar"}
+
+        # Filter by approved IDs (if provided)
+        to_import = pending if not approved_ids else [p for p in pending if p["id"] in approved_ids]
+
+        # Get all transactions for full data
+        txn_map = {t["id"]: t for t in analysis.get("transactions", [])}
+        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
+
+        created = 0
+        for p in to_import:
+            t = txn_map.get(p["id"], p)
+            expense = {
+                "id": str(uuid.uuid4()),
+                "date": t.get("date", p.get("date", "")),
+                "supplier": t.get("description", p.get("description", ""))[:100],
+                "nif": "",
+                "invoice_number": "",
+                "category": t.get("category", p.get("category", "outro")).capitalize(),
+                "type": cat_to_type.get(t.get("category", p.get("category", "")), "variavel"),
+                "obra_id": None,
+                "obra_name": None,
+                "value_net": round(abs(t.get("amount", p.get("amount", 0))) / 1.23, 2),
+                "vat_rate": 23,
+                "vat_amount": round(abs(t.get("amount", p.get("amount", 0))) - abs(t.get("amount", p.get("amount", 0))) / 1.23, 2),
+                "value_gross": round(abs(t.get("amount", p.get("amount", 0))), 2),
+                "payment_method": "Transferência Bancária",
+                "notes": f"Importado do extrato bancário: {analysis.get('filename', '')}",
+                "invoice_file": None,
+                "bank_txn_id": t.get("id", p.get("id")),
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.expenses.insert_one(expense)
+            created += 1
+
+        # Update sync_preview: remove approved items from pending
+        imported_ids = {p["id"] for p in to_import}
+        remaining = [p for p in pending if p["id"] not in imported_ids]
+        await db.bank_analyses.update_one(
+            {"id": analysis_id},
+            {"$set": {
+                "sync_preview.pending": remaining,
+                "sync_preview.pending_count": len(remaining),
+                "sync_approved": {"created": created, "approved_at": datetime.now(timezone.utc).isoformat()},
+            }}
+        )
+
+        return {"created": created, "remaining": len(remaining), "message": f"{created} despesas importadas com sucesso"}
 
     # ── Tax Alerts ────────────────────────────────────────────────
     @router.get("/tax-alerts/upcoming")

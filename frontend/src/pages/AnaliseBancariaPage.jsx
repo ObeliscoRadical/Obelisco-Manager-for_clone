@@ -70,8 +70,8 @@ export default function AnaliseBancariaPage() {
           toast.success(syncInfo + '!');
           const full = await api.get(`/bank-analysis/${analysisId}`);
           const fullData = full.data;
-          if (fullData.auto_sync?.created > 0) {
-            toast.success(`${fullData.auto_sync.created} despesas importadas automaticamente!`);
+          if (fullData.sync_preview?.pending_count > 0) {
+            toast.info(`${fullData.sync_preview.pending_count} despesas pendentes de aprovação`);
           }
           if (fullData.auto_calendar?.created > 0) {
             toast.success(`${fullData.auto_calendar.created} contas previstas adicionadas ao calendário!`);
@@ -109,8 +109,8 @@ export default function AnaliseBancariaPage() {
         fetchList();
       } else {
         toast.success(`${data.transaction_count} transações analisadas!`);
-        if (data.auto_sync?.created > 0) {
-          toast.success(`${data.auto_sync.created} despesas importadas automaticamente!`);
+        if (data.sync_preview?.pending_count > 0) {
+          toast.info(`${data.sync_preview.pending_count} despesas pendentes de aprovação`);
         }
         if (data.auto_calendar?.created > 0) {
           toast.success(`${data.auto_calendar.created} contas previstas adicionadas ao calendário!`);
@@ -276,9 +276,12 @@ function AnalysisDetail({ analysis, onBack }) {
   const [tab, setTab] = useState('overview');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
+  const [pendingItems, setPendingItems] = useState(analysis.sync_preview?.pending || []);
+  const [selectedIds, setSelectedIds] = useState(new Set((analysis.sync_preview?.pending || []).map(p => p.id)));
   const { taxes, recurring, cashflow, by_category, by_month, transactions } = analysis;
-  const autoSync = analysis.auto_sync;
+  const syncPreview = analysis.sync_preview;
   const autoCalendar = analysis.auto_calendar;
+  const syncApproved = analysis.sync_approved;
 
   const catData = Object.entries(by_category || {})
     .filter(([k]) => k !== 'receita')
@@ -292,6 +295,34 @@ function AnalysisDetail({ analysis, onBack }) {
     balance: v.income - v.expenses,
   }));
 
+  const toggleItem = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const toggleAll = () => {
+    if (selectedIds.size === pendingItems.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(pendingItems.map(p => p.id)));
+  };
+
+  const handleApproveSync = async () => {
+    if (selectedIds.size === 0) { toast.error('Selecione pelo menos uma transação'); return; }
+    setSyncing(true);
+    try {
+      const { data } = await api.post(`/bank-analysis/${analysis.id}/approve-sync`, {
+        approved_ids: [...selectedIds],
+      });
+      setSyncResult(data);
+      if (data.created > 0) toast.success(`${data.created} despesas importadas!`);
+      // Remove approved from pending list
+      setPendingItems(prev => prev.filter(p => !selectedIds.has(p.id)));
+      setSelectedIds(new Set());
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
+    finally { setSyncing(false); }
+  };
+
   return (
     <div className="space-y-6" data-testid="analysis-detail">
       <button onClick={onBack} className="text-zinc-500 hover:text-white flex items-center gap-2 transition-colors">
@@ -303,48 +334,57 @@ function AnalysisDetail({ analysis, onBack }) {
           <h1 className="text-2xl font-bold text-white">{analysis.filename}</h1>
           <p className="text-sm text-zinc-500">{analysis.date_from} → {analysis.date_to} · {analysis.transaction_count} transações</p>
         </div>
-        <button
-          data-testid="sync-expenses-btn"
-          onClick={async () => {
-            setSyncing(true);
-            try {
-              const { data } = await api.post(`/bank-analysis/${analysis.id}/sync-expenses`);
-              setSyncResult(data);
-              if (data.created > 0) toast.success(`${data.created} despesas importadas!`);
-              else toast.info(`Nenhuma nova despesa. ${data.skipped} duplicados detectados.`);
-            } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
-            finally { setSyncing(false); }
-          }}
-          disabled={syncing}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg font-medium text-sm hover:bg-blue-500/30 disabled:opacity-50"
-        >
-          {syncing ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
-          Sincronizar com Despesas
-        </button>
+        {autoCalendar?.created > 0 && (
+          <span className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full">
+            {autoCalendar.created} contas previstas no calendário
+          </span>
+        )}
       </div>
 
-      {/* Auto-sync results */}
-      {(autoSync || autoCalendar) && (
-        <div className="p-4 rounded-xl border bg-green-500/5 border-green-500/20" data-testid="auto-sync-banner">
-          <h4 className="text-sm text-green-400 font-semibold mb-2 flex items-center gap-2">
-            <Receipt size={14} /> Sincronização Automática
-          </h4>
-          <div className="flex flex-wrap gap-4 text-xs">
-            {autoSync && (
-              <div className="flex gap-3">
-                <span className="text-green-400">{autoSync.created} despesas importadas</span>
-                {autoSync.skipped > 0 && <span className="text-yellow-400">{autoSync.skipped} duplicados ignorados</span>}
-              </div>
-            )}
-            {autoCalendar && autoCalendar.created > 0 && (
-              <span className="text-blue-400">{autoCalendar.created} contas previstas no calendário</span>
-            )}
+      {/* Sync Approval Panel */}
+      {pendingItems.length > 0 && (
+        <div className="p-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5" data-testid="sync-approval-panel">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm text-yellow-400 font-semibold flex items-center gap-2">
+              <Receipt size={14} /> {pendingItems.length} despesas para importar
+            </h4>
+            <div className="flex items-center gap-2">
+              <button onClick={toggleAll} className="text-xs text-zinc-400 hover:text-white px-2 py-1 rounded border border-zinc-700 hover:border-zinc-500">
+                {selectedIds.size === pendingItems.length ? 'Desmarcar tudo' : 'Selecionar tudo'}
+              </button>
+              <button
+                data-testid="approve-sync-btn"
+                onClick={handleApproveSync}
+                disabled={syncing || selectedIds.size === 0}
+                className="flex items-center gap-2 px-4 py-2 bg-green-500/20 text-green-400 border border-green-500/30 rounded-lg text-sm font-medium hover:bg-green-500/30 disabled:opacity-50"
+              >
+                {syncing ? <Loader2 size={14} className="animate-spin" /> : <Receipt size={14} />}
+                Aprovar {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
+              </button>
+            </div>
           </div>
-          {autoSync?.duplicates?.length > 0 && (
-            <details className="mt-2">
-              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">Ver duplicados ignorados ({autoSync.duplicates.length})</summary>
+          <div className="max-h-60 overflow-y-auto space-y-1">
+            {pendingItems.map(p => {
+              const cat = CAT_LABELS[p.category] || CAT_LABELS.outro;
+              return (
+                <label key={p.id} className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${selectedIds.has(p.id) ? 'bg-green-500/10' : 'bg-zinc-800/30 hover:bg-zinc-800/50'}`}>
+                  <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleItem(p.id)}
+                    className="w-4 h-4 rounded border-zinc-600 text-yellow-400 focus:ring-yellow-400 bg-zinc-800" />
+                  <span className="text-xs text-zinc-400 font-mono w-20 flex-shrink-0">{p.date}</span>
+                  <span className="text-sm text-white flex-1 truncate">{p.description}</span>
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ color: cat.color, background: cat.color + '15' }}>{cat.label}</span>
+                  <span className="text-sm text-red-400 font-mono flex-shrink-0 w-24 text-right">{fmt(p.amount)}</span>
+                </label>
+              );
+            })}
+          </div>
+          {syncPreview?.duplicates?.length > 0 && (
+            <details className="mt-3">
+              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">
+                {syncPreview.duplicates.length} duplicados não incluídos
+              </summary>
               <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
-                {autoSync.duplicates.map((d, i) => (
+                {syncPreview.duplicates.map((d, i) => (
                   <p key={i} className="text-xs text-zinc-500">{d.description?.slice(0, 50)} · {fmt(d.amount)} — {d.reason}</p>
                 ))}
               </div>
@@ -353,26 +393,20 @@ function AnalysisDetail({ analysis, onBack }) {
         </div>
       )}
 
-      {/* Sync result */}
+      {/* Previously approved */}
+      {syncApproved?.created > 0 && pendingItems.length === 0 && (
+        <div className="p-3 rounded-xl border border-green-500/20 bg-green-500/5 text-sm text-green-400 flex items-center gap-2">
+          <Receipt size={14} /> {syncApproved.created} despesas já importadas
+        </div>
+      )}
+
+      {/* Manual sync result */}
       {syncResult && (
         <div className={`p-4 rounded-xl border text-sm ${syncResult.created > 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-zinc-800 border-zinc-700'}`}>
           <div className="flex items-center justify-between">
-            <span className="text-white font-medium">Resultado da sincronização:</span>
-            <div className="flex gap-4 text-xs">
-              <span className="text-green-400">{syncResult.created} criadas</span>
-              <span className="text-yellow-400">{syncResult.skipped} duplicados ignorados</span>
-            </div>
+            <span className="text-white font-medium">Importação concluída:</span>
+            <span className="text-green-400 text-xs">{syncResult.created} despesas criadas</span>
           </div>
-          {syncResult.duplicates?.length > 0 && (
-            <details className="mt-2">
-              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">Ver duplicados ignorados ({syncResult.duplicates.length})</summary>
-              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
-                {syncResult.duplicates.map((d, i) => (
-                  <p key={i} className="text-xs text-zinc-500">{d.description?.slice(0, 50)} · {fmt(d.amount)} — {d.reason}</p>
-                ))}
-              </div>
-            </details>
-          )}
         </div>
       )}
 
@@ -658,8 +692,12 @@ function TransactionsTab({ transactions, analysisId }) {
 
   const updateCategory = async (txnId, newCat) => {
     try {
-      await api.patch(`/bank-analysis/${analysisId}/transactions/${txnId}?category=${newCat}`);
-      toast.success('Categoria atualizada');
+      const { data } = await api.patch(`/bank-analysis/${analysisId}/transactions/${txnId}?category=${newCat}`);
+      if (data.learned) {
+        toast.success('Categoria atualizada — o sistema aprendeu esta correção para futuros extratos');
+      } else {
+        toast.success('Categoria atualizada');
+      }
     } catch { toast.error('Erro'); }
   };
 

@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 42: Verified sync-approval flow and category-override learning. Backend: 7/7 pytest tests passed (test_iter42_approval_learning.py) - CSV upload returns sync_preview.pending without auto-creating expenses; PATCH category returns {ok:true, learned:true} and persists override; GET /category-overrides/list returns {desc_key, category, original_description}; POST /approve-sync with subset creates only approved expenses, updates sync_preview.pending, stores sync_approved; a later CSV with same supplier picks up the learned category automatically. Frontend E2E: uploaded CSV via UI, sync-approval-panel rendered with 4 checkboxes and approve-sync-btn ('Aprovar (4)'). After deselecting all + selecting first + approving, backend created 1 expense; UI updated to 3 pending + green 'Importação concluída: 1 despesas criadas'. Toast 'Categoria atualizada — o sistema aprendeu esta correção para futuros extratos' shown when changing category on Transações tab. Legacy analyses (extrato_teste.csv) in list correctly don't show approval panel.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter42_approval_learning.py",
+    "/app/test_reports/pytest/iter42.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "bank_analysis.py _normalize_desc_key (line 266): Correctly strips dates (dd/mm) and long ref numbers before lowercasing/truncating to 60 chars. Produces stable keys across statements.",
+    "_pre_categorize (line 281): User overrides checked FIRST with exact match then partial prefix (first 20 chars ≥ 8) - correct priority. Verified end-to-end that learned override from PATCH is applied to a subsequent upload with the same supplier description.",
+    "approve-sync endpoint (line 1053): Filters pending by approved_ids set (empty = all), builds expense with proper VAT split (23%), tags bank_txn_id for future dedup, updates sync_preview.pending and pending_count atomically, stores sync_approved.created counter. Duplicate detection already ran at preview time so approve-sync trusts the pending list.",
+    "PATCH /transactions/{txn_id} (line 1002): Upserts override by desc_key with updated_at/updated_by trace - good auditability. Only persists overrides for desc_key with length ≥ 4, avoiding noise from short/garbage descriptions.",
+    "_prepare_sync_preview (line 600): Only enqueues debits with expense category (fixo/variavel/obra/imposto/financeiro/outro) - correctly excludes receita/salario. Duplicate detection by bank_txn_id AND date|amount|supplier[:20] key.",
+    "AnaliseBancariaPage.jsx: sync-approval-panel guarded by pendingItems.length>0 - legacy analyses without sync_preview don't render it. Checkbox state managed locally with Set, approve calls backend then optimistically removes from pending. Toast for learned categoria uses proper Portuguese wording matching spec.",
+    "Minor: approve-sync doesn't re-check duplicate uniqueness at approval time (only at preview). If user approves the same analysis twice in quick succession, could theoretically create duplicates - unlikely in practice since pending list is drained after first approval."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter42_approval_learning.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (panel, approve, learning toast all verified)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Created ephemeral bank_analyses (test_iter42.csv, test_iter42_reupload.csv, test_iter42_ui.csv) and a small number of expenses via approve-sync. Test suite deletes analyses on teardown; UI-uploaded analysis (test_iter42_ui.csv) and the 1 imported expense remain in DB for main-agent inspection but are clearly labelled 'UI TEST'. Category override desc_key from learning test persists intentionally to validate future-upload matching (contains normalized VODAFONE UI TEST desc).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Approval flow + learning is fully wired end-to-end. If retesting, note that /api/expenses uses NO trailing slash (401 with slash). The auth response field is 'access_token' not 'token'. Cleanup test override via DELETE /api/bank-analysis/category-overrides/{desc_key} if pollution becomes a concern.",
+  "rca_of_the_issue": "N/A - feature implementation verified working."
+}
