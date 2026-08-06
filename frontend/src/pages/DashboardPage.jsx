@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, AlertTriangle, TrendingUp, TrendingDown,
   FileText, ClipboardList, HardHat, Package, Truck, HandCoins, PiggyBank,
-  ChevronRight, RefreshCw, CircleDot, CheckCircle2, Sparkles,
+  ChevronRight, RefreshCw, CircleDot, CheckCircle2, Sparkles, Landmark, Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -23,16 +23,19 @@ export default function DashboardPage() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
+  const [taxAlerts, setTaxAlerts] = useState(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data }, meRes] = await Promise.all([
+      const [{ data }, meRes, taxRes] = await Promise.all([
         api.get('/dashboard/overview'),
         api.get('/auth/me').catch(() => ({ data: {} })),
+        api.get('/bank-analysis/tax-alerts/upcoming').catch(() => ({ data: null })),
       ]);
       setData(data);
       setUserName(meRes.data?.name || meRes.data?.email?.split('@')[0] || '');
+      setTaxAlerts(taxRes.data);
     } catch (err) {
       console.error(err);
       toast.error('Erro a carregar dashboard');
@@ -157,6 +160,89 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Painel Fiscal */}
+      {taxAlerts && (taxAlerts.alerts?.length > 0 || taxAlerts.estimates?.total_tax_burden > 0) && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5" data-testid="fiscal-panel">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Landmark size={16} className="text-yellow-400" />
+              <h2 className="text-white font-black uppercase tracking-wide text-sm">Resumo Fiscal</h2>
+            </div>
+            <Link to="/analise-bancaria" className="text-xs text-zinc-400 hover:text-yellow-400 flex items-center gap-1">
+              Ver análise completa <ChevronRight size={12} />
+            </Link>
+          </div>
+
+          {/* Fiscal KPIs */}
+          {taxAlerts.estimates?.total_tax_burden > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl px-3 py-2 bg-zinc-950 border border-zinc-800">
+                <div className="text-[10px] uppercase text-zinc-500 tracking-wide">IRC Estimado</div>
+                <div className="text-lg font-black text-orange-400 mt-0.5" translate="no">{fmtEuroFull(taxAlerts.estimates.irc_estimate)}</div>
+                <div className="text-[10px] text-zinc-600">Taxa efetiva: {(taxAlerts.estimates.irc_rate_effective || 0).toFixed(1)}%</div>
+              </div>
+              <div className="rounded-xl px-3 py-2 bg-zinc-950 border border-zinc-800">
+                <div className="text-[10px] uppercase text-zinc-500 tracking-wide">IVA Trimestral</div>
+                <div className="text-lg font-black text-orange-400 mt-0.5" translate="no">{fmtEuroFull(taxAlerts.estimates.iva_quarterly_estimate)}</div>
+              </div>
+              <div className="rounded-xl px-3 py-2 bg-zinc-950 border border-zinc-800">
+                <div className="text-[10px] uppercase text-zinc-500 tracking-wide">TSU Patronal</div>
+                <div className="text-lg font-black text-purple-400 mt-0.5" translate="no">{fmtEuroFull(taxAlerts.estimates.tsu_estimate)}</div>
+              </div>
+              <div className="rounded-xl px-3 py-2 bg-yellow-400/5 border border-yellow-400/20">
+                <div className="text-[10px] uppercase text-zinc-500 tracking-wide">Carga Total</div>
+                <div className="text-lg font-black text-yellow-400 mt-0.5" translate="no">{fmtEuroFull(taxAlerts.estimates.total_tax_burden)}</div>
+                <div className="text-[10px] text-zinc-600">{(taxAlerts.estimates.tax_rate_effective || 0).toFixed(1)}% da receita</div>
+              </div>
+            </div>
+          )}
+
+          {/* Próximos prazos */}
+          {taxAlerts.alerts?.length > 0 && (
+            <div>
+              <div className="text-xs uppercase text-zinc-500 font-bold mb-2 flex items-center gap-1">
+                <Calendar size={11} /> Próximos Prazos Fiscais
+              </div>
+              <div className="space-y-1.5">
+                {taxAlerts.alerts.slice(0, 5).map((a, i) => {
+                  const colors = {
+                    overdue: 'bg-red-500/10 border-red-500/20 text-red-300',
+                    urgent: 'bg-orange-500/10 border-orange-500/20 text-orange-300',
+                    soon: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-300',
+                    upcoming: 'bg-zinc-950 border-zinc-800 text-zinc-300',
+                  };
+                  const cls = colors[a.status] || colors.upcoming;
+                  const emoji = { 'IVA': '📋', 'IRC-PPC': '🏛', 'IRC-MOD22': '📄', 'TSU': '👥', 'IRS-RET': '💼' }[a.type] || '📅';
+                  return (
+                    <div key={a.date + a.type + i} className={`flex items-center justify-between text-xs border rounded-xl px-3 py-2.5 ${cls}`}>
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span>{emoji}</span>
+                        <div className="min-w-0">
+                          <div className="font-bold truncate">{a.label}</div>
+                          <div className="text-[10px] opacity-60 truncate">{a.desc}</div>
+                        </div>
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <div className="font-mono font-bold">{new Date(a.date).toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' })}</div>
+                        <div className="text-[10px]">
+                          {a.days_until < 0 ? <span className="text-red-400">{Math.abs(a.days_until)}d atraso</span>
+                            : a.days_until === 0 ? <span className="text-red-400 font-bold">HOJE</span>
+                            : <span>{a.days_until}d</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {!taxAlerts.estimates?.total_tax_burden && !taxAlerts.alerts?.length && (
+            <p className="text-xs text-zinc-500 text-center py-2">Carregue um extrato bancário na <Link to="/analise-bancaria" className="text-yellow-400 hover:underline">Análise Bancária</Link> para ver estimativas fiscais.</p>
+          )}
+        </div>
+      )}
 
       {/* Comercial + Operacional lado a lado */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
