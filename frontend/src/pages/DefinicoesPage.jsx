@@ -189,8 +189,6 @@ function CategoryOverridesTab() {
   const [overrides, setOverrides] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
-  const [editingKey, setEditingKey] = useState(null);
-  const [editCat, setEditCat] = useState('');
 
   const fetchOverrides = useCallback(async () => {
     try {
@@ -210,20 +208,6 @@ function CategoryOverridesTab() {
       toast.success('Regra eliminada');
     } catch { toast.error('Erro ao eliminar'); }
     finally { setDeleting(null); }
-  };
-
-  const handleUpdate = async (descKey) => {
-    if (!editCat) return;
-    try {
-      // Use the PATCH transaction endpoint indirectly — or just delete + re-add
-      // For simplicity, delete and the user can re-learn via the bank analysis
-      // Actually, let's add a proper update via direct DB update
-      await api.delete(`/bank-analysis/category-overrides/${encodeURIComponent(descKey)}`);
-      // The override is removed; the next correction in bank analysis will re-learn
-      setOverrides(prev => prev.filter(o => o.desc_key !== descKey));
-      toast.success('Regra eliminada — corrija a categoria no extrato bancário para re-aprender');
-      setEditingKey(null);
-    } catch { toast.error('Erro'); }
   };
 
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-yellow-400 animate-spin" /></div>;

@@ -43,7 +43,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Auto-Sync Bank → Expenses** (prepares sync preview with duplicate detection; user approves before import)
 - **Auto-Feed Calendar** (automatic creation of recurring payment predictions in calendar after analysis)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
-- **Category Learning** (user corrections to transaction categories are saved and applied to future bank statements)
+- **Category Overrides Management** (Definições > Regras IA — view and delete learned category rules)
 
 ## Backlog
 ### P1
