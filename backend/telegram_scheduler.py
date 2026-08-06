@@ -1,7 +1,9 @@
 """
-Telegram Bot commands + scheduled payment reminders.
+Telegram MANAGER Bot commands + scheduled payment reminders.
+Uses MANAGER_BOT_TOKEN exclusively — separate from PONTO bot.
 - /status: lists upcoming payments for next 7 days
-- Daily scheduler: sends reminders 2 days before each recurring payment
+- /resumo: monthly financial summary
+- Daily scheduler: sends reminders before each recurring payment
 """
 import os
 import asyncio
@@ -13,9 +15,9 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+MANAGER_BOT_TOKEN = os.environ.get('MANAGER_BOT_TOKEN')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID')
-TELEGRAM_API = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}" if TELEGRAM_BOT_TOKEN else None
+TELEGRAM_API = f"https://api.telegram.org/bot{MANAGER_BOT_TOKEN}" if MANAGER_BOT_TOKEN else None
 
 _last_update_id = 0
 
@@ -116,9 +118,9 @@ async def _handle_resumo_command(chat_id: str, db):
 
 
 async def poll_telegram_updates(db):
-    """Poll for new Telegram bot commands (runs in background)."""
+    """Poll for new Telegram MANAGER bot commands (runs in background)."""
     global _last_update_id
-    if not TELEGRAM_API or not TELEGRAM_BOT_TOKEN:
+    if not TELEGRAM_API or not MANAGER_BOT_TOKEN:
         return
 
     try:

@@ -15,8 +15,11 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-# Telegram config (optional)
-TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+# Telegram config — TWO independent bots
+# PONTO BOT: only attendance (entrada/saída)
+PONTO_BOT_TOKEN = os.environ.get('PONTO_BOT_TOKEN')
+# MANAGER BOT: invoices, reminders, /status, system alerts
+MANAGER_BOT_TOKEN = os.environ.get('MANAGER_BOT_TOKEN')
 TELEGRAM_ADMIN_CHAT_ID = os.environ.get('TELEGRAM_ADMIN_CHAT_ID')
 
 # Emergent native email (same pattern as CEO AI)
@@ -31,11 +34,11 @@ _GCREDS_PATH = Path(__file__).parent / 'google_credentials.json'
 
 # ── helpers ──────────────────────────────────────────────────────────
 async def send_telegram_notification(message: str):
-    """Send notification via Telegram bot (fire-and-forget)."""
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_ADMIN_CHAT_ID:
+    """Send notification via MANAGER bot (orders, invoices, system alerts)."""
+    if not MANAGER_BOT_TOKEN or not TELEGRAM_ADMIN_CHAT_ID:
         return
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        url = f"https://api.telegram.org/bot{MANAGER_BOT_TOKEN}/sendMessage"
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(url, json={
                 "chat_id": TELEGRAM_ADMIN_CHAT_ID,
@@ -43,7 +46,23 @@ async def send_telegram_notification(message: str):
                 "parse_mode": "HTML",
             })
     except Exception as e:
-        logger.warning(f"Telegram notification failed: {e}")
+        logger.warning(f"Manager bot notification failed: {e}")
+
+
+async def send_ponto_notification(message: str):
+    """Send notification via PONTO bot (attendance only)."""
+    if not PONTO_BOT_TOKEN or not TELEGRAM_ADMIN_CHAT_ID:
+        return
+    try:
+        url = f"https://api.telegram.org/bot{PONTO_BOT_TOKEN}/sendMessage"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(url, json={
+                "chat_id": TELEGRAM_ADMIN_CHAT_ID,
+                "text": message,
+                "parse_mode": "HTML",
+            })
+    except Exception as e:
+        logger.warning(f"Ponto bot notification failed: {e}")
 
 
 async def send_email_raw(to_email: str, subject: str, html: str):

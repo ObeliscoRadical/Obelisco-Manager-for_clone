@@ -157,9 +157,9 @@ def create_tech_extras_router(db, get_current_user):
 
         doc.pop("_id", None)
 
-        # Telegram notification for ponto entries
+        # Telegram notification for ponto entries — uses PONTO BOT
         try:
-            from service_orders import send_telegram_notification
+            from service_orders import send_ponto_notification
             emoji = PONTO_ACTION_EMOJIS.get(input.action, "📍")
             label = PONTO_ACTION_LABELS.get(input.action, input.action.upper())
             hora = datetime.fromisoformat(now).strftime("%H:%M")
@@ -168,10 +168,10 @@ def create_tech_extras_router(db, get_current_user):
                 msg += f"\n📍 Local: {input.address}"
             elif input.latitude and input.longitude:
                 msg += f"\n📍 GPS: {input.latitude:.5f}, {input.longitude:.5f}"
-            await send_telegram_notification(msg)
+            await send_ponto_notification(msg)
         except Exception as e:
             import logging as _log
-            _log.getLogger(__name__).warning(f"Telegram ponto notification failed: {e}")
+            _log.getLogger(__name__).warning(f"Ponto bot notification failed: {e}")
 
         return doc
 

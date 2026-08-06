@@ -1,0 +1,29 @@
+{
+  "summary": "Backend-only verification that Telegram was split into two independent bots: PONTO_BOT (attendance) and MANAGER_BOT (orders, invoices, reminders, /status). 10/10 pytest checks passed covering (a) .env keys, (b) source references, (c) runtime URL/token used by each helper, (d) scheduler token, (e) tech punch import.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_telegram_bot_separation.py",
+    "/app/test_reports/pytest/telegram_bot_separation.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "service_orders.py: send_ponto_notification / send_telegram_notification are near-duplicate — could be one helper parameterised by token to reduce drift risk.",
+    "Import of send_ponto_notification is inside the punch handler (runtime import) — fine, but consider top-of-file import to fail fast on refactors.",
+    "Prior iteration_37 flagged duplicate scheduler startup logs; still applies (out of scope for this test but noted).",
+    "PONTO_BOT_TOKEN and MANAGER_BOT_TOKEN live in .env unencrypted — acceptable for dev but rotate before prod."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_telegram_bot_separation.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "test_credentials": "n/a — tests exercise helpers directly with mocked httpx",
+  "seed_data_creation": "None. Runtime tests monkey-patch httpx.AsyncClient so no real Telegram traffic is generated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Bot separation verified. test_telegram_bot_separation.py contains 3 groups: TestEnvSeparation (.env keys, no legacy TELEGRAM_BOT_TOKEN), TestSourceReferences (helpers reference only their own token, tech_extras uses PONTO only, scheduler uses MANAGER only), TestRuntimeSeparation (httpx URL contains the correct token, no cross-leakage). Tests use dotenv to load /app/backend/.env before importing modules. Old TELEGRAM_BOT_TOKEN key is fully removed. Chat ID TELEGRAM_ADMIN_CHAT_ID=6792830766 is shared.",
+  "rca of the issue": "No bugs found — feature working as designed."
+}
