@@ -597,40 +597,109 @@ def _build_analysis_data(transactions, filename, user_name, user_overrides=None)
     return transactions
 
 
+def _extract_significant_words(text: str) -> set:
+    """Extract significant words (>=4 chars) from a description for fuzzy matching.
+    Removes dates, reference numbers, common prefixes like COMPRA EL-E."""
+    t = text.upper()
+    # Remove common bank statement prefixes
+    for prefix in ["COMPRA EL-E", "LEV. ATM EL-E", "TRF SEPA+", "PAG.AUT.", "INST ", "P/"]:
+        t = t.replace(prefix, "")
+    # Remove dates and reference numbers
+    t = re.sub(r'\d{2}/\d{2}', '', t)
+    t = re.sub(r'\d{5,}[/\-]?\d*', '', t)
+    t = re.sub(r'PT\d+', '', t)
+    # Split and keep words >= 4 chars (skip common noise)
+    noise = {"LDA", "LTD", "LTDA", "UNIPESSOAL", "COMERCIO", "PORTUGAL", "LISBOA", "SEDE", "SANTA", "MARTA", "QUELUZ", "OEIRAS", "AMADORA", "POVOA", "INST"}
+    words = set()
+    for w in re.split(r'[\s\-/,\.]+', t):
+        w = w.strip()
+        if len(w) >= 4 and w not in noise and not w.isdigit():
+            words.add(w)
+    return words
+
+
+def _fuzzy_match_supplier(txn_desc: str, expense_supplier: str) -> bool:
+    """Check if a bank transaction description matches an expense supplier by significant word overlap."""
+    txn_words = _extract_significant_words(txn_desc)
+    exp_words = _extract_significant_words(expense_supplier)
+    if not txn_words or not exp_words:
+        return False
+    # Match if any significant word appears in both
+    common = txn_words & exp_words
+    return len(common) > 0
+
+
 async def _prepare_sync_preview(db, analysis_id, analysis_doc):
-    """Prepare sync preview — does NOT create expenses. Returns pending items + duplicates for user review."""
+    """Prepare sync preview — does NOT create expenses. Returns pending items + possible duplicates for user review.
+    Uses fuzzy name matching: extracts significant words from bank descriptions and expense suppliers."""
     try:
         expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
         to_sync = [t for t in analysis_doc.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
 
         existing_expenses = await db.expenses.find(
-            {}, {"_id": 0, "date": 1, "supplier": 1, "value_gross": 1, "invoice_number": 1, "bank_txn_id": 1}
+            {}, {"_id": 0, "id": 1, "date": 1, "supplier": 1, "value_gross": 1, "invoice_number": 1, "bank_txn_id": 1}
         ).to_list(5000)
 
         existing_by_txn = {e.get("bank_txn_id") for e in existing_expenses if e.get("bank_txn_id")}
-        existing_by_match = set()
-        for e in existing_expenses:
-            key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
-            existing_by_match.add(key)
 
         pending = []
         duplicates = []
 
         for t in to_sync:
+            # Layer 1: Already synced by ID
             if t["id"] in existing_by_txn:
-                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"], "category": t.get("category", "outro"), "reason": "Já sincronizado (ID)"})
+                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"],
+                                   "category": t.get("category", "outro"), "reason": "Já sincronizado (ID)", "match_type": "exact"})
                 continue
-            match_key = f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}"
-            if match_key in existing_by_match:
-                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"], "category": t.get("category", "outro"), "reason": "Duplicado (data + valor + fornecedor)"})
-                continue
-            pending.append({
-                "id": t["id"],
-                "date": t["date"],
-                "description": t["description"],
-                "amount": t["amount"],
-                "category": t.get("category", "outro"),
-            })
+
+            # Layer 2: Fuzzy name + (date OR value) matching
+            txn_amount = abs(t["amount"])
+            txn_date = t["date"]
+            found_match = None
+
+            for e in existing_expenses:
+                exp_amount = abs(e.get("value_gross", 0) or 0)
+                exp_date = e.get("date", "")
+                exp_supplier = e.get("supplier", "")
+
+                # Check fuzzy name match
+                if not _fuzzy_match_supplier(t["description"], exp_supplier):
+                    continue
+
+                # Name matches — check date AND/OR value
+                date_match = txn_date == exp_date
+                value_match = exp_amount > 0 and abs(txn_amount - exp_amount) / max(exp_amount, 0.01) < 0.05  # within 5%
+
+                if date_match and value_match:
+                    found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
+                                   "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesma data e valor similar",
+                                   "match_type": "fuzzy_date_value"}
+                    break
+                elif date_match:
+                    found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
+                                   "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesma data ({exp_date})",
+                                   "match_type": "fuzzy_date"}
+                elif value_match:
+                    # Only flag if amounts are very close (within 1%)
+                    if abs(txn_amount - exp_amount) / max(exp_amount, 0.01) < 0.01:
+                        found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
+                                       "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesmo valor ({exp_amount:.2f}€)",
+                                       "match_type": "fuzzy_value"}
+
+            if found_match:
+                duplicates.append({
+                    "id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"],
+                    "category": t.get("category", "outro"),
+                    **found_match,
+                })
+            else:
+                pending.append({
+                    "id": t["id"],
+                    "date": t["date"],
+                    "description": t["description"],
+                    "amount": t["amount"],
+                    "category": t.get("category", "outro"),
+                })
 
         result = {"pending": pending, "duplicates": duplicates, "pending_count": len(pending), "duplicate_count": len(duplicates), "total_processed": len(to_sync)}
         logger.info(f"Sync preview for {analysis_id}: {len(pending)} pending, {len(duplicates)} duplicates")
@@ -973,13 +1042,29 @@ def create_bank_analysis_router(db, get_current_user):
 
     @router.get("/{analysis_id}/status")
     async def get_analysis_status(analysis_id: str, user=Depends(get_current_user)):
-        """Check processing status of an analysis (used for PDF polling)."""
+        """Check processing status of an analysis (used for PDF polling).
+        Auto-detects stale processing records (>10 min) and marks them as failed."""
         doc = await db.bank_analyses.find_one(
             {"id": analysis_id},
-            {"_id": 0, "id": 1, "status": 1, "error": 1, "transaction_count": 1, "filename": 1}
+            {"_id": 0, "id": 1, "status": 1, "error": 1, "transaction_count": 1, "filename": 1, "created_at": 1}
         )
         if not doc:
             raise HTTPException(404, "Análise não encontrada")
+        # Detect stale processing (>10 min)
+        if doc.get("status") == "processing" and doc.get("created_at"):
+            try:
+                created = datetime.fromisoformat(doc["created_at"].replace("Z", "+00:00"))
+                age_min = (datetime.now(timezone.utc) - created).total_seconds() / 60
+                if age_min > 10:
+                    await db.bank_analyses.update_one(
+                        {"id": analysis_id, "status": "processing"},
+                        {"$set": {"status": "failed", "error": "Processamento expirou (>10 min). Por favor tente novamente."}}
+                    )
+                    doc["status"] = "failed"
+                    doc["error"] = "Processamento expirou (>10 min). Por favor tente novamente."
+            except Exception:
+                pass
+        doc.pop("created_at", None)
         return doc
 
     @router.get("/{analysis_id}")

@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 43: Verified fuzzy duplicate detection and stale PDF processing detection. Wrote /app/backend/tests/test_iter43_fuzzy_dup.py with 11 tests — ALL PASS. Coverage: (1) _extract_significant_words correctly extracts supplier keywords JOTEILUX/ARMASUL/SONEPAR/SERVELEC/ELECTRICOL from bank descriptions like '29/01 COMPRA EL-E 3148056/04 JOTEILUX LDA QUELUZ' while stripping COMPRA EL-E/LEV. ATM EL-E/TRF SEPA+ prefixes, dd/mm dates, long ref numbers, and noise words (LDA, COMERCIO, PORTUGAL, LISBOA, QUELUZ, etc.). (2) _fuzzy_match_supplier returns True for JOTEILUX bank↔JOTEILUX-COMERCIO expense, and False for unrelated suppliers (JOTEILUX vs SONEPAR). (3) End-to-end: seeded an expense (JOTEILUX-COMERCIO, 2026-01-29, €58.08) via POST /api/expenses, then uploaded a CSV with 'COMPRA EL-E 3148056/04 JOTEILUX LDA QUELUZ' for -58.08 on 29/01/2026 — sync_preview.duplicates contained the JOTEILUX row with expense_supplier, expense_value=58.08, expense_date='2026-01-29', match_type='fuzzy_date_value'; JOTEILUX did NOT appear in pending. (4) Stale detection: inserted a 'processing' record with created_at=-15min directly into MongoDB; GET /api/bank-analysis/{id}/status returned status=failed with error containing 'expirou'. Fresh (<10min) processing records remain 'processing'. Frontend code reviewed (AnaliseBancariaPage.jsx line 381-403): duplicate rows correctly render orange warning boxes showing 'Despesa: {expense_supplier} ({expense_date}) — {expense_value}€' plus the reason line. UI test skipped in favor of exhaustive backend verification since the JSX code path is straightforward render of already-verified backend fields.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AnaliseBancariaPage — sync-approval-panel", "issues": ["Duplicates warning block is nested inside the `pendingItems.length > 0` guard (line 345). If an analysis has 0 pending items but N fuzzy duplicates, the user won't see the orange duplicate warnings at all — the whole panel is hidden. Suggest lifting the duplicates block to render whenever syncPreview?.duplicates?.length > 0, independent of pending count."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter43_fuzzy_dup.py",
+    "/app/test_reports/pytest/iter43.xml"
+  ],
+  "action_items": [
+    "OPTIONAL/minor: Move the duplicates warning block in AnaliseBancariaPage.jsx outside the `pendingItems.length > 0` guard so users still see fuzzy duplicates when 0 pending items remain."
+  ],
+  "critical_code_review_comments": [
+    "bank_analysis.py _extract_significant_words (line 600): Correctly strips COMPRA EL-E, LEV. ATM EL-E, TRF SEPA+, PAG.AUT., dd/mm dates, and >=5-digit reference numbers. Noise set includes PT entity words (LDA, COMERCIO, PORTUGAL, LISBOA, QUELUZ, OEIRAS, AMADORA, POVOA). Keeps words length>=4 — this correctly picks JOTEILUX/ARMASUL/SONEPAR/SERVELEC. Verified with 4 real supplier patterns.",
+    "_fuzzy_match_supplier (line 621): Set-intersection approach with early-return is O(n) and robust to word order. Requires only 1 common significant word — could be too loose for very short suppliers, but noise filtering mitigates false positives.",
+    "_prepare_sync_preview (line 632): Two-layer detection: (1) exact bank_txn_id match, (2) fuzzy name + (date AND/OR value within 5%). Returns match_type='fuzzy_date_value'|'fuzzy_date'|'fuzzy_value' with full expense_supplier/date/value context for UI. value_match-only is guarded by tighter 1% threshold to avoid coincidental value collisions — good defensive design.",
+    "GET /{analysis_id}/status stale detection (line 1043): 10-min threshold is reasonable for Gemini PDF processing. Uses conditional update with {status:'processing'} filter to avoid overriding a race-completed doc. datetime.fromisoformat with 'Z'→'+00:00' handles the ISO stored format. No noticeable issue.",
+    "MINOR: _fuzzy_match_supplier does no threshold on match strength — a single common short-ish word (e.g., 'GALP' shared by 'GALP Energia' and an unrelated 'GALP Marina') could trigger a false-positive fuzzy_date_value if date and value coincidentally match. In practice value/date filters catch this, but consider requiring 2 words when common word is <=5 chars in a future iteration.",
+    "MINOR: In AnaliseBancariaPage.jsx line 345, the duplicates block being nested inside the pending guard means an analysis that is 100% duplicates will silently show no warning — flagged as design issue above.",
+    "MINOR: The stale-detection endpoint is triggered only when the FE calls /status. If nobody polls, records stay 'processing' forever in the list view. Consider a startup sweep or periodic background job for full self-healing (not blocking)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter43_fuzzy_dup.py"
+  ],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "code-reviewed, not E2E-tested this iteration"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Test creates + deletes a JOTEILUX-COMERCIO expense (invoice_number='TEST-ITER43-001', notes include TEST_ITER43) and 2 short-lived bank_analyses records. All cleanup happens in fixtures/finally blocks. No orphan data expected.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Fuzzy duplicate detection and stale-processing detection are fully working on backend. If retesting UI: (a) log in admin, (b) create expense JOTEILUX 2026-01-29 €58.08 if not present, (c) upload CSV with 'COMPRA EL-E 3148056/04 JOTEILUX LDA QUELUZ;-58,08;29/01/2026', (d) open analysis detail — the orange 'Possíveis duplicados detetados' block should appear with 'Despesa: JOTEILUX-COMERCIO... (2026-01-29) — 58.08 €'. Only visible when there is at least 1 pending item too (see design_issue).",
+  "rca_of_the_issue": "N/A — both bug fixes verified working. Fuzzy match works via significant-word set intersection; stale detection works via conditional status update on /status endpoint when created_at is >10min old."
+}
