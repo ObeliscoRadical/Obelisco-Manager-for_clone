@@ -9,7 +9,7 @@ import requests
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://eletro-manager-1.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://expenses-ai-1.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 LLM_TIMEOUT = 120
 

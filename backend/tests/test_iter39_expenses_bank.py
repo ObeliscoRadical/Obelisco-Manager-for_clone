@@ -17,7 +17,7 @@ import uuid
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
     # Fallback for local testing
-    BASE_URL = "https://eletro-manager-1.preview.emergentagent.com"
+    BASE_URL = "https://expenses-ai-1.preview.emergentagent.com"
 
 # Test credentials from test_credentials.md
 ADMIN_EMAIL = "admin@obelisco.pt"
