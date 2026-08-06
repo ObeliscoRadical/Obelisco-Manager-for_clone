@@ -1,5 +1,40 @@
 # Obelisco Manager - CHANGELOG
 
+## Aug 06, 2026 — Despesas: Categorização IA + Duplicados + Extratos PDF
+
+### Despesas — Auto-Categorização Inteligente
+- **Backend** (`expenses.py`): Novo `_SUPPLIER_CATEGORY_MAP` com ~60 fornecedores portugueses → categoria automática (Material, Combustível, Alimentação, Viatura, Comunicações, Rendas, Seguros, Ferramentas, etc.)
+- **Backend**: `_smart_category_from_supplier()` determina categoria por palavras-chave do fornecedor
+- **Backend**: `extract_invoice_data` agora retorna `category_source` (IA, palavras-chave, histórico, genérico)
+- **Backend**: Sugestões por histórico — procura despesas anteriores do mesmo fornecedor, usa categoria dominante
+- **Prioridade**: histórico > palavras-chave > IA/OCR > "Outros"
+- **Backend**: Tipo automático (fixo/variavel/obra) já existente com `_SUPPLIER_TYPE_MAP`
+
+### Despesas — Detecção de Duplicados Melhorada
+- **Backend**: 3 camadas: 1) nº fatura exacto, 2) data+valor+fornecedor fuzzy (±1%), 3) bank_txn_id
+- **Backend**: HTTP 409 com `duplicate_invoice` code ao criar/editar, bypass com `?force=true`
+- **Frontend**: Substituído `window.confirm` por painel visual `save-duplicate-confirm` com dados da despesa existente
+- **Frontend**: Botões "Criar Mesmo Assim" / "Cancelar" no painel de confirmação
+- **Frontend**: Banner de aviso `duplicate-warning` ao detectar duplicado na extracção OCR
+
+### Despesas — UI de Sugestão
+- **Frontend**: Banner `suggestion-banner` mostra fonte da categorização (histórico, palavras-chave, IA)
+- **Frontend**: Badge `category-source-badge` junto ao dropdown de Categoria
+- **Frontend**: Badge "auto" junto ao campo Tipo quando auto-categorizado
+- **Frontend**: Categoria e tipo editáveis manualmente (badge desaparece ao alterar)
+
+### Análise Bancária — Suporte a PDF
+- **Backend** (`bank_analysis.py`): Nova função `_parse_pdf()` — envia PDF ao Gemini 3.1 Pro para extrair transações
+- **Backend**: Upload endpoint aceita `.pdf` como formato válido
+- **Backend**: Erros de parsing (ValueError) convertidos em HTTP 400 (em vez de 500)
+- **Frontend** (`AnaliseBancariaPage.jsx`): Input de ficheiro aceita `.pdf`, texto atualizado
+
+### Testes
+- **Iteration 39**: 15/15 backend + 100% frontend aprovado
+- Cobertura: categorização inteligente, duplicados 409, bypass force, PDF aceite, .doc rejeitado, UI completa
+
+---
+
 ## Aug 05, 2026 — Fusão Obelisco-Tecnicos-main → Obelisco Manager
 - **Pedido**: Unificar o app "Obelisco-Tecnicos-main" (gestão de pedidos de serviço, ponto GPS, widget público) dentro do app principal "Obelisco Manager" para ficar com apenas UM projecto.
 - **Backend novo** (`/app/backend/service_orders.py`):

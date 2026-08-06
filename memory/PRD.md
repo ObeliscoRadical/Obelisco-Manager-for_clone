@@ -8,8 +8,8 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Backend**: FastAPI + MongoDB (port 8001)
 - **Auth**: JWT (localStorage Bearer tokens)
 - **PDF**: jsPDF + jspdf-autotable
-- **AI**: Emergent LLM Key → GPT-5.4-mini (categorization), Gemini 3.1 Pro (OCR, chat)
-- **Integrations**: Telegram Bot, Google Calendar, Emergent Email, Web Push (VAPID)
+- **AI**: Emergent LLM Key → GPT-4o-mini (bank categorization), Gemini 3.1 Pro (OCR, invoice extraction, PDF bank statement extraction)
+- **Integrations**: Telegram Bot (Ponto + Manager), Google Calendar, Emergent Email, Web Push (VAPID)
 - **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
 
 ## All Implemented Features
@@ -30,16 +30,26 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - GPS Timeclock + Telegram + Reports + CSV
 - Perfil 360° Cliente (mini-CRM)
 - Web Push Notifications (VAPID)
-- Bank Statement Analysis (CSV/Excel/OFX, AI categorization, recurring, cash flow projection)
+- Bank Statement Analysis (CSV/Excel/OFX/PDF, AI categorization, recurring, cash flow projection)
 - **Tax Alerts** (PT fiscal calendar: IVA, IRC-PPC, Modelo 22, TSU, IRS retenções)
 - **Bank-to-Expenses Sync** (duplicate detection by ID + date/amount/supplier fuzzy match)
+- **Recurring financial detection** + calendar feed (mensal/trimestral, dia típico, próxima data)
+- **Telegram Bot Manager** (lembretes, /status, alertas) + **Bot Ponto** (entrada/saída)
+- **Dashboard Fiscal** (KPIs IRC, IVA, TSU, carga fiscal)
+- **Expenses Smart Categorization** (auto-category from supplier keywords + AI + history, auto-type fixo/variavel/obra)
+- **Expenses Duplicate Detection** (3 layers: invoice number, date+amount+supplier fuzzy, bank sync)
+- **Expenses Suggestion System** (historical supplier pattern, keyword match, AI fallback with category_source tracking)
+- **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements)
 
 ## Backlog
 ### P1
-- Automação Máscara DIN
+- Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
+- Mini gráfico receitas vs despesas no dashboard
 
 ### P2
 - Mapa de equipa GPS
-- Hardening segurança
-- TOC Online integration
+- Hardening segurança (CORS allow-list, rate limiting, CSP)
+- TOC Online integration (se credenciais fornecidas)
+- Alertas Telegram automáticos de IVA/PPC perto do vencimento
+- Refactor server.py (>4000 linhas)
