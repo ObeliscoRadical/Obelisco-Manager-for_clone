@@ -30,10 +30,12 @@ export default function AnaliseBancariaPage() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [view, setView] = useState('list'); // list | detail
+  const [taxAlerts, setTaxAlerts] = useState(null);
   const fileRef = useRef(null);
 
   useEffect(() => {
     fetchList();
+    fetchAlerts();
   }, []);
 
   const fetchList = async () => {
@@ -41,6 +43,13 @@ export default function AnaliseBancariaPage() {
       const { data } = await api.get('/bank-analysis');
       setAnalyses(data);
     } catch { } finally { setLoading(false); }
+  };
+
+  const fetchAlerts = async () => {
+    try {
+      const { data } = await api.get('/bank-analysis/tax-alerts/upcoming');
+      setTaxAlerts(data);
+    } catch { }
   };
 
   const handleUpload = async (file) => {
@@ -117,6 +126,38 @@ export default function AnaliseBancariaPage() {
         </div>
       )}
 
+      {/* Tax Alerts */}
+      {taxAlerts?.alerts?.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4" data-testid="tax-alerts-panel">
+          <h3 className="text-sm text-zinc-400 uppercase tracking-wider font-semibold mb-3 flex items-center gap-2">
+            <AlertTriangle size={16} className="text-yellow-400" /> Alertas Fiscais
+          </h3>
+          <div className="space-y-2">
+            {taxAlerts.alerts.slice(0, 6).map((a, i) => {
+              const statusColors = {
+                overdue: 'bg-red-500/10 border-red-500/30 text-red-400',
+                urgent: 'bg-orange-500/10 border-orange-500/30 text-orange-400',
+                soon: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
+                upcoming: 'bg-zinc-800/50 border-zinc-700 text-zinc-400',
+              };
+              const cls = statusColors[a.status] || statusColors.upcoming;
+              return (
+                <div key={a.date + a.type + i} className={`flex items-center justify-between p-3 border rounded-lg ${cls}`}>
+                  <div>
+                    <p className="text-sm font-medium">{a.label}</p>
+                    <p className="text-xs opacity-70">{a.desc}</p>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-4">
+                    <p className="text-sm font-mono font-bold">{new Date(a.date).toLocaleDateString('pt-PT')}</p>
+                    <p className="text-xs">{a.days_until < 0 ? `${Math.abs(a.days_until)}d em atraso` : a.days_until === 0 ? 'HOJE' : `em ${a.days_until} dias`}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* List of analyses */}
       {loading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 text-yellow-400 animate-spin" /></div>
@@ -155,6 +196,8 @@ export default function AnaliseBancariaPage() {
 /* ─── Analysis Detail ───────────────────────────────────────────── */
 function AnalysisDetail({ analysis, onBack }) {
   const [tab, setTab] = useState('overview');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
   const { taxes, recurring, cashflow, by_category, by_month, transactions } = analysis;
 
   const catData = Object.entries(by_category || {})
@@ -180,7 +223,48 @@ function AnalysisDetail({ analysis, onBack }) {
           <h1 className="text-2xl font-bold text-white">{analysis.filename}</h1>
           <p className="text-sm text-zinc-500">{analysis.date_from} → {analysis.date_to} · {analysis.transaction_count} transações</p>
         </div>
+        <button
+          data-testid="sync-expenses-btn"
+          onClick={async () => {
+            setSyncing(true);
+            try {
+              const { data } = await api.post(`/bank-analysis/${analysis.id}/sync-expenses`);
+              setSyncResult(data);
+              if (data.created > 0) toast.success(`${data.created} despesas importadas!`);
+              else toast.info(`Nenhuma nova despesa. ${data.skipped} duplicados detectados.`);
+            } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
+            finally { setSyncing(false); }
+          }}
+          disabled={syncing}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg font-medium text-sm hover:bg-blue-500/30 disabled:opacity-50"
+        >
+          {syncing ? <Loader2 size={16} className="animate-spin" /> : <Receipt size={16} />}
+          Sincronizar com Despesas
+        </button>
       </div>
+
+      {/* Sync result */}
+      {syncResult && (
+        <div className={`p-4 rounded-xl border text-sm ${syncResult.created > 0 ? 'bg-green-500/10 border-green-500/30' : 'bg-zinc-800 border-zinc-700'}`}>
+          <div className="flex items-center justify-between">
+            <span className="text-white font-medium">Resultado da sincronização:</span>
+            <div className="flex gap-4 text-xs">
+              <span className="text-green-400">{syncResult.created} criadas</span>
+              <span className="text-yellow-400">{syncResult.skipped} duplicados ignorados</span>
+            </div>
+          </div>
+          {syncResult.duplicates?.length > 0 && (
+            <details className="mt-2">
+              <summary className="text-xs text-zinc-500 cursor-pointer hover:text-zinc-400">Ver duplicados ignorados ({syncResult.duplicates.length})</summary>
+              <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
+                {syncResult.duplicates.map((d, i) => (
+                  <p key={i} className="text-xs text-zinc-500">{d.description?.slice(0, 50)} · {fmt(d.amount)} — {d.reason}</p>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-1">

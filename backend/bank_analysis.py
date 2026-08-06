@@ -557,4 +557,166 @@ def create_bank_analysis_router(db, get_current_user):
             raise HTTPException(404, "Transação não encontrada")
         return {"ok": True}
 
+    # ── Tax Alerts ────────────────────────────────────────────────
+    @router.get("/tax-alerts/upcoming")
+    async def get_tax_alerts(user=Depends(get_current_user)):
+        """Return upcoming tax payment deadlines based on PT fiscal calendar."""
+        today = datetime.now(timezone.utc)
+        year = today.year
+
+        # Portuguese fiscal calendar
+        deadlines = [
+            # IVA Trimestral (regime trimestral)
+            {"date": f"{year}-02-15", "type": "IVA", "label": f"IVA 4.º Trimestre {year-1}", "desc": "Entrega da declaração periódica do IVA referente ao 4.º trimestre do ano anterior"},
+            {"date": f"{year}-05-15", "type": "IVA", "label": f"IVA 1.º Trimestre {year}", "desc": "Entrega da declaração periódica do IVA referente ao 1.º trimestre"},
+            {"date": f"{year}-08-15", "type": "IVA", "label": f"IVA 2.º Trimestre {year}", "desc": "Entrega da declaração periódica do IVA referente ao 2.º trimestre"},
+            {"date": f"{year}-11-15", "type": "IVA", "label": f"IVA 3.º Trimestre {year}", "desc": "Entrega da declaração periódica do IVA referente ao 3.º trimestre"},
+            # IRC - Pagamento por Conta (3 prestações)
+            {"date": f"{year}-07-31", "type": "IRC-PPC", "label": f"1.ª Prestação PPC {year}", "desc": "Primeiro pagamento por conta do IRC"},
+            {"date": f"{year}-09-30", "type": "IRC-PPC", "label": f"2.ª Prestação PPC {year}", "desc": "Segundo pagamento por conta do IRC"},
+            {"date": f"{year}-12-15", "type": "IRC-PPC", "label": f"3.ª Prestação PPC {year}", "desc": "Terceiro pagamento por conta do IRC"},
+            # IRC - Modelo 22
+            {"date": f"{year}-05-31", "type": "IRC-MOD22", "label": f"IRC Modelo 22 ({year-1})", "desc": "Entrega da declaração Modelo 22 do IRC do exercício anterior"},
+            # TSU mensal
+            {"date": f"{year}-{today.month:02d}-20", "type": "TSU", "label": f"TSU {today.strftime('%B %Y')}", "desc": "Entrega das contribuições à Segurança Social"},
+            # IRS Retenções
+            {"date": f"{year}-{today.month:02d}-20", "type": "IRS-RET", "label": f"IRS Retenções {today.strftime('%B %Y')}", "desc": "Entrega das retenções de IRS ao Estado"},
+        ]
+
+        # Add next month deadlines for TSU/IRS
+        next_m = today.replace(day=1) + timedelta(days=35)
+        deadlines.append({"date": next_m.strftime(f"%Y-%m-20"), "type": "TSU", "label": f"TSU {next_m.strftime('%B %Y')}", "desc": "Entrega das contribuições à Segurança Social"})
+
+        # Filter: only future or within last 5 days (overdue)
+        alerts = []
+        for d in deadlines:
+            try:
+                dl_date = datetime.strptime(d["date"], "%Y-%m-%d")
+                days_until = (dl_date - today.replace(tzinfo=None)).days
+                if days_until >= -5 and days_until <= 90:
+                    d["days_until"] = days_until
+                    d["status"] = "overdue" if days_until < 0 else ("urgent" if days_until <= 7 else ("soon" if days_until <= 30 else "upcoming"))
+                    alerts.append(d)
+            except ValueError:
+                continue
+
+        # Get latest tax estimates from most recent analysis
+        latest = await db.bank_analyses.find_one({}, {"_id": 0, "taxes": 1}, sort=[("created_at", -1)])
+        estimates = latest.get("taxes", {}) if latest else {}
+
+        return {"alerts": sorted(alerts, key=lambda a: a["date"]), "estimates": estimates}
+
+    # ── Sync to Expenses (with duplicate detection) ───────────────
+    @router.post("/{analysis_id}/sync-expenses")
+    async def sync_to_expenses(analysis_id: str, user=Depends(get_current_user)):
+        """Import debit transactions from bank analysis into expenses module, detecting duplicates."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+
+        analysis = await db.bank_analyses.find_one({"id": analysis_id}, {"_id": 0})
+        if not analysis:
+            raise HTTPException(404, "Análise não encontrada")
+
+        # Only sync expenses (debit transactions, excluding receita/salario)
+        expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
+        to_sync = [t for t in analysis.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
+
+        # Get existing expenses for duplicate detection
+        existing_expenses = await db.expenses.find(
+            {}, {"_id": 0, "date": 1, "supplier": 1, "value_gross": 1, "invoice_number": 1, "bank_txn_id": 1}
+        ).to_list(5000)
+
+        # Build lookup sets for duplicate detection
+        existing_by_txn = {e.get("bank_txn_id") for e in existing_expenses if e.get("bank_txn_id")}
+        existing_by_match = set()
+        for e in existing_expenses:
+            key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
+            existing_by_match.add(key)
+
+        created = 0
+        skipped = 0
+        duplicates = []
+
+        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
+
+        for t in to_sync:
+            # Check if already synced by ID
+            if t["id"] in existing_by_txn:
+                skipped += 1
+                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Já sincronizado (ID)"})
+                continue
+
+            # Check by date + amount + supplier similarity
+            match_key = f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}"
+            if match_key in existing_by_match:
+                skipped += 1
+                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Duplicado (data + valor + fornecedor)"})
+                continue
+
+            # Create expense
+            expense = {
+                "id": str(uuid.uuid4()),
+                "date": t["date"],
+                "supplier": t["description"][:100],
+                "nif": "",
+                "invoice_number": "",
+                "category": t.get("category", "outro").capitalize(),
+                "type": cat_to_type.get(t.get("category", ""), "variavel"),
+                "obra_id": None,
+                "obra_name": None,
+                "value_net": round(abs(t["amount"]) / 1.23, 2),
+                "vat_rate": 23,
+                "vat_amount": round(abs(t["amount"]) - abs(t["amount"]) / 1.23, 2),
+                "value_gross": round(abs(t["amount"]), 2),
+                "payment_method": "Transferência Bancária",
+                "notes": f"Importado do extrato bancário: {analysis.get('filename', '')}",
+                "invoice_file": None,
+                "bank_txn_id": t["id"],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.expenses.insert_one(expense)
+            existing_by_txn.add(t["id"])
+            existing_by_match.add(match_key)
+            created += 1
+
+        return {
+            "created": created,
+            "skipped": skipped,
+            "duplicates": duplicates,
+            "total_processed": len(to_sync),
+        }
+
+    # ── Check duplicates before sync (preview) ───────────────────
+    @router.get("/{analysis_id}/check-duplicates")
+    async def check_duplicates(analysis_id: str, user=Depends(get_current_user)):
+        """Preview which transactions would be synced vs skipped."""
+        analysis = await db.bank_analyses.find_one({"id": analysis_id}, {"_id": 0})
+        if not analysis:
+            raise HTTPException(404, "Análise não encontrada")
+
+        expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
+        to_check = [t for t in analysis.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
+
+        existing = await db.expenses.find(
+            {}, {"_id": 0, "date": 1, "supplier": 1, "value_gross": 1, "bank_txn_id": 1}
+        ).to_list(5000)
+
+        existing_ids = {e.get("bank_txn_id") for e in existing if e.get("bank_txn_id")}
+        existing_keys = set()
+        for e in existing:
+            key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
+            existing_keys.add(key)
+
+        new_items = []
+        dup_items = []
+        for t in to_check:
+            if t["id"] in existing_ids:
+                dup_items.append({**t, "dup_reason": "Já sincronizado"})
+            elif f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}" in existing_keys:
+                dup_items.append({**t, "dup_reason": "Data + valor + fornecedor similar"})
+            else:
+                new_items.append(t)
+
+        return {"new": new_items, "duplicates": dup_items, "new_count": len(new_items), "dup_count": len(dup_items)}
+
     return router

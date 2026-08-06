@@ -1,0 +1,22 @@
+{
+  "summary": "Tested new Tax Alerts + Bank->Expenses sync features. Backend: 7/7 pytest tests passed against public URL. Frontend: /analise-bancaria loads with 'ALERTAS FISCAIS' panel (data-testid=tax-alerts-panel) showing PT fiscal deadlines (IVA 2.º Trim 2026 15/08 em 8 dias, TSU/IRS 20/08 em 13 dias, TSU Sep, PPC 30/09). Analysis detail page shows 'Sincronizar com Despesas' button (data-testid=sync-expenses-btn); click yields result panel 'Resultado da sincronização: 0 criadas / 20 duplicados ignorados' with expandable 'Ver duplicados ignorados (20)'. Toast informs 'Nenhuma nova despesa. 20 duplicados detectados.' Idempotency confirmed via API (second sync returns created=0, skipped=total_processed). Expenses persisted with bank_txn_id, correct payment_method='Transferência Bancária' and all required fields.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_bank_tax_and_sync.py",
+    "/app/test_reports/pytest/iter35_bank_tax_sync.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "bank_analysis.py get_tax_alerts uses today.strftime('%B %Y') which yields English month names (e.g. 'August 2026') — consider PT localization for consistency with UI (currently mixes 'IVA 2.º Trimestre' PT + 'TSU August 2026' EN).",
+    "Duplicate fuzzy key uses only first 20 chars of supplier — may cause false positives for suppliers sharing prefix. Consider tighter matching (e.g. normalize + first 30 chars, or add invoice_number).",
+    "TSU/IRS deadlines are only generated for current month + next month; if today > 20, current month entry becomes overdue window (<=-5 days) and drops off; consider always including next 2 months explicitly."
+  ],
+  "updated_files": ["/app/backend/tests/test_bank_tax_and_sync.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "No new seed. Reused existing 3 bank_analyses + 20 previously-synced expenses from iteration 34.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Tax alerts + bank-to-expenses sync validated end-to-end (backend 7 tests + UI). Bank analysis list route is GET /api/bank-analysis (no trailing slash — 307 redirect otherwise). Detail page opens via clicking [data-testid^='analysis-<id>'] rows on /analise-bancaria."
+}
