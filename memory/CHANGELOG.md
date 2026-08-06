@@ -2,6 +2,32 @@
 
 ---
 
+## Aug 06, 2026 (Fork 2b) — Auto-Sync Despesas + Calendário + Re-Categorização IA
+
+### Auto-Sync Bancário → Despesas
+- **Backend** (`bank_analysis.py`): Novas funções `_auto_sync_expenses()` e `_auto_feed_calendar()` — executam automaticamente após cada upload (PDF ou CSV/Excel/OFX)
+- Resultados guardados no documento de análise (`auto_sync`, `auto_calendar`)
+- Deteção de duplicados: bank_txn_id + data/valor/fornecedor fuzzy
+- Upload CSV síncrono e upload PDF assíncrono ambos incluem auto-sync
+
+### Re-Categorização IA de Despesas Existentes
+- **Backend** (`expenses.py`): Novo endpoint `POST /api/expenses/ai-categorize`
+  - Fase 1: Palavras-chave (instant) — `_smart_category_from_supplier()` + `_smart_type_from_supplier()`
+  - Fase 2: GPT-4o-mini para despesas restantes em "Outros" (batches de 40)
+  - Retorna: `{total, updated_keywords, updated_ai, unchanged, message}`
+- **Frontend** (`DespesasPage.jsx`): Botão "Categorizar com IA" (roxo) na barra de ações
+
+### Frontend — Auto-Sync UI
+- **AnaliseBancariaPage.jsx**: Banner `auto-sync-banner` mostra resultados automáticos (despesas importadas, duplicados, calendário)
+- Toasts de sucesso para auto-sync tanto em CSV como em PDF (polling)
+- Botão manual "Sincronizar com Despesas" continua disponível para re-sync
+
+### Testes
+- **Iteration 41**: 8/8 backend + 100% frontend aprovado
+- Cobertura: CSV upload com auto_sync, duplicados no re-upload, ai-categorize endpoint, UI buttons + banner
+
+---
+
 ## Aug 06, 2026 (Fork 2) — Fix: PDF Upload Assíncrono
 
 ### Bug
