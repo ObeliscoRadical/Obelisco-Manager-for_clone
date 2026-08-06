@@ -564,6 +564,10 @@ def create_bank_analysis_router(db, get_current_user):
         today = datetime.now(timezone.utc)
         year = today.year
 
+        PT_MONTHS = {1:"Janeiro",2:"Fevereiro",3:"Março",4:"Abril",5:"Maio",6:"Junho",7:"Julho",8:"Agosto",9:"Setembro",10:"Outubro",11:"Novembro",12:"Dezembro"}
+        month_name = PT_MONTHS.get(today.month, "")
+        next_month_name = PT_MONTHS.get(next_m.month, "")
+
         # Portuguese fiscal calendar
         deadlines = [
             # IVA Trimestral (regime trimestral)
@@ -578,14 +582,15 @@ def create_bank_analysis_router(db, get_current_user):
             # IRC - Modelo 22
             {"date": f"{year}-05-31", "type": "IRC-MOD22", "label": f"IRC Modelo 22 ({year-1})", "desc": "Entrega da declaração Modelo 22 do IRC do exercício anterior"},
             # TSU mensal
-            {"date": f"{year}-{today.month:02d}-20", "type": "TSU", "label": f"TSU {today.strftime('%B %Y')}", "desc": "Entrega das contribuições à Segurança Social"},
+            {"date": f"{year}-{today.month:02d}-20", "type": "TSU", "label": f"TSU {month_name} {year}", "desc": "Entrega das contribuições à Segurança Social"},
             # IRS Retenções
-            {"date": f"{year}-{today.month:02d}-20", "type": "IRS-RET", "label": f"IRS Retenções {today.strftime('%B %Y')}", "desc": "Entrega das retenções de IRS ao Estado"},
+            {"date": f"{year}-{today.month:02d}-20", "type": "IRS-RET", "label": f"IRS Retenções {month_name} {year}", "desc": "Entrega das retenções de IRS ao Estado"},
         ]
 
         # Add next month deadlines for TSU/IRS
         next_m = today.replace(day=1) + timedelta(days=35)
-        deadlines.append({"date": next_m.strftime(f"%Y-%m-20"), "type": "TSU", "label": f"TSU {next_m.strftime('%B %Y')}", "desc": "Entrega das contribuições à Segurança Social"})
+        next_month_name = PT_MONTHS.get(next_m.month, "")
+        deadlines.append({"date": next_m.strftime(f"%Y-%m-20"), "type": "TSU", "label": f"TSU {next_month_name} {next_m.year}", "desc": "Entrega das contribuições à Segurança Social"})
 
         # Filter: only future or within last 5 days (overdue)
         alerts = []
