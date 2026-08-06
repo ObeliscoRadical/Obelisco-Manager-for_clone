@@ -2,6 +2,33 @@
 
 ---
 
+## Aug 06, 2026 (Fork 2c) — Aprendizagem de Categorias + Aprovação de Sync
+
+### Category Learning (Aprendizagem)
+- **Backend** (`bank_analysis.py`): Novo collection `category_overrides` — guarda regras aprendidas
+- PATCH transação → guarda `desc_key` normalizado (sem datas/refs, lowercase) + categoria
+- `_pre_categorize()` agora verifica overrides do utilizador ANTES de keywords/IA (prioridade máxima)
+- Match exato + match parcial (primeiros 20 chars)
+- `GET /api/bank-analysis/category-overrides/list` — listar regras aprendidas
+- `DELETE /api/bank-analysis/category-overrides/{desc_key}` — remover regra
+
+### Aprovação de Importação (Sync Preview)
+- **Backend**: Substituído `_auto_sync_expenses()` por `_prepare_sync_preview()` — NÃO importa automaticamente
+- Análises agora incluem `sync_preview: {pending: [...], duplicates: [...]}` com itens pendentes de aprovação
+- Novo endpoint `POST /api/bank-analysis/{id}/approve-sync` — aceita `{approved_ids: [ids]}` e cria despesas apenas para os aprovados
+- Após aprovação: `sync_preview.pending` é atualizado, `sync_approved.created` guardado
+- **Frontend** (`AnaliseBancariaPage.jsx`):
+  - Painel de aprovação (`sync-approval-panel`) com checkboxes por transação
+  - Botões "Selecionar tudo" / "Desmarcar tudo" + "Aprovar (N)"
+  - Duplicados mostrados em secção colapsável
+  - Toast de aprendizagem: "o sistema aprendeu esta correção para futuros extratos"
+
+### Testes
+- **Iteration 42**: 7/7 backend + 100% frontend aprovado
+- Cobertura: upload CSV com preview, approve-sync parcial, learning override, re-upload com override aplicado, UI panel
+
+---
+
 ## Aug 06, 2026 (Fork 2b) — Auto-Sync Despesas + Calendário + Re-Categorização IA
 
 ### Auto-Sync Bancário → Despesas

@@ -40,9 +40,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Expenses Duplicate Detection** (3 layers: invoice number, date+amount+supplier fuzzy, bank sync)
 - **Expenses Suggestion System** (historical supplier pattern, keyword match, AI fallback with category_source tracking)
 - **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements, async background processing with polling)
-- **Auto-Sync Bank → Expenses** (automatic import of debit transactions to expenses with duplicate detection after any upload)
+- **Auto-Sync Bank → Expenses** (prepares sync preview with duplicate detection; user approves before import)
 - **Auto-Feed Calendar** (automatic creation of recurring payment predictions in calendar after analysis)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
+- **Category Learning** (user corrections to transaction categories are saved and applied to future bank statements)
 
 ## Backlog
 ### P1
