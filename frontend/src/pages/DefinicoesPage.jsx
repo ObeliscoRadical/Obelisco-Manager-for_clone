@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Settings, Save, Building2, Percent, Shield, AlertTriangle } from 'lucide-react';
+import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash2, Loader2 } from 'lucide-react';
 
 const formatPct = (v) => `${v}%`;
 
@@ -60,6 +60,7 @@ export default function DefinicoesPage() {
           <TabsTrigger value="indiretos" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Percent size={14} className="mr-1" /> Indiretos</TabsTrigger>
           <TabsTrigger value="risco" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Shield size={14} className="mr-1" /> Risco</TabsTrigger>
           <TabsTrigger value="empresa" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Building2 size={14} className="mr-1" /> Empresa</TabsTrigger>
+          <TabsTrigger value="ia" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Brain size={14} className="mr-1" /> Regras IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral" className="mt-6">
@@ -163,7 +164,144 @@ export default function DefinicoesPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="ia" className="mt-6">
+          <CategoryOverridesTab />
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+
+const BANK_CAT_LABELS = {
+  fixo: 'Custo Fixo', variavel: 'Custo Variável', obra: 'Custo de Obra',
+  receita: 'Receita', imposto: 'Imposto', salario: 'Salário',
+  financeiro: 'Financeiro', outro: 'Outro',
+};
+const BANK_CAT_COLORS = {
+  fixo: '#3B82F6', variavel: '#F59E0B', obra: '#FACC15',
+  receita: '#22C55E', imposto: '#EF4444', salario: '#8B5CF6',
+  financeiro: '#64748B', outro: '#71717A',
+};
+
+function CategoryOverridesTab() {
+  const [overrides, setOverrides] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
+  const [editCat, setEditCat] = useState('');
+
+  const fetchOverrides = useCallback(async () => {
+    try {
+      const { data } = await api.get('/bank-analysis/category-overrides/list');
+      setOverrides(data);
+    } catch { }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchOverrides(); }, [fetchOverrides]);
+
+  const handleDelete = async (descKey) => {
+    setDeleting(descKey);
+    try {
+      await api.delete(`/bank-analysis/category-overrides/${encodeURIComponent(descKey)}`);
+      setOverrides(prev => prev.filter(o => o.desc_key !== descKey));
+      toast.success('Regra eliminada');
+    } catch { toast.error('Erro ao eliminar'); }
+    finally { setDeleting(null); }
+  };
+
+  const handleUpdate = async (descKey) => {
+    if (!editCat) return;
+    try {
+      // Use the PATCH transaction endpoint indirectly — or just delete + re-add
+      // For simplicity, delete and the user can re-learn via the bank analysis
+      // Actually, let's add a proper update via direct DB update
+      await api.delete(`/bank-analysis/category-overrides/${encodeURIComponent(descKey)}`);
+      // The override is removed; the next correction in bank analysis will re-learn
+      setOverrides(prev => prev.filter(o => o.desc_key !== descKey));
+      toast.success('Regra eliminada — corrija a categoria no extrato bancário para re-aprender');
+      setEditingKey(null);
+    } catch { toast.error('Erro'); }
+  };
+
+  if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-yellow-400 animate-spin" /></div>;
+
+  return (
+    <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Brain size={18} className="text-purple-400" /> Regras de Categorização Aprendidas
+            </h3>
+            <p className="text-zinc-400 text-sm mt-1">
+              Quando corrige a categoria de uma transação no extrato bancário, o sistema aprende e aplica automaticamente a mesma categoria a transações futuras com descrições semelhantes.
+            </p>
+          </div>
+          <span className="text-xs text-zinc-500 bg-zinc-800 rounded-full px-3 py-1" data-testid="override-count">
+            {overrides.length} {overrides.length === 1 ? 'regra' : 'regras'}
+          </span>
+        </div>
+
+        {overrides.length === 0 ? (
+          <div className="text-center py-8">
+            <Brain className="w-10 h-10 text-zinc-700 mx-auto mb-3" />
+            <p className="text-zinc-500 text-sm">Nenhuma regra aprendida ainda</p>
+            <p className="text-zinc-600 text-xs mt-1">Corrija categorias nas transações do extrato bancário e o sistema vai aprender automaticamente.</p>
+          </div>
+        ) : (
+          <div className="space-y-2" data-testid="overrides-list">
+            <div className="grid grid-cols-[1fr_140px_140px_80px] gap-3 px-3 py-2 text-[10px] text-zinc-500 uppercase tracking-wider">
+              <span>Padrão de descrição</span>
+              <span>Exemplo original</span>
+              <span>Categoria atribuída</span>
+              <span className="text-right">Ações</span>
+            </div>
+            {overrides.map(o => {
+              const catLabel = BANK_CAT_LABELS[o.category] || o.category;
+              const catColor = BANK_CAT_COLORS[o.category] || '#71717A';
+              return (
+                <div key={o.desc_key} className="grid grid-cols-[1fr_140px_140px_80px] gap-3 items-center px-3 py-3 bg-zinc-800/40 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-colors" data-testid={`override-${o.desc_key}`}>
+                  <div className="min-w-0">
+                    <p className="text-sm text-white font-mono truncate">{o.desc_key}</p>
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs text-zinc-400 truncate" title={o.original_description}>{o.original_description?.slice(0, 30) || '—'}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: catColor, background: catColor + '20' }}>
+                      {catLabel}
+                    </span>
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      data-testid={`delete-override-${o.desc_key}`}
+                      onClick={() => handleDelete(o.desc_key)}
+                      disabled={deleting === o.desc_key}
+                      className="text-zinc-500 hover:text-red-400 p-1.5 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
+                      title="Eliminar regra"
+                    >
+                      {deleting === o.desc_key ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="mt-4 p-4 rounded-xl bg-purple-500/5 border border-purple-500/20">
+          <h4 className="text-xs text-purple-400 font-semibold mb-1">Como funciona?</h4>
+          <ul className="text-xs text-zinc-400 space-y-1">
+            <li>1. Carregue um extrato bancário na Análise Bancária</li>
+            <li>2. Na tab Transações, altere a categoria de qualquer transação</li>
+            <li>3. O sistema guarda a regra automaticamente</li>
+            <li>4. Em futuros extratos, transações com descrições semelhantes serão categorizadas automaticamente</li>
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
