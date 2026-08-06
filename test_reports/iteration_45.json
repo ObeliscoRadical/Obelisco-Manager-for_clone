@@ -1,0 +1,25 @@
+{
+  "summary": "Iter45: Verified new PATCH /api/bank-analysis/category-overrides/{desc_key} endpoint and inline <select> dropdown on the Regras IA tab. Backend (6/6 PASS): valid category returns {ok:true,category:'obra'} and persists via GET list; invalid category → 400; missing category → 400; nonexistent desc_key → 404; endpoint requires auth. Frontend (Playwright, all PASS): admin login → /definicoes → Regras IA tab renders 3 rows (vodafone/joteilux/sonepar) each with data-testid='cat-select-{desc_key}' <select> instead of a static pill. Changed vodafone from 'fixo' to 'variavel' → optimistic UI update (pill turned orange 'Custo Variável'), toast 'Regra atualizada → Custo Variável' appeared, and after full page reload the change was persisted. Value restored to 'fixo' after test to avoid polluting seed data.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter45_patch_override.py",
+    "/app/test_reports/pytest/iter45.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PATCH endpoint correctly validates category against the same whitelist used elsewhere (fixo/variavel/obra/receita/imposto/salario/financeiro/outro) — consistent with cat_to_type map in approve_sync.",
+    "Frontend uses encodeURIComponent(descKey) both for DELETE and PATCH — safe for keys with spaces/unicode.",
+    "Optimistic UI update via setOverrides map is fine; on API failure the local state won't be rolled back to the previous value. Minor: consider reverting on catch. Not blocking (toast.error is shown).",
+    "The dropdown appearance-none + inline background/color style works but the native select still uses OS-styled option list on open — cosmetic, not a bug.",
+    "PATCH endpoint uses JSON body for category (unlike the transaction-learning PATCH which uses a query param). Slight inconsistency across the bank_analysis router, but acceptable."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter45_patch_override.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (dropdown, PATCH call, toast, optimistic update, persistence all verified)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "None. Used the 3 pre-seeded overrides (joteilux, vodafone, sonepar). Vodafone was toggled to 'variavel' during the UI test and restored to 'fixo' at the end.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "PATCH /api/bank-analysis/category-overrides/{desc_key} is fully working. Frontend inline <select> on Regras IA tab (data-testid='cat-select-{desc_key}') is functional with toast + optimistic update + backend persistence. Seed overrides preserved.",
+  "rca_of_the_issue": "N/A — feature works as designed."
+}

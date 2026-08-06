@@ -210,6 +210,14 @@ function CategoryOverridesTab() {
     finally { setDeleting(null); }
   };
 
+  const handleCategoryChange = async (descKey, newCat) => {
+    try {
+      await api.patch(`/bank-analysis/category-overrides/${encodeURIComponent(descKey)}`, { category: newCat });
+      setOverrides(prev => prev.map(o => o.desc_key === descKey ? { ...o, category: newCat } : o));
+      toast.success(`Regra atualizada → ${BANK_CAT_LABELS[newCat] || newCat}`);
+    } catch { toast.error('Erro ao atualizar'); }
+  };
+
   if (loading) return <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-yellow-400 animate-spin" /></div>;
 
   return (
@@ -255,9 +263,17 @@ function CategoryOverridesTab() {
                     <p className="text-xs text-zinc-400 truncate" title={o.original_description}>{o.original_description?.slice(0, 30) || '—'}</p>
                   </div>
                   <div>
-                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ color: catColor, background: catColor + '20' }}>
-                      {catLabel}
-                    </span>
+                    <select
+                      data-testid={`cat-select-${o.desc_key}`}
+                      value={o.category}
+                      onChange={e => handleCategoryChange(o.desc_key, e.target.value)}
+                      className="text-xs font-semibold px-2.5 py-1.5 rounded-full border-0 cursor-pointer appearance-none bg-transparent focus:outline-none focus:ring-1 focus:ring-yellow-400/50"
+                      style={{ color: catColor, background: catColor + '20' }}
+                    >
+                      {Object.entries(BANK_CAT_LABELS).map(([k, l]) => (
+                        <option key={k} value={k} style={{ background: '#18181b', color: '#fff' }}>{l}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex justify-end">
                     <button

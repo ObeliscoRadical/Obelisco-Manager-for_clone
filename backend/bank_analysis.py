@@ -1134,6 +1134,22 @@ def create_bank_analysis_router(db, get_current_user):
             raise HTTPException(404, "Override não encontrado")
         return {"ok": True}
 
+    @router.patch("/category-overrides/{desc_key}")
+    async def update_category_override(desc_key: str, request: Request, user=Depends(get_current_user)):
+        """Update the category of a learned override. Body: {"category": "obra"}"""
+        body = await request.json()
+        new_cat = body.get("category", "").strip()
+        valid = ("fixo", "variavel", "obra", "receita", "imposto", "salario", "financeiro", "outro")
+        if new_cat not in valid:
+            raise HTTPException(400, f"Categoria inválida. Use: {', '.join(valid)}")
+        result = await db.category_overrides.update_one(
+            {"desc_key": desc_key},
+            {"$set": {"category": new_cat, "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by": user.get("name", "")}},
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "Override não encontrado")
+        return {"ok": True, "category": new_cat}
+
     @router.post("/{analysis_id}/approve-sync")
     async def approve_sync(analysis_id: str, request: Request, user=Depends(get_current_user)):
         """Approve selected transactions for import into expenses.
