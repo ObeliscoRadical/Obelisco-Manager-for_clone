@@ -49,6 +49,7 @@ import RelatoriosPontoPage from "./pages/RelatoriosPontoPage";
 import PontoGPSPage from "./pages/PontoGPSPage";
 import TechPedidosPage from "./pages/TechPedidosPage";
 import PerfilClientePage from "./pages/PerfilClientePage";
+import AnaliseBancariaPage from "./pages/AnaliseBancariaPage";
 import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
@@ -165,6 +166,7 @@ function App() {
           <Route path="/relatorios-ponto" element={<ProtectedRoute module="assiduidade"><RelatoriosPontoPage /></ProtectedRoute>} />
           <Route path="/pedido-servico" element={<WidgetPedidoPage />} />
           <Route path="/perfil-cliente" element={<ProtectedRoute module="obras"><PerfilClientePage /></ProtectedRoute>} />
+          <Route path="/analise-bancaria" element={<ProtectedRoute module="financeiro"><AnaliseBancariaPage /></ProtectedRoute>} />
           {/* ===== Portal Técnico (isolado do admin) ===== */}
           <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
           <Route path="/tech/pedidos" element={<TechProtectedRoute><TechPedidosPage /></TechProtectedRoute>} />

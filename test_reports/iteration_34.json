@@ -1,0 +1,35 @@
+{
+  "summary": "Bank Statement Analysis module tested end-to-end. Backend: 8/8 pytest tests pass — upload parses 31 txns from semicolon CSV; categorization correct (APEC→receita, EDP/Vodafone→fixo, Leroy Merlin→obra, Gasoleo BP→variavel, Ordenado→salario, AT→imposto); 3+ recurring detected (Vodafone, EDP, Ordenados); tax estimation returns irc_estimate/derrama_municipal/iva_quarterly_estimate/tsu_estimate/total_tax_burden; cashflow returns 3 historical + 6 projected months; GET list & GET by ID work; 404 works. AI batch was not invoked because pre-categorization covered all 31 transactions (fast path, ~1.5s). Frontend: /analise-bancaria loads with sidebar item 'Análise Bancária', upload-statement-btn present, list shows saved analyses, detail view opens with all 5 tabs (overview/taxes/recurring/cashflow/transactions). Overview shows KPI cards + charts. Taxes tab contains IRC/Derrama/IVA/TSU labels. Recurring/cashflow/transactions tabs render without errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Analise Bancaria detail — tabs bar", "issues": ["Recharts warns 'width(-1) and height(-1) of chart should be greater than 0' on initial mount of Overview + Cashflow charts. Not fatal (charts render eventually), but ResponsiveContainer parent should have explicit min-height / min-width or a defined aspect ratio to avoid the first-paint layout race."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_bank_analysis.py",
+    "/app/test_reports/pytest/bank_analysis.xml"
+  ],
+  "action_items": [
+    "(optional) Fix Recharts ResponsiveContainer warnings by setting min-height on chart wrappers in OverviewTab and CashflowTab.",
+    "(optional) The AI fallback path (_ai_categorize_batch) was not exercised by the seed CSV since 100% of descriptions matched KNOWN_SUPPLIERS/_pre_categorize. Consider adding one 'unknown' transaction to seed to exercise GPT path in future tests."
+  ],
+  "critical_code_review_comments": [
+    "bank_analysis.py:399 IVA deductible uses `abs(amount) * 0.23/1.23` for txns with amount<0 — correct assumption that supplier invoices are IVA-inclusive. Good.",
+    "bank_analysis.py:361 Projected month rollover uses `last_month + timedelta(days=32*i)` which can occasionally jump 2 months when starting near month-end; safer to use `dateutil.relativedelta(months=i)` or increment year/month explicitly. Current data (up to 2026-03-15) produced correct Apr–Sep, but this is brittle.",
+    "bank_analysis.py:432 Auth uses `user.get('role') != 'admin'` on upload/delete but list and GET endpoints have no role check — any authenticated tech user could read financial analyses. If not intended, add role gate.",
+    "bank_analysis.py:547 update_transaction_category takes `category` as a raw query/body param on a PATCH without Pydantic model — accepts it via FastAPI query param inference; should use a Pydantic body model for consistency.",
+    "bank_analysis.py:414 `irc_rate_effective` is expressed in % but `iva_quarterly_estimate` and others are raw euros — mixed units in same dict may confuse frontend consumers; consider consistent suffix (`_pct` vs `_eur`).",
+    "bank_analysis.py:400 IVA collected assumes 100% of income is IVA-taxable at 23%; if some receipts are net-of-IVA transfers this over-estimates. Document assumption."
+  ],
+  "updated_files": ["/app/backend/tests/test_bank_analysis.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (all 5 tabs + sidebar + upload button verified)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "One extra bank analysis inserted via upload of /tmp/extrato_teste.csv (31 txns, 2026-01-05 → 2026-03-15). DB now has 4+ analyses. Non-destructive.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_bank_analysis.py covers full upload → parse → categorize → recurring → cashflow → taxes → list → get flow. It reads REACT_APP_BACKEND_URL from env or falls back to /app/frontend/.env. Because the seed CSV is fully covered by KNOWN_SUPPLIERS, the LLM batch path (_ai_categorize_batch) is NOT exercised — if you need to verify Emergent LLM integration for this module, either mutate the CSV or add a transaction whose description doesn't match any pattern.",
+  "rca of the issue": "N/A — no bugs found"
+}

@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 
@@ -19,6 +19,7 @@ const navItems = [
   { path: '/custos-fixos', label: 'Custos Fixos', icon: Repeat, mod: 'custos_fixos' },
   { path: '/faturas', label: 'Faturas', icon: FileCheck, mod: 'faturas' },
   { path: '/financeiro', label: 'Financeiro', icon: LineChart, mod: 'financeiro' },
+  { path: '/analise-bancaria', label: 'Análise Bancária', icon: Building2, mod: 'financeiro' },
   { path: '/ponto-equilibrio', label: 'Ponto Equilíbrio', icon: Target, mod: 'ponto_equilibrio' },
   { path: '/contabilista', label: 'Contabilista IA', icon: BrainCircuit, mod: 'contabilista' },
   { path: '/relatorios', label: 'Relatórios', icon: FileBarChart, mod: 'relatorios' },

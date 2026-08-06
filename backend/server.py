@@ -4463,6 +4463,10 @@ app.include_router(create_client_profile_router(db, get_current_user))
 from push_notifications import create_push_router
 app.include_router(create_push_router(db, get_current_user))
 
+# Bank Statement Analysis (Análise Bancária)
+from bank_analysis import create_bank_analysis_router
+app.include_router(create_bank_analysis_router(db, get_current_user))
+
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
     "https://tech-app-obelisco.emergent.host",

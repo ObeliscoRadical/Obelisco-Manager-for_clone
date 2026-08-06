@@ -6,6 +6,7 @@ annotated-types==0.7.0
 anyio==4.13.0
 attrs==26.1.0
 bcrypt==4.1.3
+beautifulsoup4==4.15.0
 black==26.3.1
 boto3==1.42.86
 botocore==1.42.86
@@ -55,6 +56,7 @@ jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 librt==0.8.1
 litellm==1.80.0
+lxml==6.1.1
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mccabe==0.7.0
@@ -65,6 +67,7 @@ mypy==1.20.0
 mypy_extensions==1.1.0
 numpy==2.4.4
 oauthlib==3.3.1
+ofxparse==0.21
 openai==1.99.9
 openpyxl==3.1.5
 packaging==26.0
@@ -110,6 +113,7 @@ s5cmd==0.2.0
 shellingham==1.5.4
 six==1.17.0
 sniffio==1.3.1
+soupsieve==2.9.1
 starlette==0.37.2
 stripe==14.4.1
 tenacity==9.1.4
