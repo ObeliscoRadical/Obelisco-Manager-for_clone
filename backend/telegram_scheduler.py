@@ -156,12 +156,14 @@ async def check_and_send_payment_reminders(db):
         return 0
 
     today = datetime.now(timezone.utc)
-    target_date = (today + timedelta(days=2)).strftime("%Y-%m-%d")
+    # Check window: 1-3 days ahead (covers missed checks due to downtime)
+    window_start = (today + timedelta(days=1)).strftime("%Y-%m-%d")
+    window_end = (today + timedelta(days=3)).strftime("%Y-%m-%d")
 
-    # Find predicted bills due in 2 days
+    # Find predicted bills due in 1-3 days
     cursor = db.appointments.find({
         "is_predicted_bill": True,
-        "date": target_date,
+        "date": {"$gte": window_start, "$lte": window_end},
     }, {"_id": 0})
     bills = await cursor.to_list(50)
 
@@ -170,21 +172,23 @@ async def check_and_send_payment_reminders(db):
 
     sent = 0
     for bill in bills:
+        bill_date = bill.get("date", "")
         # Check if reminder was already sent
-        reminder_key = f"reminder_{bill.get('id', '')}_{target_date}"
+        reminder_key = f"reminder_{bill.get('id', '')}_{bill_date}"
         existing = await db.telegram_reminders.find_one({"key": reminder_key})
         if existing:
             continue
 
         title = bill.get("title", "").replace("💰 ", "")
         amount = bill.get("predicted_amount", 0)
-        date_fmt = datetime.strptime(target_date, "%Y-%m-%d").strftime("%d/%m/%Y")
+        date_fmt = datetime.strptime(bill_date, "%Y-%m-%d").strftime("%d/%m/%Y") if bill_date else "?"
+        days_left = (datetime.strptime(bill_date, "%Y-%m-%d") - today.replace(tzinfo=None)).days if bill_date else 2
         cat = bill.get("predicted_category", "")
         cat_emoji = {"fixo": "🏢", "variavel": "⛽", "obra": "⚡", "imposto": "🏛", "salario": "👤"}.get(cat, "💰")
 
         msg = (
             f"⏰ <b>Lembrete de Pagamento</b>\n\n"
-            f"{cat_emoji} <b>{title}</b> vence em 48h\n"
+            f"{cat_emoji} <b>{title}</b> vence em {days_left * 24}h\n"
             f"📅 Data: <b>{date_fmt}</b>\n"
             f"💰 Valor estimado: <b>{amount:.2f}€</b>\n\n"
             f"<i>Prepare o pagamento para evitar atrasos.</i>"
@@ -202,8 +206,17 @@ async def check_and_send_payment_reminders(db):
     return sent
 
 
+_scheduler_task = None
+
+
 async def run_telegram_scheduler(db):
     """Background loop: polls for commands + checks daily reminders."""
+    global _scheduler_task
+    # Idempotency guard — prevent duplicate scheduler
+    if _scheduler_task is not None:
+        logger.warning("Telegram scheduler already running — skipping duplicate start")
+        return
+    _scheduler_task = True
     logger.info("Telegram scheduler started")
     last_reminder_check = None
 
