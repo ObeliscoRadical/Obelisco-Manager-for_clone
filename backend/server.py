@@ -12,6 +12,7 @@ import logging
 import uuid
 import bcrypt
 import jwt
+import asyncio
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
@@ -4393,6 +4394,9 @@ async def seed_admin():
 async def startup():
     await seed_admin()
     await seed_professional_data()
+    # Start Telegram bot scheduler (commands + payment reminders)
+    from telegram_scheduler import run_telegram_scheduler
+    asyncio.create_task(run_telegram_scheduler(db))
     logger.info("Obelisco Manager API iniciada")
 
 app.include_router(api_router)
