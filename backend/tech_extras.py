@@ -17,6 +17,10 @@ import shutil
 import logging
 import jwt
 
+# Ponto action labels/emojis (module-level constants)
+PONTO_ACTION_LABELS = {"in": "ENTRADA", "out": "SAÍDA", "break_start": "INÍCIO PAUSA", "break_end": "FIM PAUSA"}
+PONTO_ACTION_EMOJIS = {"in": "🟢", "out": "🔴", "break_start": "☕", "break_end": "🔵"}
+
 logger = logging.getLogger(__name__)
 
 # Directório para fotos de obras
@@ -156,10 +160,8 @@ def create_tech_extras_router(db, get_current_user):
         # Telegram notification for ponto entries
         try:
             from service_orders import send_telegram_notification
-            ACTION_LABELS = {"in": "ENTRADA", "out": "SAÍDA", "break_start": "INÍCIO PAUSA", "break_end": "FIM PAUSA"}
-            ACTION_EMOJIS = {"in": "🟢", "out": "🔴", "break_start": "☕", "break_end": "🔵"}
-            emoji = ACTION_EMOJIS.get(input.action, "📍")
-            label = ACTION_LABELS.get(input.action, input.action.upper())
+            emoji = PONTO_ACTION_EMOJIS.get(input.action, "📍")
+            label = PONTO_ACTION_LABELS.get(input.action, input.action.upper())
             hora = datetime.fromisoformat(now).strftime("%H:%M")
             msg = f"{emoji} <b>{user.get('name', '')}</b> registou <b>{label}</b>\n⏰ Hora: {hora}"
             if input.address:

@@ -23,25 +23,24 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - [x] Stock management with invoice import (AI OCR)
 - [x] Transport Guides with tech portal
 - [x] Invoices with WhatsApp reminders
-- [x] Expenses with AI OCR
+- [x] Expenses with AI OCR (sequential upload fix applied)
 - [x] Financial dashboard + Annual reports
 - [x] Payroll (employees, attendance, salary processing)
 - [x] Break-even calculator
 - [x] Accountant AI chat
 - [x] Service Orders with Telegram + Google Calendar + WhatsApp updates
 - [x] Public widget for client service requests
-- [x] GPS Timeclock in Tech Portal
+- [x] GPS Timeclock in Tech Portal + Telegram notifications on punch
 - [x] Timeclock Reports with CSV export
 - [x] Perfil 360° do Cliente (mini-CRM)
 - [x] WhatsApp share + update buttons
-- [x] Email system (Emergent native — pending EMERGENT_EMAIL_KEY auto-provision on deploy)
-- [x] Web Push Notifications (VAPID) — smartwatch, phone, desktop compatible
-  - Push on: new order assigned, agenda appointment, chat message, daily briefing
+- [x] Email system (Emergent native — auto-provisioned on deploy)
+- [x] Web Push Notifications (VAPID) — smartwatch, phone, desktop
+- [x] Code quality: test secrets externalized, hook deps fixed, array keys fixed
 
 ## Prioritized Backlog
 
 ### P1 (Important)
-- Deploy to provision EMERGENT_EMAIL_KEY (auto-created on deploy)
 - Automação Máscara DIN (auto-atribuir cor por tipo de módulo)
 - Módulo Salarial Fase 2: recibos PDF por funcionário
 
@@ -53,3 +52,4 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ### Refactoring
 - `/app/backend/server.py` >4400 lines — split into modules
+- Large frontend components (OrcamentosPage 750L, FaturasPage 634L, etc.)
