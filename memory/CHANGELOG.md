@@ -206,6 +206,24 @@
   - testing agent iteration 51: bulk reconciliation button/endpoints 100%
   - ficheiros: `/app/backend/tests/test_dedupe_reconciliation.py`, `/app/backend/tests/test_bulk_reconciliation.py`, `/app/test_reports/iteration_50.json`, `/app/test_reports/iteration_51.json`
 
+## 2026-08-07 — Auditoria Excel da reconciliação
+- **Backend novo**:
+  - persistência de relatórios em `expense_reconciliation_reports`
+  - geração automática de ficheiro `.xlsx` em `/app/backend/uploads/reconciliation_reports/`
+  - `GET /api/expenses/reconcile-reports`
+  - `GET /api/expenses/reconcile-reports/{id}/download`
+- **Estrutura do Excel**:
+  - folha `Resumo`
+  - folha `Reconciliadas`
+  - folha `Duplicados Removidos`
+- **Frontend novo**:
+  - secção `Auditoria de Reconciliações` em `DespesasPage.jsx`
+  - botão separado `Descarregar Excel` por relatório gravado
+  - toast a informar que o relatório foi guardado para auditoria
+- **Testes**:
+  - testing agent iteration 52: backend 10/10 + frontend 100%
+  - ficheiros: `/app/backend/tests/test_reconciliation_audit_reports.py`, `/app/test_reports/iteration_52.json`
+
 ---
 
 (Ver PRD.md para changelog anterior completo)

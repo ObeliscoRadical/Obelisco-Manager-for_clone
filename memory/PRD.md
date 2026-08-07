@@ -44,6 +44,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Custos Recorrentes** (página /custos-recorrentes — vista consolidada master de pagamentos recorrentes com edição inline, dia do mês, categoria, modelo, valor médio)
 - **Tesouraria Preditiva** (Análise Bancária + Dashboard + Dashboard Financeiro — projeção automática 30/60 dias só com saídas previstas, saldo inicial automático + ajuste manual, detetor de anomalias por limiar configurável, mapa de pressão financeira e badges de dias críticos)
 - **Reconciliação Mensal de Despesas** (botão manual em Despesas + Análise Bancária para preview + aplicação de reconciliação fiscal/banco e limpeza de hard duplicates no mês/filtro selecionado)
+- **Auditoria de Reconciliação** (relatórios Excel persistidos por operação, com download posterior e histórico visível em Despesas)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
 - **Category Overrides Management** (Definições > Regras IA — view, edit inline, and delete learned category rules)
 
@@ -69,6 +70,20 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - 1 despesa canónica com prioridade aos dados fiscais
   - remoção automática do hard duplicate mais fraco no período filtrado
 - Testado com sucesso: testing agent iteration 50 (dedupe base) + iteration 51 (bulk button/preview/apply), ambos 100%
+
+## Atualização 2026-08-07 (auditoria Excel)
+- Relatório Excel persistido após cada reconciliação aplicada
+- Nova lista de auditoria em **Despesas** com histórico e botão de download posterior
+- O relatório inclui:
+  - itens reconciliados/removidos
+  - totais
+  - utilizador
+  - data/hora
+  - motivo e regra aplicada
+- Backend novo:
+  - `GET /api/expenses/reconcile-reports`
+  - `GET /api/expenses/reconcile-reports/{report_id}/download`
+- Testado com sucesso: testing agent iteration 52 (backend 10/10, frontend 100%)
 
 ## Backlog
 ### P1
