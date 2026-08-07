@@ -167,6 +167,25 @@
 - **Testado**: 17/17 backend pytest + 100% frontend (widget, dashboard, detalhe, ponto)
 - **Collections MongoDB novas**: `service_orders`, `service_timeclock`
 
+## 2026-08-07 — Tesouraria Preditiva no módulo financeiro/bancário
+- **Backend novo**:
+  - `GET /api/bank-analysis/treasury/insights`
+  - Projeção automática de fluxo de caixa 30/60 dias usando apenas saídas previstas
+  - Suporte a `opening_balance` manual via query param sem perder a base automática do último extrato
+  - Detetor de anomalias para custos recorrentes com limiar configurável por `system_settings.treasury_settings.anomaly_threshold_pct`
+  - Merge seguro de defaults em `GET/PUT /api/system-settings`
+- **Frontend novo**:
+  - `TreasuryInsightsPanel.jsx` com KPIs, gráfico diário, mapa de pressão financeira, anomalias e próximas saídas
+  - Resumo `TreasurySummaryStrip` no Dashboard, Dashboard Financeiro e topo da Análise Bancária
+  - Nova tab `Tesouraria` no detalhe da Análise Bancária
+  - Nova tab `Tesouraria` em Definições com input configurável do limiar de anomalia
+- **Fix técnico**:
+  - warning de nested component removido em `DespesasPage.jsx`
+  - tick component também estabilizado em `DashboardFinanceiroPage.jsx`
+- **Testes**:
+  - testing agent iteration 49: backend 11/11 pytest e frontend 100%
+  - ficheiros: `/app/backend/tests/test_treasury_insights.py`, `/app/test_reports/iteration_49.json`
+
 ---
 
 (Ver PRD.md para changelog anterior completo)

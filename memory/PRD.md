@@ -42,16 +42,30 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements, async background processing with polling)
 - **Auto-Sync Bank → Expenses** (prepares sync preview with duplicate detection; user approves before import)
 - **Custos Recorrentes** (página /custos-recorrentes — vista consolidada master de pagamentos recorrentes com edição inline, dia do mês, categoria, modelo, valor médio)
+- **Tesouraria Preditiva** (Análise Bancária + Dashboard + Dashboard Financeiro — projeção automática 30/60 dias só com saídas previstas, saldo inicial automático + ajuste manual, detetor de anomalias por limiar configurável, mapa de pressão financeira e badges de dias críticos)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
 - **Category Overrides Management** (Definições > Regras IA — view, edit inline, and delete learned category rules)
+
+## Atualização 2026-08-07
+- Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
+- Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
+- Resumo de tesouraria agora visível em:
+  - Dashboard principal
+  - Dashboard Financeiro
+  - Análise Bancária (topo da listagem)
+  - Tab dedicada **Tesouraria** dentro do detalhe da análise
+- Corrigido warning técnico de render instável em `DespesasPage.jsx`
+- Testado com sucesso: curl/manual + testing agent iteration 49 (backend 11/11, frontend 100%)
 
 ## Backlog
 ### P1
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
-- Mini gráfico receitas vs despesas no dashboard
+- Exportar Custos Recorrentes
 
 ### P2
+- Filtros em Contas Previstas
+- Mini gráfico receitas vs despesas no dashboard
 - Mapa de equipa GPS
 - Hardening segurança (CORS allow-list, rate limiting, CSP)
 - TOC Online integration (se credenciais fornecidas)
