@@ -186,6 +186,26 @@
   - testing agent iteration 49: backend 11/11 pytest e frontend 100%
   - ficheiros: `/app/backend/tests/test_treasury_insights.py`, `/app/test_reports/iteration_49.json`
 
+## 2026-08-07 — Reconciliação bulk manual de despesas
+- **Backend novo**:
+  - `GET /api/expenses/reconcile-preview`
+  - `POST /api/expenses/reconcile-apply`
+  - algoritmo mensal/filtrado para:
+    - reconciliar despesa fiscal + movimento bancário histórico já existente
+    - remover hard duplicates históricos mantendo o registo mais forte
+- **Frontend novo**:
+  - componente `ReconcileExpensesButton.jsx`
+  - botão no cabeçalho de `DespesasPage.jsx`
+  - botão no cabeçalho de `AnaliseBancariaPage.jsx`
+  - diálogo com preview, contadores, confirmação/cancelamento e bloqueio quando não há ações
+- **Refinamentos backend**:
+  - merge de histórico bancário/fiscal preservando registo canónico fiscal
+  - suporte a reprocessamento manual do mês atual/filtros selecionados
+- **Testes**:
+  - testing agent iteration 50: dedupe/reconciliação base + alerts treasury 100%
+  - testing agent iteration 51: bulk reconciliation button/endpoints 100%
+  - ficheiros: `/app/backend/tests/test_dedupe_reconciliation.py`, `/app/backend/tests/test_bulk_reconciliation.py`, `/app/test_reports/iteration_50.json`, `/app/test_reports/iteration_51.json`
+
 ---
 
 (Ver PRD.md para changelog anterior completo)

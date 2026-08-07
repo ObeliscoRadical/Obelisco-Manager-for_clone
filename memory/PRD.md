@@ -43,6 +43,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Auto-Sync Bank → Expenses** (prepares sync preview with duplicate detection; user approves before import)
 - **Custos Recorrentes** (página /custos-recorrentes — vista consolidada master de pagamentos recorrentes com edição inline, dia do mês, categoria, modelo, valor médio)
 - **Tesouraria Preditiva** (Análise Bancária + Dashboard + Dashboard Financeiro — projeção automática 30/60 dias só com saídas previstas, saldo inicial automático + ajuste manual, detetor de anomalias por limiar configurável, mapa de pressão financeira e badges de dias críticos)
+- **Reconciliação Mensal de Despesas** (botão manual em Despesas + Análise Bancária para preview + aplicação de reconciliação fiscal/banco e limpeza de hard duplicates no mês/filtro selecionado)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
 - **Category Overrides Management** (Definições > Regras IA — view, edit inline, and delete learned category rules)
 
@@ -56,6 +57,18 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - Tab dedicada **Tesouraria** dentro do detalhe da análise
 - Corrigido warning técnico de render instável em `DespesasPage.jsx`
 - Testado com sucesso: curl/manual + testing agent iteration 49 (backend 11/11, frontend 100%)
+
+## Atualização 2026-08-07 (reconciliação bulk)
+- Entregue o botão **🔍 Reconciliar & Validar Duplicados** em **Despesas** e **Análise Bancária**
+- Novo fluxo com preview + confirmação antes de aplicar reconciliação/limpeza
+- Backend novo:
+  - `GET /api/expenses/reconcile-preview`
+  - `POST /api/expenses/reconcile-apply`
+- Regras suportadas:
+  - match fiscal ↔ bancário por valor exato e data ±2 dias
+  - 1 despesa canónica com prioridade aos dados fiscais
+  - remoção automática do hard duplicate mais fraco no período filtrado
+- Testado com sucesso: testing agent iteration 50 (dedupe base) + iteration 51 (bulk button/preview/apply), ambos 100%
 
 ## Backlog
 ### P1
