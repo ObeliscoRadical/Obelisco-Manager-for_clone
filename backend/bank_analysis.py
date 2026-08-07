@@ -547,6 +547,17 @@ def _clean_description(desc: str) -> str:
             d = d[len(pfx):].strip()
     d = re.sub(r'\bPT\d{10,}\b', '', d)
     d = re.sub(r'\b(REF|REFERENCIA|TRANSFERENCIA|PAGAMENTO)\b', '', d, flags=re.IGNORECASE)
+    d = re.sub(r'^\d+\s+P/\s*', '', d, flags=re.IGNORECASE)
+    d = re.sub(r'^DD\s+', '', d, flags=re.IGNORECASE)
+    bpi_match = re.search(r'(BPI\s+\d{4,12})', d.upper())
+    if bpi_match:
+        d = bpi_match.group(1)
+    else:
+        d = re.sub(r'\b\d{6,}[/\-]?\d*\b$', '', d).strip()
+    if 'GOLD ENERGY' in d.upper():
+        d = 'GOLD ENERGY'
+    if 'EDIFICABELLA' in d.upper():
+        d = 'EDIFICABELLA'
     d = re.sub(r'\s+', ' ', d).strip()
     return d if d else (desc or '')[:60]
 
@@ -554,6 +565,10 @@ def _clean_description(desc: str) -> str:
 def _detect_payment_type(desc: str) -> str:
     """Detect payment type from description."""
     d = (desc or '').upper()
+    if "PAG.AUT.CARTAO" in d:
+        return "Cartão"
+    if d.startswith("DD ") or " DD " in f" {d} ":
+        return "DD"
     if "PAG.AUT." in d or "DEBITO DIRETO" in d:
         return "DD"
     if "TRF SEPA" in d or "TRANSFERENCIA" in d or "TRF " in d:
@@ -618,6 +633,41 @@ def _build_recurring_group_key(txn: dict) -> tuple[str, str, list]:
     return desc_key, cleaned, refs
 
 
+def _split_recurring_subgroups(txns: list) -> list:
+    """Split one supplier/contract group into stable recurring sub-series by amount/day when needed."""
+    if len(txns) <= 2:
+        return [txns]
+
+    buckets = defaultdict(list)
+    for t in txns:
+        try:
+            dt = datetime.strptime(t["date"], "%Y-%m-%d")
+            day = dt.day
+        except Exception:
+            day = 0
+        amount = round(abs(float(t.get("amount", 0) or 0)), 2)
+        payment_type = _detect_payment_type(t.get("description", ""))
+        category = t.get("category", "outro")
+        bucket_key = f"{day}|{amount:.2f}|{payment_type}|{category}"
+        buckets[bucket_key].append(t)
+
+    if len(buckets) == 1:
+        return [txns]
+
+    valid_buckets = []
+    fallback = []
+    for group in buckets.values():
+        months = {item.get("date", "")[:7] for item in group if item.get("date")}
+        if len(group) >= 2 and len(months) >= 2:
+            valid_buckets.append(group)
+        else:
+            fallback.extend(group)
+
+    if fallback:
+        valid_buckets.append(fallback)
+    return valid_buckets if valid_buckets else [txns]
+
+
 def _build_recurring_masters_from_analyses(analyses: list) -> list:
     """Consolidate recurring debit transactions into one master row per recurring contract."""
     all_txns = []
@@ -638,78 +688,81 @@ def _build_recurring_masters_from_analyses(analyses: list) -> list:
 
     masters = []
     for key, txns in groups.items():
-        if len(txns) < 2:
-            continue
-
-        parsed_dates = []
-        valid_txns = []
-        for t in txns:
-            try:
-                dt = datetime.strptime(t["date"], "%Y-%m-%d")
-                parsed_dates.append(dt)
-                valid_txns.append((t, dt))
-            except (ValueError, KeyError):
+        subgroup_list = _split_recurring_subgroups(txns)
+        for subgroup_index, subgroup_txns in enumerate(subgroup_list):
+            if len(subgroup_txns) < 2:
                 continue
 
-        if len(valid_txns) < 2:
-            continue
+            parsed_dates = []
+            valid_txns = []
+            for t in subgroup_txns:
+                try:
+                    dt = datetime.strptime(t["date"], "%Y-%m-%d")
+                    parsed_dates.append(dt)
+                    valid_txns.append((t, dt))
+                except (ValueError, KeyError):
+                    continue
 
-        months_seen = {(dt.year, dt.month) for _, dt in valid_txns}
-        if len(months_seen) < 2:
-            continue
+            if len(valid_txns) < 2:
+                continue
 
-        amounts = [abs(float(t.get("amount", 0) or 0)) for t, _ in valid_txns]
-        avg_amount = sum(amounts) / len(amounts)
-        consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
-        days = [dt.day for _, dt in valid_txns]
-        day_counts = Counter(days)
-        typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
-        day_label = f"Dia {typical_day}" if typical_day else "Dia —"
-        frequency, interval_months = _infer_recurring_frequency(parsed_dates)
-        description_counts = Counter([t.get("_clean_description") or _clean_description(t.get("description", "")) for t, _ in valid_txns])
-        clean_name = description_counts.most_common(1)[0][0]
-        payment_type = _detect_payment_type(txns[0].get("description", ""))
-        category_counts = Counter([t.get("category", "outro") or "outro" for t, _ in valid_txns])
-        category = category_counts.most_common(1)[0][0]
-        refs = sorted({ref for t, _ in valid_txns for ref in (t.get("_refs") or [])})
-        detail_transactions = [
-            {
-                "id": t.get("id"),
-                "date": t.get("date"),
-                "description": t.get("description"),
-                "clean_description": t.get("_clean_description") or _clean_description(t.get("description", "")),
-                "amount": round(abs(float(t.get("amount", 0) or 0)), 2),
-                "category": t.get("category", "outro"),
-                "payment_type": _detect_payment_type(t.get("description", "")),
-                "analysis_id": t.get("analysis_id"),
-                "analysis_filename": t.get("analysis_filename", ""),
-            }
-            for t, _ in sorted(valid_txns, key=lambda item: item[1])
-        ]
-        masters.append({
-            "id": str(uuid.uuid4()),
-            "version": 2,
-            "desc_key": key,
-            "description": clean_name,
-            "group_reference": refs[0] if refs else None,
-            "group_references": refs,
-            "day_of_month": day_label,
-            "typical_day": typical_day,
-            "category": category,
-            "payment_type": payment_type,
-            "frequency": frequency,
-            "interval_months": interval_months,
-            "avg_amount": round(avg_amount, 2),
-            "min_amount": round(min(amounts), 2),
-            "max_amount": round(max(amounts), 2),
-            "occurrences": len(valid_txns),
-            "months_seen": len(months_seen),
-            "amount_consistent": consistent,
-            "notes": "",
-            "last_date": max(t["date"] for t, _ in valid_txns),
-            "first_date": min(t["date"] for t, _ in valid_txns),
-            "detail_transactions": detail_transactions,
-        })
+            months_seen = {(dt.year, dt.month) for _, dt in valid_txns}
+            if len(months_seen) < 2:
+                continue
+
+            amounts = [abs(float(t.get("amount", 0) or 0)) for t, _ in valid_txns]
+            avg_amount = sum(amounts) / len(amounts)
+            consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
+            days = [dt.day for _, dt in valid_txns]
+            day_counts = Counter(days)
+            typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
+            day_label = f"Dia {typical_day}" if typical_day else "Dia —"
+            frequency, interval_months = _infer_recurring_frequency(parsed_dates)
+            description_counts = Counter([t.get("_clean_description") or _clean_description(t.get("description", "")) for t, _ in valid_txns])
+            clean_name = description_counts.most_common(1)[0][0]
+            payment_counts = Counter([_detect_payment_type(t.get("description", "")) for t, _ in valid_txns])
+            payment_type = payment_counts.most_common(1)[0][0]
+            category_counts = Counter([t.get("category", "outro") or "outro" for t, _ in valid_txns])
+            category = category_counts.most_common(1)[0][0]
+            refs = sorted({ref for t, _ in valid_txns for ref in (t.get("_refs") or [])})
+            detail_transactions = [
+                {
+                    "id": t.get("id"),
+                    "date": t.get("date"),
+                    "description": t.get("description"),
+                    "clean_description": t.get("_clean_description") or _clean_description(t.get("description", "")),
+                    "amount": round(abs(float(t.get("amount", 0) or 0)), 2),
+                    "category": t.get("category", "outro"),
+                    "payment_type": _detect_payment_type(t.get("description", "")),
+                    "analysis_id": t.get("analysis_id"),
+                    "analysis_filename": t.get("analysis_filename", ""),
+                }
+                for t, _ in sorted(valid_txns, key=lambda item: item[1])
+            ]
+            masters.append({
+                "id": str(uuid.uuid4()),
+                "version": 2,
+                "desc_key": f"{key}::{subgroup_index}",
+                "description": clean_name,
+                "group_reference": refs[0] if refs else None,
+                "group_references": refs,
+                "day_of_month": day_label,
+                "typical_day": typical_day,
+                "category": category,
+                "payment_type": payment_type,
+                "frequency": frequency,
+                "interval_months": interval_months,
+                "avg_amount": round(avg_amount, 2),
+                "min_amount": round(min(amounts), 2),
+                "max_amount": round(max(amounts), 2),
+                "occurrences": len(valid_txns),
+                "months_seen": len(months_seen),
+                "amount_consistent": consistent,
+                "notes": "",
+                "last_date": max(t["date"] for t, _ in valid_txns),
+                "first_date": min(t["date"] for t, _ in valid_txns),
+                "detail_transactions": detail_transactions,
+            })
     masters.sort(key=lambda m: m["avg_amount"], reverse=True)
     return masters
 
