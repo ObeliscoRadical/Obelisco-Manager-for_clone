@@ -49,7 +49,7 @@ export const ReconcileExpensesButton = ({
     setApplying(true);
     try {
       const { data } = await api.post('/expenses/reconcile-apply', null, { params });
-      toast.success(data.message || 'Verificação concluída com sucesso');
+      toast.success(data.report?.id ? `${data.message} Relatório Excel guardado na auditoria.` : (data.message || 'Verificação concluída com sucesso'));
       setOpen(false);
       onCompleted?.(data);
     } catch (err) {

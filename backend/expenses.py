@@ -8,6 +8,7 @@ Funcionalidades:
 - Dashboard mensal: total gasto, por categoria, por obra
 """
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, timezone, timedelta
@@ -20,6 +21,8 @@ from pathlib import Path
 import re
 from difflib import SequenceMatcher
 from collections import defaultdict
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill
 
 from pymongo.errors import DuplicateKeyError
 
@@ -29,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 EXPENSES_DIR = Path("/app/backend/uploads/expenses")
 EXPENSES_DIR.mkdir(parents=True, exist_ok=True)
+RECONCILIATION_REPORTS_DIR = Path("/app/backend/uploads/reconciliation_reports")
+RECONCILIATION_REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
 expenses_router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
@@ -537,6 +542,88 @@ def _build_expense_scope_query(month: Optional[int], year: Optional[int], catego
     return q, {"scope": scope, "month": resolved_month, "year": resolved_year, "category": category or "", "type": type_value or ""}
 
 
+def _format_euro(value) -> float:
+    return round(float(value or 0), 2)
+
+
+def _autosize_worksheet(ws):
+    for col in ws.columns:
+        values = [str(cell.value or "") for cell in col]
+        max_len = min(max((len(v) for v in values), default=10) + 2, 48)
+        ws.column_dimensions[col[0].column_letter].width = max_len
+
+
+def _write_sheet_rows(ws, title: str, rows: list[dict]):
+    ws.append([title])
+    ws["A1"].font = Font(bold=True, size=13)
+    if not rows:
+        ws.append(["Sem registos"])
+        return
+    headers = list(rows[0].keys())
+    ws.append(headers)
+    for cell in ws[2]:
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill(fill_type="solid", fgColor="FACC15")
+    for row in rows:
+        ws.append([row.get(h, "") for h in headers])
+    _autosize_worksheet(ws)
+
+
+def _build_reconciliation_report_workbook(report_doc: dict, file_path: Path):
+    wb = Workbook()
+    summary_ws = wb.active
+    summary_ws.title = "Resumo"
+    summary_rows = [
+        {"campo": "Relatório ID", "valor": report_doc.get("id")},
+        {"campo": "Gerado em", "valor": report_doc.get("created_at")},
+        {"campo": "Gerado por", "valor": report_doc.get("created_by_name") or report_doc.get("created_by_email") or report_doc.get("created_by")},
+        {"campo": "Escopo", "valor": report_doc.get("scope", {}).get("scope")},
+        {"campo": "Mês", "valor": report_doc.get("scope", {}).get("month")},
+        {"campo": "Ano", "valor": report_doc.get("scope", {}).get("year")},
+        {"campo": "Categoria filtro", "valor": report_doc.get("scope", {}).get("category")},
+        {"campo": "Tipo filtro", "valor": report_doc.get("scope", {}).get("type")},
+        {"campo": "Registos analisados", "valor": report_doc.get("summary", {}).get("records_scanned")},
+        {"campo": "Pares reconciliados", "valor": report_doc.get("result", {}).get("reconciled")},
+        {"campo": "Duplicados removidos", "valor": report_doc.get("result", {}).get("duplicates_removed")},
+        {"campo": "Grupos de duplicados tratados", "valor": report_doc.get("result", {}).get("duplicate_groups_processed")},
+    ]
+    _write_sheet_rows(summary_ws, "Resumo da operação", summary_rows)
+
+    reconciled_ws = wb.create_sheet("Reconciliadas")
+    _write_sheet_rows(reconciled_ws, "Itens reconciliados", report_doc.get("reconciled_items") or [])
+
+    duplicates_ws = wb.create_sheet("Duplicados Removidos")
+    _write_sheet_rows(duplicates_ws, "Itens removidos", report_doc.get("removed_duplicates") or [])
+
+    wb.save(file_path)
+
+
+async def _create_reconciliation_report(db, actor_user: dict, scope_meta: dict, summary: dict, result_meta: dict, reconciled_items: list, removed_duplicates: list) -> dict:
+    created_at = datetime.now(timezone.utc).isoformat()
+    report_id = str(uuid.uuid4())
+    filename = f"reconciliacao_despesas_{scope_meta.get('year')}_{scope_meta.get('month'):02d}_{report_id[:8]}.xlsx"
+    file_path = RECONCILIATION_REPORTS_DIR / filename
+    report_doc = {
+        "id": report_id,
+        "created_at": created_at,
+        "created_by": actor_user.get("id"),
+        "created_by_name": actor_user.get("name") or "",
+        "created_by_email": actor_user.get("email") or "",
+        "scope": scope_meta,
+        "summary": summary,
+        "result": result_meta,
+        "reconciled_items": reconciled_items,
+        "removed_duplicates": removed_duplicates,
+        "file_name": filename,
+        "file_path": str(file_path),
+        "download_url": f"/api/expenses/reconcile-reports/{report_id}/download",
+    }
+    _build_reconciliation_report_workbook(report_doc, file_path)
+    await db.expense_reconciliation_reports.insert_one({**report_doc})
+    report_doc.pop("_id", None)
+    return report_doc
+
+
 def _build_bulk_reconciliation_plan(expenses: list) -> dict:
     hard_groups_map = defaultdict(list)
     for doc in expenses:
@@ -624,7 +711,7 @@ def _build_bulk_reconciliation_plan(expenses: list) -> dict:
     }
 
 
-async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Optional[int], category: Optional[str], type_value: Optional[str], scope: str = "month", apply_changes: bool = False) -> dict:
+async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Optional[int], category: Optional[str], type_value: Optional[str], scope: str = "month", apply_changes: bool = False, actor_user: Optional[dict] = None) -> dict:
     query, scope_meta = _build_expense_scope_query(month, year, category, type_value, scope=scope)
     expenses = await db.expenses.find(query, {"_id": 0}).sort("date", 1).to_list(5000)
     plan = _build_bulk_reconciliation_plan(expenses)
@@ -642,6 +729,8 @@ async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Opt
     duplicates_removed = 0
     duplicate_groups_processed = 0
     reconciled = 0
+    removed_duplicates_items = []
+    reconciled_items = []
 
     for group in plan["hard_duplicate_groups"]:
         keeper = await db.expenses.find_one({"id": group["keep_id"]}, {"_id": 0})
@@ -652,6 +741,20 @@ async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Opt
             loser = await db.expenses.find_one({"id": loser_id}, {"_id": 0})
             if not loser:
                 continue
+            removed_duplicates_items.append({
+                "tipo_operacao": "hard_duplicate_removido",
+                "despesa_principal_id": keeper.get("id"),
+                "despesa_removida_id": loser.get("id"),
+                "fornecedor_principal": keeper.get("supplier") or "",
+                "fornecedor_removido": loser.get("supplier") or "",
+                "fatura_principal": keeper.get("invoice_number") or "",
+                "fatura_removida": loser.get("invoice_number") or "",
+                "data": _format_date(loser.get("date")),
+                "valor_total": _format_euro(loser.get("value_gross")),
+                "motivo": "Hard duplicate removido automaticamente",
+                "regra_aplicada": "same_date+same_anchor+same_amount",
+                "executado_em": datetime.now(timezone.utc).isoformat(),
+            })
             keeper = merge_existing_expenses(keeper, loser, mode="hard_duplicate")
             if loser.get("fixed_cost_instance_id"):
                 await db.fixed_cost_instances.update_one({"id": loser.get("fixed_cost_instance_id")}, {"$set": {"expense_id": keeper["id"]}})
@@ -667,6 +770,19 @@ async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Opt
         bank = await db.expenses.find_one({"id": pair["bank_id"]}, {"_id": 0})
         if not fiscal or not bank:
             continue
+        reconciled_items.append({
+            "tipo_operacao": "reconciliacao_fiscal_banco",
+            "despesa_canonica_id": fiscal.get("id"),
+            "despesa_bancaria_removida_id": bank.get("id"),
+            "fornecedor": fiscal.get("supplier") or bank.get("supplier") or "",
+            "numero_fatura": fiscal.get("invoice_number") or "",
+            "data_fiscal": _format_date(fiscal.get("date")),
+            "data_banco": _format_date(bank.get("date")),
+            "valor_total": _format_euro(fiscal.get("value_gross") or bank.get("value_gross")),
+            "motivo": "Documento fiscal e débito bancário conciliados",
+            "regra_aplicada": "date±2d+exact_amount",
+            "executado_em": datetime.now(timezone.utc).isoformat(),
+        })
         merged = merge_existing_expenses(fiscal, bank, mode="reconciliation")
         await db.expenses.update_one({"id": fiscal["id"]}, {"$set": merged})
         if bank.get("fixed_cost_instance_id"):
@@ -674,14 +790,33 @@ async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Opt
         await db.expenses.delete_one({"id": bank["id"]})
         reconciled += 1
 
+    result_meta = {
+        "reconciled": reconciled,
+        "duplicates_removed": duplicates_removed,
+        "duplicate_groups_processed": duplicate_groups_processed,
+    }
+    report_doc = None
+    if actor_user:
+        report_doc = await _create_reconciliation_report(
+            db,
+            actor_user=actor_user,
+            scope_meta=scope_meta,
+            summary=preview["summary"],
+            result_meta=result_meta,
+            reconciled_items=reconciled_items,
+            removed_duplicates=removed_duplicates_items,
+        )
+
     return {
         **preview,
         "dry_run": False,
-        "result": {
-            "reconciled": reconciled,
-            "duplicates_removed": duplicates_removed,
-            "duplicate_groups_processed": duplicate_groups_processed,
-        },
+        "result": result_meta,
+        "report": {
+            "id": report_doc.get("id"),
+            "created_at": report_doc.get("created_at"),
+            "file_name": report_doc.get("file_name"),
+            "download_url": report_doc.get("download_url"),
+        } if report_doc else None,
         "message": f"Verificação concluída: {reconciled} despesas reconciliadas e {duplicates_removed} duplicados removidos com sucesso!",
     }
 
@@ -1162,7 +1297,27 @@ def create_expenses_router(db, get_current_user):
             type_value=type,
             scope=scope,
             apply_changes=True,
+            actor_user=user,
         )
+
+    @expenses_router.get("/reconcile-reports")
+    async def list_reconciliation_reports(limit: int = 30, user=Depends(get_current_user)):
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Apenas administradores")
+        docs = await db.expense_reconciliation_reports.find({}, {"_id": 0, "reconciled_items": 0, "removed_duplicates": 0}).sort("created_at", -1).to_list(max(1, min(limit, 100)))
+        return docs
+
+    @expenses_router.get("/reconcile-reports/{report_id}/download")
+    async def download_reconciliation_report(report_id: str, user=Depends(get_current_user)):
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Apenas administradores")
+        report = await db.expense_reconciliation_reports.find_one({"id": report_id}, {"_id": 0})
+        if not report:
+            raise HTTPException(status_code=404, detail="Relatório não encontrado")
+        file_path = Path(report.get("file_path") or "")
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Ficheiro não encontrado")
+        return FileResponse(path=file_path, filename=report.get("file_name") or file_path.name, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     @expenses_router.get("/{expense_id}")
     async def get_expense(expense_id: str, user=Depends(get_current_user)):
