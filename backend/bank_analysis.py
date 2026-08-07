@@ -542,11 +542,11 @@ def _clean_description(desc: str) -> str:
     """Clean a bank transaction description to a readable supplier/contract name."""
     d = (desc or "").strip()
     d = re.sub(r'^\d{2}/\d{2}(/\d{2,4})?\s*', '', d)
-    for pfx in ["COMPRA EL-E", "LEV. ATM EL-E", "LEV.ATM EL-E", "TRF SEPA+ INST", "TRF SEPA+", "PAG.AUT.CARTAO", "PAG.AUT."]:
+    for pfx in ["COMPRA EL-E", "LEV. ATM EL-E", "LEV.ATM EL-E", "TRF SEPA+ INST", "TRF SEPA+", "TRF CR INTRAB", "TRF CR SEPA+", "PAG.AUT.CARTAO", "PAGSERV ADC", "PAG.AUT."]:
         if d.upper().startswith(pfx):
             d = d[len(pfx):].strip()
-    d = re.sub(r'\b\d{6,}[/\-]?\d*\b', '', d)
     d = re.sub(r'\bPT\d{10,}\b', '', d)
+    d = re.sub(r'\b(REF|REFERENCIA|TRANSFERENCIA|PAGAMENTO)\b', '', d, flags=re.IGNORECASE)
     d = re.sub(r'\s+', ' ', d).strip()
     return d if d else (desc or '')[:60]
 
@@ -555,23 +555,76 @@ def _detect_payment_type(desc: str) -> str:
     """Detect payment type from description."""
     d = (desc or '').upper()
     if "PAG.AUT." in d or "DEBITO DIRETO" in d:
-        return "Débito Direto"
+        return "DD"
     if "TRF SEPA" in d or "TRANSFERENCIA" in d or "TRF " in d:
-        return "Transferência"
+        return "TRF"
     if "COMPRA EL-E" in d or "COMPRA" in d:
-        return "Compra Cartão"
+        return "Cartão"
     if "LEV. ATM" in d or "LEV.ATM" in d:
-        return "Levantamento ATM"
+        return "ATM"
     return "Outro"
 
 
+def _extract_contract_refs(desc: str) -> list:
+    """Extract stable bank contract identifiers like IBAN/NIB/reference numbers from description."""
+    text = (desc or '').upper()
+    refs = set()
+
+    iban_matches = re.findall(r'PT\d{2}[\s\d]{15,30}', text)
+    for match in iban_matches:
+        refs.add(re.sub(r'\s+', '', match))
+
+    nib_matches = re.findall(r'\b\d{21}\b', re.sub(r'\s+', '', text))
+    for match in nib_matches:
+        refs.add(match)
+
+    tagged = re.findall(r'\b(?:BPI|CGD|NB|SANTANDER|MEO|NOS|EDP|GALP|VODAFONE|GOLD\s+ENERGY)\s+\d{4,12}\b', text)
+    for match in tagged:
+        refs.add(re.sub(r'\s+', ' ', match).strip())
+
+    compact_number = re.findall(r'\b\d{7,12}\b', text)
+    if len(compact_number) == 1:
+        refs.add(compact_number[0])
+
+    return sorted(refs)
+
+
+def _infer_recurring_frequency(dates: list) -> tuple[str, int]:
+    """Infer monthly / quarterly / annual recurrence from month intervals."""
+    month_points = sorted({(d.year * 12) + d.month for d in dates})
+    if len(month_points) <= 1:
+        return "Mensal", 1
+
+    intervals = [month_points[idx] - month_points[idx - 1] for idx in range(1, len(month_points)) if month_points[idx] - month_points[idx - 1] > 0]
+    if not intervals:
+        return "Mensal", 1
+
+    avg_interval = sum(intervals) / len(intervals)
+    if avg_interval >= 10:
+        return "Anual", 12
+    if avg_interval >= 2.25:
+        return "Trimestral", 3
+    return "Mensal", 1
+
+
+def _build_recurring_group_key(txn: dict) -> tuple[str, str, list]:
+    """Build a stable group key combining cleaned description and bank refs when available."""
+    raw_desc = txn.get("description", "")
+    cleaned = _clean_description(raw_desc)
+    desc_key = _normalize_desc_key(cleaned)
+    refs = _extract_contract_refs(raw_desc)
+    if refs:
+        return f"{refs[0]}|{desc_key or refs[0].lower()}", cleaned, refs
+    return desc_key, cleaned, refs
+
+
 def _build_recurring_masters_from_analyses(analyses: list) -> list:
-    """Consolidate recurring debit transactions from all analyses into master entries."""
+    """Consolidate recurring debit transactions into one master row per recurring contract."""
     all_txns = []
     for a in analyses:
         for t in a.get("transactions", []):
             if t.get("amount", 0) < 0:
-                all_txns.append(t)
+                all_txns.append({**t, "analysis_filename": a.get("filename", ""), "analysis_id": a.get("id")})
 
     if not all_txns:
         return []
@@ -579,53 +632,83 @@ def _build_recurring_masters_from_analyses(analyses: list) -> list:
     from collections import Counter
     groups = defaultdict(list)
     for t in all_txns:
-        key = _normalize_desc_key(t.get("description", ""))
+        key, cleaned, refs = _build_recurring_group_key(t)
         if key and len(key) >= 4:
-            groups[key].append(t)
+            groups[key].append({**t, "_clean_description": cleaned, "_refs": refs})
 
     masters = []
     for key, txns in groups.items():
         if len(txns) < 2:
             continue
-        amounts = [abs(float(t.get("amount", 0) or 0)) for t in txns]
-        avg_amount = sum(amounts) / len(amounts)
-        consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
-        days = []
-        months_seen = set()
+
+        parsed_dates = []
+        valid_txns = []
         for t in txns:
             try:
                 dt = datetime.strptime(t["date"], "%Y-%m-%d")
-                days.append(dt.day)
-                months_seen.add(t["date"][:7])
+                parsed_dates.append(dt)
+                valid_txns.append((t, dt))
             except (ValueError, KeyError):
-                pass
+                continue
+
+        if len(valid_txns) < 2:
+            continue
+
+        months_seen = {(dt.year, dt.month) for _, dt in valid_txns}
         if len(months_seen) < 2:
             continue
+
+        amounts = [abs(float(t.get("amount", 0) or 0)) for t, _ in valid_txns]
+        avg_amount = sum(amounts) / len(amounts)
+        consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
+        days = [dt.day for _, dt in valid_txns]
         day_counts = Counter(days)
         typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
-        day_range = f"Dia {min(days)}" if max(days) - min(days) <= 2 else f"Dia {min(days)}-{max(days)}"
-        frequency = "Mensal"
-        clean_name = _clean_description(txns[0].get("description", ""))
+        day_label = f"Dia {typical_day}" if typical_day else "Dia —"
+        frequency, interval_months = _infer_recurring_frequency(parsed_dates)
+        description_counts = Counter([t.get("_clean_description") or _clean_description(t.get("description", "")) for t, _ in valid_txns])
+        clean_name = description_counts.most_common(1)[0][0]
         payment_type = _detect_payment_type(txns[0].get("description", ""))
-        category = txns[0].get("category", "outro")
+        category_counts = Counter([t.get("category", "outro") or "outro" for t, _ in valid_txns])
+        category = category_counts.most_common(1)[0][0]
+        refs = sorted({ref for t, _ in valid_txns for ref in (t.get("_refs") or [])})
+        detail_transactions = [
+            {
+                "id": t.get("id"),
+                "date": t.get("date"),
+                "description": t.get("description"),
+                "clean_description": t.get("_clean_description") or _clean_description(t.get("description", "")),
+                "amount": round(abs(float(t.get("amount", 0) or 0)), 2),
+                "category": t.get("category", "outro"),
+                "payment_type": _detect_payment_type(t.get("description", "")),
+                "analysis_id": t.get("analysis_id"),
+                "analysis_filename": t.get("analysis_filename", ""),
+            }
+            for t, _ in sorted(valid_txns, key=lambda item: item[1])
+        ]
         masters.append({
             "id": str(uuid.uuid4()),
+            "version": 2,
             "desc_key": key,
             "description": clean_name,
-            "day_of_month": day_range,
+            "group_reference": refs[0] if refs else None,
+            "group_references": refs,
+            "day_of_month": day_label,
             "typical_day": typical_day,
             "category": category,
             "payment_type": payment_type,
             "frequency": frequency,
+            "interval_months": interval_months,
             "avg_amount": round(avg_amount, 2),
             "min_amount": round(min(amounts), 2),
             "max_amount": round(max(amounts), 2),
-            "occurrences": len(txns),
+            "occurrences": len(valid_txns),
             "months_seen": len(months_seen),
             "amount_consistent": consistent,
             "notes": "",
-            "last_date": max(t["date"] for t in txns),
-            "first_date": min(t["date"] for t in txns),
+            "last_date": max(t["date"] for t, _ in valid_txns),
+            "first_date": min(t["date"] for t, _ in valid_txns),
+            "detail_transactions": detail_transactions,
         })
     masters.sort(key=lambda m: m["avg_amount"], reverse=True)
     return masters
@@ -633,7 +716,7 @@ def _build_recurring_masters_from_analyses(analyses: list) -> list:
 
 async def _load_or_compute_recurring_masters(db):
     saved = await db.recurring_masters.find({}, {"_id": 0}).sort("avg_amount", -1).to_list(500)
-    if saved:
+    if saved and all(int(doc.get("version", 1) or 1) >= 2 for doc in saved):
         return saved, "saved"
 
     analyses = await db.bank_analyses.find(

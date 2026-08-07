@@ -1,0 +1,75 @@
+{
+  "summary": "Iteration 53: Full testing of Custos Recorrentes (Recurring Costs) master consolidated view feature. Backend: 6/6 pytest tests passed for GET/POST/PATCH/DELETE /api/bank-analysis/recurring-consolidated endpoints. Frontend: All UI elements verified - page loads with data-testid='custos-recorrentes-page', table shows 5 masters with correct columns, expand/collapse works, edit mode works, refresh button works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_recurring_consolidated.py",
+    "/app/test_reports/pytest/iter53_recurring_consolidated.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "GET /api/bank-analysis/recurring-consolidated returns masters array with source field (saved/computed)",
+    "Each master has version=2 with all required fields: id, description, day_of_month, category, payment_type, frequency, avg_amount, occurrences, months_seen, detail_transactions",
+    "detail_transactions array contains full transaction details for expansion: id, date, description, clean_description, amount, category, payment_type, analysis_id, analysis_filename",
+    "POST /api/bank-analysis/recurring-consolidated/refresh correctly recalculates and persists masters",
+    "PATCH endpoint allows updating description, category, payment_type, frequency, notes, day_of_month, avg_amount",
+    "DELETE endpoint removes master and returns 404 on subsequent access",
+    "Frontend table shows correct columns: Descrição do Pagamento, Dia do Mês, Categoria, Tipo de Pagamento, Recorrência, Valor Médio (€)",
+    "KPIs correctly calculated: Compromisso Mensal, Projeção Anual, Custos Identificados, Categorias",
+    "Category breakdown shows monthly totals per category (Salário, Custo Fixo)",
+    "Expand/collapse functionality works with chevron icons and detail_transactions displayed",
+    "Edit mode shows form with inputs for all editable fields and save/cancel buttons"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "5 recurring masters exist from previous bank statement uploads: ORDENADO DIEGO OLIVEIRA (1200€), ORDENADO CARLOS MENDES (950€), SEGURANCA SOCIAL - TSU (512€), EDP UNIVERSAL - ELECTRICIDADE (90.17€), VODAFONE COMUNICACOES (45.99€)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Custos Recorrentes master consolidated view fully tested. Key endpoints: GET /api/bank-analysis/recurring-consolidated (returns masters with detail_transactions), POST /api/bank-analysis/recurring-consolidated/refresh (recalculates), PATCH /api/bank-analysis/recurring-consolidated/{id} (updates), DELETE /api/bank-analysis/recurring-consolidated/{id} (removes). Frontend data-testids: custos-recorrentes-page, masters-table, master-row-{id}, expand-master-{id}, expanded-master-{id}, edit-master-{id}, delete-master-{id}, detail-transaction-{id}-{idx}, refresh-btn. Note: User mentioned wanting to verify EDIFICABELLA, BPI 0510348, GOLD ENERGY examples but these are not present in current test data.",
+  "features_tested": [
+    "GET /api/bank-analysis/recurring-consolidated returns 200 with masters array and source field",
+    "Each master has required fields: id, description, day_of_month, category, payment_type, frequency, avg_amount, occurrences, months_seen, detail_transactions",
+    "detail_transactions contains: id, date, description, clean_description, amount, category, payment_type, analysis_id, analysis_filename",
+    "POST /api/bank-analysis/recurring-consolidated/refresh returns 200 with recalculated masters",
+    "PATCH /api/bank-analysis/recurring-consolidated/{id} updates master fields and returns updated document",
+    "PATCH returns 404 for nonexistent master",
+    "DELETE /api/bank-analysis/recurring-consolidated/{id} removes master and returns {ok: true}",
+    "DELETE returns 404 for nonexistent master",
+    "Endpoints require authentication (401/403 without token)",
+    "Frontend page loads with data-testid='custos-recorrentes-page'",
+    "Table shows 6 columns: Descrição do Pagamento, Dia do Mês, Categoria, Tipo de Pagamento, Recorrência, Valor Médio (€)",
+    "KPIs display: Compromisso Mensal (2798.16€), Projeção Anual (33577.92€), Custos Identificados (5), Categorias (2)",
+    "Category breakdown shows Salário (2150€/mês) and Custo Fixo (648.16€/mês)",
+    "Expand button (chevron) toggles detail view",
+    "Expanded view shows: Contrato/Ref, Recorrência inferida, Faixa de valores, Observações, Lançamentos agrupados",
+    "Detail transactions show date, description, payment_type, amount",
+    "Edit button opens inline edit form with inputs and selects",
+    "Edit form has save (✓) and cancel (✗) buttons",
+    "Refresh button triggers POST /recurring-consolidated/refresh and updates table"
+  ],
+  "api_test_results": {
+    "GET /api/bank-analysis/recurring-consolidated": "200 - Returns {masters: [...], source: 'saved'}",
+    "POST /api/bank-analysis/recurring-consolidated/refresh": "200 - Returns {masters: [...], source: 'computed'}",
+    "PATCH /api/bank-analysis/recurring-consolidated/{id}": "200 - Returns updated master document",
+    "PATCH /api/bank-analysis/recurring-consolidated/{nonexistent}": "404 - Registo não encontrado",
+    "DELETE /api/bank-analysis/recurring-consolidated/{id}": "200 - Returns {ok: true}",
+    "DELETE /api/bank-analysis/recurring-consolidated/{nonexistent}": "404 - Registo não encontrado"
+  },
+  "master_data_structure": {
+    "version": 2,
+    "fields": ["id", "version", "desc_key", "description", "group_reference", "group_references", "day_of_month", "typical_day", "category", "payment_type", "frequency", "interval_months", "avg_amount", "min_amount", "max_amount", "occurrences", "months_seen", "amount_consistent", "notes", "last_date", "first_date", "detail_transactions"],
+    "detail_transaction_fields": ["id", "date", "description", "clean_description", "amount", "category", "payment_type", "analysis_id", "analysis_filename"]
+  },
+  "rca_of_the_issue": "N/A - all features working as designed. The new master consolidated view correctly groups recurring transactions by description and/or NIB/IBAN, infers frequency (Mensal/Trimestral/Anual), and provides expandable detail view with all grouped transactions."
+}
