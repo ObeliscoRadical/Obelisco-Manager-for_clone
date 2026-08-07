@@ -4,7 +4,7 @@ import urllib.parse
 import pytest
 import requests
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://expenses-ai-1.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://custos-preview.preview.emergentagent.com").rstrip("/")
 
 
 @pytest.fixture(scope="module")
