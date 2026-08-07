@@ -19,6 +19,7 @@ import base64
 from pathlib import Path
 import re
 from difflib import SequenceMatcher
+from collections import defaultdict
 
 from pymongo.errors import DuplicateKeyError
 
@@ -331,8 +332,9 @@ def build_hard_dedupe_key(doc: dict) -> Optional[str]:
 
 def _get_bank_history_entry(doc: dict) -> Optional[dict]:
     bank_txn_id = doc.get("bank_txn_id")
-    description = (doc.get("bank_description") or doc.get("supplier") or "").strip()
-    if not bank_txn_id and not description:
+    explicit_description = (doc.get("bank_description") or "").strip()
+    description = explicit_description or ((doc.get("supplier") or "").strip() if bank_txn_id else "")
+    if not bank_txn_id and not explicit_description:
         return None
     return {
         "bank_txn_id": bank_txn_id,
@@ -385,6 +387,303 @@ def _merge_fiscal_history(existing: dict, incoming: dict) -> list:
     if key not in seen:
         history.append(entry)
     return history
+
+
+def _collect_bank_history(doc: dict) -> list:
+    history = list(doc.get("bank_movement_history") or [])
+    extra = _get_bank_history_entry(doc)
+    if extra:
+        seen = {item.get("bank_txn_id") or f"{item.get('date')}|{item.get('description')}|{item.get('amount')}" for item in history}
+        key = extra.get("bank_txn_id") or f"{extra.get('date')}|{extra.get('description')}|{extra.get('amount')}"
+        if key not in seen:
+            history.append(extra)
+    return history
+
+
+def _collect_fiscal_history(doc: dict) -> list:
+    history = list(doc.get("fiscal_document_history") or [])
+    invoice_number = (doc.get("invoice_number") or "").strip()
+    invoice_file = doc.get("invoice_file")
+    if invoice_number or invoice_file:
+        entry = {
+            "supplier": (doc.get("supplier") or "")[:180],
+            "invoice_number": invoice_number,
+            "invoice_file": invoice_file,
+            "nif": doc.get("nif") or "",
+            "date": _format_date(doc.get("date")),
+            "value_gross": _round_money(doc.get("value_gross")),
+            "linked_at": datetime.now(timezone.utc).isoformat(),
+        }
+        seen = {f"{item.get('invoice_number','')}|{item.get('invoice_file','')}|{item.get('date','')}|{item.get('value_gross',0)}" for item in history}
+        key = f"{entry['invoice_number']}|{entry['invoice_file']}|{entry['date']}|{entry['value_gross']}"
+        if key not in seen:
+            history.append(entry)
+    return history
+
+
+def _merge_unique_notes(*notes: str) -> str:
+    unique = []
+    for note in notes:
+        text = (note or "").strip()
+        if text and text not in unique:
+            unique.append(text)
+    return "\n".join(unique)
+
+
+def _is_generic_category(category: str) -> bool:
+    return (category or "").strip().lower() in {"", "outros", "outro"}
+
+
+def _expense_strength(doc: dict):
+    has_fiscal = bool(doc.get("invoice_number") or doc.get("invoice_file") or doc.get("fiscal_document_history"))
+    has_bank = bool(doc.get("bank_txn_id") or doc.get("bank_movement_history"))
+    score = 0
+    if doc.get("reconciled") or infer_expense_source_kind(doc) == "reconciled":
+        score += 500
+    if has_fiscal:
+        score += 220
+    if has_bank:
+        score += 80
+    if (doc.get("supplier") or "").strip():
+        score += 25
+    if (doc.get("nif") or "").strip():
+        score += 15
+    if (doc.get("notes") or "").strip():
+        score += 5
+    created_at = doc.get("created_at") or f"{_format_date(doc.get('date'))}T00:00:00"
+    try:
+        epoch = datetime.fromisoformat(created_at.replace("Z", "+00:00")).timestamp()
+    except Exception:
+        epoch = 0
+    return (score, 1 if has_fiscal else 0, 1 if has_bank else 0, -epoch)
+
+
+def _pick_primary_expense(docs: list) -> dict:
+    return sorted(docs, key=_expense_strength, reverse=True)[0]
+
+
+def merge_existing_expenses(primary: dict, secondary: dict, *, mode: str) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    merged = {**primary}
+
+    for field in ("supplier", "nif", "invoice_number", "invoice_file", "payment_method", "obra_id", "obra_name", "fixed_cost_instance_id"):
+        if not merged.get(field) and secondary.get(field):
+            merged[field] = secondary.get(field)
+
+    if _is_generic_category(merged.get("category")) and secondary.get("category"):
+        merged["category"] = secondary.get("category")
+    if not merged.get("type") and secondary.get("type"):
+        merged["type"] = secondary.get("type")
+    if not merged.get("value_net") and secondary.get("value_net"):
+        merged["value_net"] = secondary.get("value_net")
+    if not merged.get("vat_amount") and secondary.get("vat_amount"):
+        merged["vat_amount"] = secondary.get("vat_amount")
+    if not merged.get("vat_rate") and secondary.get("vat_rate"):
+        merged["vat_rate"] = secondary.get("vat_rate")
+
+    merged["notes"] = _merge_unique_notes(primary.get("notes", ""), secondary.get("notes", ""))
+    merged["bank_movement_history"] = _collect_bank_history(primary)
+    for item in _collect_bank_history(secondary):
+        if item.get("bank_txn_id") not in {row.get("bank_txn_id") for row in merged["bank_movement_history"]}:
+            merged["bank_movement_history"].append(item)
+    merged["fiscal_document_history"] = _collect_fiscal_history(primary)
+    existing_fiscal_keys = {f"{item.get('invoice_number','')}|{item.get('invoice_file','')}|{item.get('date','')}|{item.get('value_gross',0)}" for item in merged["fiscal_document_history"]}
+    for item in _collect_fiscal_history(secondary):
+        key = f"{item.get('invoice_number','')}|{item.get('invoice_file','')}|{item.get('date','')}|{item.get('value_gross',0)}"
+        if key not in existing_fiscal_keys:
+            merged["fiscal_document_history"].append(item)
+            existing_fiscal_keys.add(key)
+
+    if merged.get("bank_movement_history"):
+        primary_bank = merged["bank_movement_history"][0]
+        merged["bank_txn_id"] = primary_bank.get("bank_txn_id")
+        merged["bank_description"] = primary_bank.get("description")
+        merged["bank_analysis_id"] = primary_bank.get("analysis_id")
+
+    source_kinds = {*(primary.get("source_kinds") or [infer_expense_source_kind(primary)]), *(secondary.get("source_kinds") or [infer_expense_source_kind(secondary)])}
+    has_fiscal = bool(merged.get("invoice_number") or merged.get("invoice_file") or merged.get("fiscal_document_history"))
+    has_bank = bool(merged.get("bank_txn_id") or merged.get("bank_movement_history"))
+    merged["source_kinds"] = sorted(source_kinds)
+    merged["reconciled"] = has_fiscal and has_bank
+    merged["source_kind"] = "reconciled" if merged["reconciled"] else infer_expense_source_kind(merged)
+    if merged["reconciled"]:
+        merged["reconciled_at"] = now_iso
+        merged["reconciliation_status"] = "matched_fiscal_bank"
+        merged["reconciliation_rule"] = "date±2d+exact_amount"
+    elif mode == "hard_duplicate":
+        merged["reconciliation_status"] = "hard_duplicate_merged"
+        merged["reconciliation_rule"] = "same_date+same_anchor+same_amount"
+
+    merged["display_description"] = " · ".join(part for part in [merged.get("supplier"), merged.get("invoice_number")] if part)
+    merged["merged_from_ids"] = sorted({*(primary.get("merged_from_ids") or []), *(secondary.get("merged_from_ids") or []), secondary.get("id")})
+    merged["updated_at"] = now_iso
+    merged["hard_dedupe_key"] = build_hard_dedupe_key(merged)
+    return merged
+
+
+def _build_expense_scope_query(month: Optional[int], year: Optional[int], category: Optional[str], type_value: Optional[str], scope: str = "month") -> tuple[dict, dict]:
+    now = datetime.now(timezone.utc)
+    q = {}
+    resolved_year = year or now.year
+    resolved_month = month or now.month
+    if scope != "all":
+        q["date"] = {"$regex": f"^{_month_prefix(resolved_year, resolved_month)}"}
+    elif resolved_year:
+        q["date"] = {"$regex": f"^{resolved_year:04d}"}
+    if category:
+        q["category"] = category
+    if type_value:
+        q["type"] = type_value
+    return q, {"scope": scope, "month": resolved_month, "year": resolved_year, "category": category or "", "type": type_value or ""}
+
+
+def _build_bulk_reconciliation_plan(expenses: list) -> dict:
+    hard_groups_map = defaultdict(list)
+    for doc in expenses:
+        if doc.get("dedupe_exempt"):
+            continue
+        key = build_hard_dedupe_key(doc)
+        if key:
+            hard_groups_map[key].append(doc)
+
+    hard_duplicate_groups = []
+    loser_ids = set()
+    for key, docs in hard_groups_map.items():
+        if len(docs) <= 1:
+            continue
+        keeper = _pick_primary_expense(docs)
+        losers = [doc for doc in docs if doc.get("id") != keeper.get("id")]
+        loser_ids.update(doc.get("id") for doc in losers)
+        hard_duplicate_groups.append({
+            "hard_dedupe_key": key,
+            "keep_id": keeper.get("id"),
+            "keep_supplier": keeper.get("supplier"),
+            "keep_invoice_number": keeper.get("invoice_number"),
+            "remove_ids": [doc.get("id") for doc in losers],
+            "remove_count": len(losers),
+        })
+
+    active_docs = [doc for doc in expenses if doc.get("id") not in loser_ids]
+    fiscal_docs = [
+        doc for doc in active_docs
+        if bool(doc.get("invoice_number") or doc.get("invoice_file") or doc.get("fiscal_document_history"))
+        and not bool(doc.get("bank_txn_id") or doc.get("bank_movement_history"))
+    ]
+    bank_docs = [
+        doc for doc in active_docs
+        if bool(doc.get("bank_txn_id") or doc.get("bank_movement_history"))
+        and not bool(doc.get("invoice_number") or doc.get("invoice_file") or doc.get("fiscal_document_history"))
+    ]
+
+    used_bank_ids = set()
+    reconciliation_pairs = []
+    for fiscal in sorted(fiscal_docs, key=lambda doc: (_format_date(doc.get("date")), doc.get("supplier", ""))):
+        fiscal_date = _parse_iso_date(fiscal.get("date"))
+        fiscal_amount = _round_money(fiscal.get("value_gross"))
+        if not fiscal_date or fiscal_amount <= 0:
+            continue
+
+        ranked = []
+        for bank in bank_docs:
+            if bank.get("id") in used_bank_ids:
+                continue
+            bank_date = _parse_iso_date(bank.get("date"))
+            if not bank_date:
+                continue
+            bank_amount = _round_money(bank.get("value_gross"))
+            if bank_amount != fiscal_amount:
+                continue
+            diff_days = abs((bank_date - fiscal_date).days)
+            if diff_days > 2:
+                continue
+            sim = _similarity(fiscal.get("supplier", ""), bank.get("bank_description") or bank.get("supplier", ""))
+            ranked.append((diff_days, -sim, bank))
+
+        if ranked:
+            ranked.sort(key=lambda row: (row[0], row[1]))
+            bank = ranked[0][2]
+            used_bank_ids.add(bank.get("id"))
+            reconciliation_pairs.append({
+                "fiscal_id": fiscal.get("id"),
+                "bank_id": bank.get("id"),
+                "supplier": fiscal.get("supplier") or bank.get("supplier"),
+                "invoice_number": fiscal.get("invoice_number") or "",
+                "amount": fiscal_amount,
+                "date_diff_days": abs((_parse_iso_date(bank.get("date")) - fiscal_date).days),
+            })
+
+    return {
+        "hard_duplicate_groups": hard_duplicate_groups,
+        "reconciliation_pairs": reconciliation_pairs,
+        "summary": {
+            "records_scanned": len(expenses),
+            "hard_duplicate_groups": len(hard_duplicate_groups),
+            "duplicates_to_remove": sum(group.get("remove_count", 0) for group in hard_duplicate_groups),
+            "reconcilable_pairs": len(reconciliation_pairs),
+        },
+    }
+
+
+async def run_bulk_expense_reconciliation(db, *, month: Optional[int], year: Optional[int], category: Optional[str], type_value: Optional[str], scope: str = "month", apply_changes: bool = False) -> dict:
+    query, scope_meta = _build_expense_scope_query(month, year, category, type_value, scope=scope)
+    expenses = await db.expenses.find(query, {"_id": 0}).sort("date", 1).to_list(5000)
+    plan = _build_bulk_reconciliation_plan(expenses)
+
+    preview = {
+        "scope": scope_meta,
+        "summary": plan["summary"],
+        "reconciliation_preview": plan["reconciliation_pairs"][:12],
+        "hard_duplicate_preview": plan["hard_duplicate_groups"][:12],
+        "dry_run": not apply_changes,
+    }
+    if not apply_changes:
+        return preview
+
+    duplicates_removed = 0
+    duplicate_groups_processed = 0
+    reconciled = 0
+
+    for group in plan["hard_duplicate_groups"]:
+        keeper = await db.expenses.find_one({"id": group["keep_id"]}, {"_id": 0})
+        if not keeper:
+            continue
+        changed = False
+        for loser_id in group["remove_ids"]:
+            loser = await db.expenses.find_one({"id": loser_id}, {"_id": 0})
+            if not loser:
+                continue
+            keeper = merge_existing_expenses(keeper, loser, mode="hard_duplicate")
+            if loser.get("fixed_cost_instance_id"):
+                await db.fixed_cost_instances.update_one({"id": loser.get("fixed_cost_instance_id")}, {"$set": {"expense_id": keeper["id"]}})
+            await db.expenses.delete_one({"id": loser_id})
+            duplicates_removed += 1
+            changed = True
+        if changed:
+            await db.expenses.update_one({"id": keeper["id"]}, {"$set": keeper})
+            duplicate_groups_processed += 1
+
+    for pair in plan["reconciliation_pairs"]:
+        fiscal = await db.expenses.find_one({"id": pair["fiscal_id"]}, {"_id": 0})
+        bank = await db.expenses.find_one({"id": pair["bank_id"]}, {"_id": 0})
+        if not fiscal or not bank:
+            continue
+        merged = merge_existing_expenses(fiscal, bank, mode="reconciliation")
+        await db.expenses.update_one({"id": fiscal["id"]}, {"$set": merged})
+        if bank.get("fixed_cost_instance_id"):
+            await db.fixed_cost_instances.update_one({"id": bank.get("fixed_cost_instance_id")}, {"$set": {"expense_id": fiscal["id"]}})
+        await db.expenses.delete_one({"id": bank["id"]})
+        reconciled += 1
+
+    return {
+        **preview,
+        "dry_run": False,
+        "result": {
+            "reconciled": reconciled,
+            "duplicates_removed": duplicates_removed,
+            "duplicate_groups_processed": duplicate_groups_processed,
+        },
+        "message": f"Verificação concluída: {reconciled} despesas reconciliadas e {duplicates_removed} duplicados removidos com sucesso!",
+    }
 
 
 async def find_hard_duplicate_expense(db, expense_doc: dict, exclude_id: Optional[str] = None) -> Optional[dict]:
@@ -822,6 +1121,48 @@ def create_expenses_router(db, get_current_user):
             "by_type": by_type,
             "by_obra": by_obra,
         }
+
+    @expenses_router.get("/reconcile-preview")
+    async def reconcile_preview(
+        month: Optional[int] = None,
+        year: Optional[int] = None,
+        category: Optional[str] = None,
+        type: Optional[str] = None,
+        scope: str = "month",
+        user=Depends(get_current_user),
+    ):
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Apenas administradores")
+        return await run_bulk_expense_reconciliation(
+            db,
+            month=month,
+            year=year,
+            category=category,
+            type_value=type,
+            scope=scope,
+            apply_changes=False,
+        )
+
+    @expenses_router.post("/reconcile-apply")
+    async def reconcile_apply(
+        month: Optional[int] = None,
+        year: Optional[int] = None,
+        category: Optional[str] = None,
+        type: Optional[str] = None,
+        scope: str = "month",
+        user=Depends(get_current_user),
+    ):
+        if user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Apenas administradores")
+        return await run_bulk_expense_reconciliation(
+            db,
+            month=month,
+            year=year,
+            category=category,
+            type_value=type,
+            scope=scope,
+            apply_changes=True,
+        )
 
     @expenses_router.get("/{expense_id}")
     async def get_expense(expense_id: str, user=Depends(get_current_user)):

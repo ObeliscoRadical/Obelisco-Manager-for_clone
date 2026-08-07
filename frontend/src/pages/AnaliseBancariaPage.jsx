@@ -8,6 +8,7 @@ import {
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
 import { TreasuryInsightsPanel, TreasurySummaryStrip } from '../components/TreasuryInsightsPanel';
+import { ReconcileExpensesButton } from '../components/ReconcileExpensesButton';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -200,6 +201,13 @@ export default function AnaliseBancariaPage() {
           <p className="text-sm text-zinc-500 mt-1">Extratos bancários, categorização IA, projeções e impostos</p>
         </div>
         <div className="flex gap-2">
+          <ReconcileExpensesButton
+            month={new Date().getMonth() + 1}
+            year={new Date().getFullYear()}
+            onCompleted={() => fetchList()}
+            buttonClassName="h-10 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 font-semibold"
+            testIdPrefix="bank-analysis-reconcile"
+          />
           <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls,.ofx,.qfx,.txt,.pdf" onChange={e => handleUpload(e.target.files?.[0])} className="hidden" />
           <button
             data-testid="upload-statement-btn"

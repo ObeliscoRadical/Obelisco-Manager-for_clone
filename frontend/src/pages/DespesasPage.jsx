@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Upload, FileText, Loader2, Sparkles, Eye, Receipt, TrendingUp, Pencil, RefreshCw, AlertTriangle, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { ReconcileExpensesButton } from '../components/ReconcileExpensesButton';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 const monthName = (m) => ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][m] || '';
@@ -239,6 +240,15 @@ export default function DespesasPage() {
           <p className="text-zinc-400 mt-1 font-medium">Controlo de custos mensais com extração IA de faturas</p>
         </div>
         <div className="flex items-center gap-2">
+          <ReconcileExpensesButton
+            month={month}
+            year={year}
+            category={filterCategory}
+            type={filterType}
+            onCompleted={() => fetchAll()}
+            buttonClassName="h-10 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/30 hover:bg-blue-500/20 text-xs font-semibold"
+            testIdPrefix="expenses-reconcile"
+          />
           <button
             data-testid="ai-categorize-btn"
             onClick={handleAICategorize}
