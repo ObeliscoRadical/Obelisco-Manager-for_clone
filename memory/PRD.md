@@ -41,7 +41,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Expenses Suggestion System** (historical supplier pattern, keyword match, AI fallback with category_source tracking)
 - **Bank Analysis PDF Support** (Gemini AI extracts transactions from PDF bank statements, async background processing with polling)
 - **Auto-Sync Bank → Expenses** (prepares sync preview with duplicate detection; user approves before import)
-- **Contas Previstas CRUD** (página dedicada /contas-previstas — listar, criar, editar, eliminar contas previstas no calendário)
+- **Custos Recorrentes** (página /custos-recorrentes — vista consolidada master de pagamentos recorrentes com edição inline, dia do mês, categoria, modelo, valor médio)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
 - **Category Overrides Management** (Definições > Regras IA — view, edit inline, and delete learned category rules)
 
