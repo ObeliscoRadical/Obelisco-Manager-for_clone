@@ -334,12 +334,37 @@ function AnalysisDetail({ analysis, onBack }) {
           <h1 className="text-2xl font-bold text-white">{analysis.filename}</h1>
           <p className="text-sm text-zinc-500">{analysis.date_from} → {analysis.date_to} · {analysis.transaction_count} transações</p>
         </div>
-        {autoCalendar?.created > 0 && (
-          <span className="text-xs text-blue-400 bg-blue-500/10 border border-blue-500/20 px-3 py-1 rounded-full">
-            {autoCalendar.created} contas previstas no calendário
-          </span>
-        )}
       </div>
+
+      {/* Calendar Predictions Banner */}
+      {(autoCalendar?.created > 0 || (analysis.recurring?.length > 0)) && (
+        <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5" data-testid="calendar-predictions-banner">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Calendar size={18} className="text-blue-400" />
+              <div>
+                <p className="text-sm text-white font-medium">
+                  {autoCalendar?.created > 0
+                    ? `${autoCalendar.created} contas previstas adicionadas ao calendário`
+                    : `${analysis.recurring?.length || 0} pagamentos recorrentes detetados`}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {autoCalendar?.created > 0
+                    ? 'Compromissos criados na Agenda para os próximos 6 meses'
+                    : 'Pode alimentar o calendário na tab Recorrentes abaixo'}
+                </p>
+              </div>
+            </div>
+            <a
+              href="/agenda"
+              data-testid="go-to-agenda-btn"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium hover:bg-blue-500/30 transition-colors"
+            >
+              <Calendar size={14} /> Ver Agenda
+            </a>
+          </div>
+        </div>
+      )}
 
       {/* Sync Approval Panel */}
       {pendingItems.length > 0 && (

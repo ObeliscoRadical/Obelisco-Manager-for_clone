@@ -1,0 +1,20 @@
+{
+  "summary": "Iter46 (frontend-only): Verified new blue 'calendar-predictions-banner' on Análise Bancária detail. Tested 7 analyses. Banner correctly HIDDEN on test_iter42_ui.csv (no recurring). Banner correctly SHOWN on all 6 extrato_teste.csv analyses with text '5 pagamentos recorrentes detetados' and subtitle 'Pode alimentar o calendário na tab Recorrentes abaixo' (auto_calendar absent → recurring-only branch). data-testid='go-to-agenda-btn' has href='/agenda' and clicking navigates to /agenda successfully. Failed 'jan-26-bpi.pdf' analysis was not opened (opening disabled). No analysis with auto_calendar.created>0 was available to visually verify the alternate copy, but the code branch is trivial and covered by conditional in JSX (line 347-354).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Banner condition (autoCalendar?.created > 0 || analysis.recurring?.length > 0) works correctly. Old analyses without auto_calendar field fall through to the recurring-only message.",
+    "Ver Agenda uses <a href='/agenda'> which triggers a full page reload rather than React Router navigation. Minor UX nit — consider <Link> from react-router-dom to keep SPA state. Not blocking.",
+    "No visual test of the 'X contas previstas adicionadas ao calendário' variant since no seed analysis has auto_calendar.created>0. Recommend seeding one for full coverage in a future iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100% (banner visibility, text, testid, href, navigation all verified across 7 analyses)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "None. Used existing analyses.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "calendar-predictions-banner + go-to-agenda-btn on AnaliseBancariaPage detail view working correctly. Banner only appears when auto_calendar.created>0 OR recurring.length>0. Nav to /agenda verified. If needed, seed an analysis with auto_calendar.created>0 to visually verify the alternate copy.",
+  "rca_of_the_issue": "N/A — feature works as designed."
+}
