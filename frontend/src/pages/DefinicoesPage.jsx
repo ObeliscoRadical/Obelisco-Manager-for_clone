@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
-import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash2, Loader2 } from 'lucide-react';
+import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash2, Loader2, Wallet } from 'lucide-react';
 
 const formatPct = (v) => `${v}%`;
 
@@ -36,6 +36,13 @@ export default function DefinicoesPage() {
   const updateIndirect = (key, val) => setSettings({ ...settings, indirect_costs: { ...settings.indirect_costs, [key]: parseFloat(val) || 0 } });
   const updateRisk = (key, val) => setSettings({ ...settings, risk_levels: { ...settings.risk_levels, [key]: parseFloat(val) || 0 } });
   const updateCompany = (key, val) => setSettings({ ...settings, company_info: { ...settings.company_info, [key]: val } });
+  const updateTreasury = (key, val) => setSettings({
+    ...settings,
+    treasury_settings: {
+      ...(settings.treasury_settings || { anomaly_threshold_pct: 18 }),
+      [key]: parseFloat(val) || 0,
+    },
+  });
 
   if (loading || !settings) return <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>;
 
@@ -59,6 +66,7 @@ export default function DefinicoesPage() {
           <TabsTrigger value="geral" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Settings size={14} className="mr-1" /> Geral</TabsTrigger>
           <TabsTrigger value="indiretos" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Percent size={14} className="mr-1" /> Indiretos</TabsTrigger>
           <TabsTrigger value="risco" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Shield size={14} className="mr-1" /> Risco</TabsTrigger>
+          <TabsTrigger value="tesouraria" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Wallet size={14} className="mr-1" /> Tesouraria</TabsTrigger>
           <TabsTrigger value="empresa" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Building2 size={14} className="mr-1" /> Empresa</TabsTrigger>
           <TabsTrigger value="ia" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Brain size={14} className="mr-1" /> Regras IA</TabsTrigger>
         </TabsList>
@@ -149,6 +157,42 @@ export default function DefinicoesPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="tesouraria" className="mt-6">
+          <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
+            <CardContent className="p-6 space-y-5">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2"><Wallet size={18} className="text-yellow-400" /> Tesouraria Preditiva</h3>
+                <p className="text-zinc-400 text-sm mt-1">Parâmetros dos alertas visuais de fluxo de caixa, desvios e pressão financeira.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <Label className="text-zinc-300 text-sm">Limiar de anomalia (%)</Label>
+                  <Input
+                    data-testid="treasury-anomaly-threshold"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={settings.treasury_settings?.anomaly_threshold_pct ?? 18}
+                    onChange={e => updateTreasury('anomaly_threshold_pct', e.target.value)}
+                    className="mt-1 bg-zinc-800 border-zinc-700 text-white rounded-xl"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">Ex.: com 18%, qualquer débito recorrente acima de 18% da média anterior gera alerta.</p>
+                </div>
+
+                <div className="p-4 rounded-2xl border border-zinc-800 bg-zinc-950/60">
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">Como afeta o painel</p>
+                  <ul className="mt-3 space-y-2 text-sm text-zinc-300">
+                    <li>• Sinaliza subidas anormais em débitos recorrentes</li>
+                    <li>• Atualiza badges no Dashboard e Financeiro</li>
+                    <li>• Mantém o fluxo de caixa focado apenas em saídas previstas</li>
+                  </ul>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="empresa" className="mt-6">
           <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
             <CardContent className="p-6 space-y-4">
@@ -194,7 +238,9 @@ function CategoryOverridesTab() {
     try {
       const { data } = await api.get('/bank-analysis/category-overrides/list');
       setOverrides(data);
-    } catch { }
+    } catch (err) {
+      console.debug('[category-overrides/list]', err?.message);
+    }
     finally { setLoading(false); }
   }, []);
 

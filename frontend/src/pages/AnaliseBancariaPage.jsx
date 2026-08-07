@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import api from '../lib/api';
 import {
   Upload, Loader2, TrendingUp, TrendingDown, Receipt, RefreshCw, Trash2,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line, CartesianGrid, Legend, Area, AreaChart } from 'recharts';
+import { TreasuryInsightsPanel, TreasurySummaryStrip } from '../components/TreasuryInsightsPanel';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -32,27 +33,53 @@ export default function AnaliseBancariaPage() {
   const [processingId, setProcessingId] = useState(null);
   const [view, setView] = useState('list'); // list | detail
   const [taxAlerts, setTaxAlerts] = useState(null);
+  const [treasuryInsights, setTreasuryInsights] = useState(null);
+  const [treasuryLoading, setTreasuryLoading] = useState(true);
+  const [treasuryBalanceInput, setTreasuryBalanceInput] = useState('');
   const fileRef = useRef(null);
   const pollRef = useRef(null);
+
+  const fetchTreasury = useCallback(async (openingBalance) => {
+    setTreasuryLoading(true);
+    try {
+      const params = {};
+      if (openingBalance !== undefined && openingBalance !== null && `${openingBalance}`.trim() !== '') {
+        const parsed = parseFloat(openingBalance);
+        if (Number.isFinite(parsed)) params.opening_balance = parsed;
+      }
+      const { data } = await api.get('/bank-analysis/treasury/insights', { params });
+      setTreasuryInsights(data);
+      setTreasuryBalanceInput(`${data.opening_balance?.effective ?? data.opening_balance?.automatic ?? ''}`);
+    } catch {
+      setTreasuryInsights(null);
+    } finally {
+      setTreasuryLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     fetchList();
     fetchAlerts();
+    fetchTreasury();
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, []);
+  }, [fetchTreasury]);
 
   const fetchList = async () => {
     try {
       const { data } = await api.get('/bank-analysis');
       setAnalyses(data);
-    } catch { } finally { setLoading(false); }
+    } catch (err) {
+      console.debug('[bank-analysis/list]', err?.message);
+    } finally { setLoading(false); }
   };
 
   const fetchAlerts = async () => {
     try {
       const { data } = await api.get('/bank-analysis/tax-alerts/upcoming');
       setTaxAlerts(data);
-    } catch { }
+    } catch (err) {
+      console.debug('[bank-analysis/alerts]', err?.message);
+    }
   };
 
   const startPolling = (analysisId) => {
@@ -79,6 +106,7 @@ export default function AnaliseBancariaPage() {
           setCurrent(fullData);
           setView('detail');
           fetchList();
+          fetchTreasury();
         } else if (data.status === 'failed') {
           clearInterval(pollRef.current);
           pollRef.current = null;
@@ -119,6 +147,7 @@ export default function AnaliseBancariaPage() {
         setView('detail');
         setUploading(false);
         fetchList();
+        fetchTreasury();
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao processar extrato');
@@ -143,12 +172,24 @@ export default function AnaliseBancariaPage() {
       await api.delete(`/bank-analysis/${id}`);
       toast.success('Eliminada');
       fetchList();
+      fetchTreasury();
       if (current?.id === id) { setCurrent(null); setView('list'); }
     } catch { toast.error('Erro'); }
   };
 
   if (view === 'detail' && current) {
-    return <AnalysisDetail analysis={current} onBack={() => { setView('list'); setCurrent(null); }} />;
+    return (
+      <AnalysisDetail
+        analysis={current}
+        treasuryInsights={treasuryInsights}
+        treasuryLoading={treasuryLoading}
+        treasuryBalanceInput={treasuryBalanceInput}
+        onTreasuryBalanceChange={setTreasuryBalanceInput}
+        onApplyTreasuryBalance={() => fetchTreasury(treasuryBalanceInput)}
+        onResetTreasuryBalance={() => fetchTreasury()}
+        onBack={() => { setView('list'); setCurrent(null); }}
+      />
+    );
   }
 
   return (
@@ -195,6 +236,13 @@ export default function AnaliseBancariaPage() {
           )}
         </div>
       )}
+
+      <TreasurySummaryStrip
+        insights={treasuryInsights}
+        loading={treasuryLoading}
+        title="Tesouraria preditiva"
+        linkTo="/analise-bancaria"
+      />
 
       {/* Tax Alerts */}
       {taxAlerts?.alerts?.length > 0 && (
@@ -272,7 +320,16 @@ export default function AnaliseBancariaPage() {
 }
 
 /* ─── Analysis Detail ───────────────────────────────────────────── */
-function AnalysisDetail({ analysis, onBack }) {
+function AnalysisDetail({
+  analysis,
+  onBack,
+  treasuryInsights,
+  treasuryLoading,
+  treasuryBalanceInput,
+  onTreasuryBalanceChange,
+  onApplyTreasuryBalance,
+  onResetTreasuryBalance,
+}) {
   const [tab, setTab] = useState('overview');
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
@@ -458,6 +515,7 @@ function AnalysisDetail({ analysis, onBack }) {
           { id: 'overview', label: 'Visão Geral', icon: BarChart3 },
           { id: 'taxes', label: 'Impostos', icon: Calculator },
           { id: 'recurring', label: 'Recorrentes', icon: Repeat },
+          { id: 'treasury', label: 'Tesouraria', icon: Wallet },
           { id: 'cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
           { id: 'transactions', label: 'Transações', icon: Receipt },
         ].map(t => (
@@ -473,6 +531,16 @@ function AnalysisDetail({ analysis, onBack }) {
       {tab === 'overview' && <OverviewTab taxes={taxes} catData={catData} monthData={monthData} recurring={recurring} />}
       {tab === 'taxes' && <TaxesTab taxes={taxes} />}
       {tab === 'recurring' && <RecurringTab recurring={recurring} analysisId={analysis.id} />}
+      {tab === 'treasury' && (
+        <TreasuryInsightsPanel
+          insights={treasuryInsights}
+          loading={treasuryLoading}
+          balanceInput={treasuryBalanceInput}
+          onBalanceInputChange={onTreasuryBalanceChange}
+          onApplyBalance={onApplyTreasuryBalance}
+          onResetBalance={onResetTreasuryBalance}
+        />
+      )}
       {tab === 'cashflow' && <CashflowTab cashflow={cashflow} />}
       {tab === 'transactions' && <TransactionsTab transactions={transactions} analysisId={analysis.id} />}
     </div>

@@ -13,6 +13,22 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
 const monthName = (m) => ['', 'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'][m] || '';
 
+function ExpensesMonthTick({ x, y, payload, selectedMonthLabel }) {
+  const isSelected = selectedMonthLabel === payload?.value;
+  return (
+    <text
+      x={x}
+      y={y + 12}
+      textAnchor="middle"
+      fontSize={10}
+      fill={isSelected ? '#facc15' : '#71717a'}
+      fontWeight={isSelected ? 700 : 400}
+    >
+      {payload?.value}
+    </text>
+  );
+}
+
 const TYPES = [
   { value: 'fixo', label: 'Custo Fixo', color: 'bg-blue-500/20 text-blue-400' },
   { value: 'variavel', label: 'Custo Variável', color: 'bg-zinc-700 text-zinc-300' },
@@ -287,17 +303,7 @@ export default function DespesasPage() {
                     dataKey="name"
                     stroke="#71717a"
                     fontSize={10}
-                    tick={(props) => {
-                      const { x, y, payload } = props;
-                      const isSel = monthName(month) === payload.value;
-                      return (
-                        <text x={x} y={y + 12} textAnchor="middle" fontSize={10}
-                              fill={isSel ? '#facc15' : '#71717a'}
-                              fontWeight={isSel ? 700 : 400}>
-                          {payload.value}
-                        </text>
-                      );
-                    }}
+                    tick={<ExpensesMonthTick selectedMonthLabel={monthName(month)} />}
                   />
                   <YAxis stroke="#71717a" fontSize={10} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip

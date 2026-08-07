@@ -9,6 +9,7 @@ import {
   ChevronRight, RefreshCw, CircleDot, CheckCircle2, Sparkles, Landmark, Calendar,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { TreasurySummaryStrip } from '../components/TreasuryInsightsPanel';
 
 const fmtEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
 const fmtEuroFull = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -24,18 +25,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
   const [taxAlerts, setTaxAlerts] = useState(null);
+  const [treasury, setTreasury] = useState(null);
 
   const fetch = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ data }, meRes, taxRes] = await Promise.all([
+      const [{ data }, meRes, taxRes, treasuryRes] = await Promise.all([
         api.get('/dashboard/overview'),
         api.get('/auth/me').catch(() => ({ data: {} })),
         api.get('/bank-analysis/tax-alerts/upcoming').catch(() => ({ data: null })),
+        api.get('/bank-analysis/treasury/insights').catch(() => ({ data: null })),
       ]);
       setData(data);
       setUserName(meRes.data?.name || meRes.data?.email?.split('@')[0] || '');
       setTaxAlerts(taxRes.data);
+      setTreasury(treasuryRes.data);
     } catch (err) {
       console.error(err);
       toast.error('Erro a carregar dashboard');
@@ -241,6 +245,66 @@ export default function DashboardPage() {
           {!taxAlerts.estimates?.total_tax_burden && !taxAlerts.alerts?.length && (
             <p className="text-xs text-zinc-500 text-center py-2">Carregue um extrato bancário na <Link to="/analise-bancaria" className="text-yellow-400 hover:underline">Análise Bancária</Link> para ver estimativas fiscais.</p>
           )}
+        </div>
+      )}
+
+      <TreasurySummaryStrip
+        insights={treasury}
+        loading={loading}
+        title="Radar de tesouraria"
+        linkTo="/analise-bancaria"
+      />
+
+      {treasury && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="dashboard-treasury-detail-grid">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5" data-testid="dashboard-treasury-anomalies-card">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={16} className="text-orange-400" />
+              <h2 className="text-white font-black uppercase tracking-wide text-sm">Anomalias em custos recorrentes</h2>
+            </div>
+            {treasury.anomalies?.items?.length ? (
+              <div className="space-y-2">
+                {treasury.anomalies.items.slice(0, 3).map(item => (
+                  <div key={`${item.desc_key}-${item.last_date}`} className="rounded-2xl border border-orange-500/20 bg-orange-500/5 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-white truncate">{item.description}</div>
+                        <div className="text-[11px] text-zinc-500">{item.payment_type} · média {fmtEuro(item.baseline_avg)}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-black text-orange-400">+{item.increase_pct}%</div>
+                        <div className="text-[11px] text-zinc-500">{fmtEuro(item.last_amount)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 py-8 text-center">Sem desvios acima do limiar nas últimas leituras.</p>
+            )}
+          </div>
+
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5" data-testid="dashboard-treasury-critical-days-card">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={16} className="text-yellow-400" />
+              <h2 className="text-white font-black uppercase tracking-wide text-sm">Dias de maior pressão</h2>
+            </div>
+            {treasury.pressure_map?.critical_dates?.length ? (
+              <div className="space-y-2">
+                {treasury.pressure_map.critical_dates.slice(0, 4).map(day => (
+                  <div key={day.date} className="flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3">
+                    <div>
+                      <div className="text-sm font-semibold text-white">{fmtDate(day.date)}</div>
+                      <div className="text-[11px] text-zinc-500">{day.items_count} saída(s) concentradas neste dia</div>
+                    </div>
+                    <div className="text-sm font-black text-red-400">{fmtEuro(day.total_outflow)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 py-8 text-center">Não há concentração crítica de saídas no horizonte atual.</p>
+            )}
+          </div>
         </div>
       )}
 

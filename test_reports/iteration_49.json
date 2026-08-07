@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 49: Full testing of Treasury/Tesouraria module features. Backend: 11/11 pytest tests passed for GET /api/bank-analysis/treasury/insights (with opening_balance override), GET/PUT /api/system-settings (treasury_settings.anomaly_threshold_pct). Frontend: All 8 user stories verified via Playwright - Dashboard treasury summary strip with badges, Análise Bancária treasury strip, Treasury tab with KPIs/charts/pressure map/anomaly detector, manual balance override, Definições Tesouraria tab with configurable threshold, Dashboard Financeiro treasury cards.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_treasury_insights.py",
+    "/app/test_reports/pytest/iter49_treasury.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DespesasPage/DashboardFinanceiro render warning mentioned in requirements was NOT observed during testing - appears to be already fixed (FinanceMonthTick component moved outside render).",
+    "Treasury insights API correctly uses configured anomaly_threshold_pct from system_settings - verified via pytest.",
+    "Opening balance override via query param works correctly and updates projection KPIs.",
+    "All data-testid attributes are properly implemented for treasury components."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_treasury_insights.py"
+  ],
+  "success_rate": {
+    "backend": "100% (11/11 tests passed)",
+    "frontend": "100% (all 8 user stories verified)"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "No new seed data created. Used existing bank analyses and system settings.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Treasury/Tesouraria module fully functional. Key endpoints: GET /api/bank-analysis/treasury/insights (accepts opening_balance query param), GET/PUT /api/system-settings (treasury_settings.anomaly_threshold_pct). Frontend components: TreasurySummaryStrip (used on Dashboard, Análise Bancária, Dashboard Financeiro), TreasuryInsightsPanel (used in Análise Bancária Treasury tab). All data-testids: treasury-summary-strip, treasury-insights-panel, treasury-opening-balance-input, treasury-apply-balance-btn, treasury-pressure-calendar, treasury-balance-chart, treasury-anomaly-threshold.",
+  "features_tested": [
+    "Dashboard treasury summary strip with badges (saldo projetado 30d, anomalias, próximo dia crítico, janela crítica)",
+    "Dashboard treasury detail cards (anomalies, critical days)",
+    "Análise Bancária treasury summary strip at top of list",
+    "Análise Bancária Treasury tab with full panel (KPIs, chart, pressure map, anomaly detector)",
+    "Manual opening balance override with Apply button",
+    "Definições Tesouraria tab with configurable anomaly threshold",
+    "Dashboard Financeiro treasury summary and detail cards",
+    "API GET /api/bank-analysis/treasury/insights with opening_balance override",
+    "API GET/PUT /api/system-settings for treasury_settings"
+  ],
+  "rca_of_the_issue": "N/A - all features working as designed."
+}

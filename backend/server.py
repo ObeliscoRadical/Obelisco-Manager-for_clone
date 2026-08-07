@@ -2420,6 +2420,9 @@ DEFAULT_SYSTEM_SETTINGS = {
     "iva_rate": 23,
     "min_margin": 15,
     "target_margin": 30,
+    "treasury_settings": {
+        "anomaly_threshold_pct": 18,
+    },
     "indirect_costs": {
         "deslocacao": 3, "ferramentas": 2, "consumiveis": 1.5,
         "gestao_obra": 4, "supervisao": 3, "logistica": 2,
@@ -2488,6 +2491,7 @@ class SystemSettingsInput(BaseModel):
     iva_rate: Optional[float] = None
     min_margin: Optional[float] = None
     target_margin: Optional[float] = None
+    treasury_settings: Optional[dict] = None
     indirect_costs: Optional[dict] = None
     risk_levels: Optional[dict] = None
     proposal_modes: Optional[dict] = None
@@ -2518,10 +2522,22 @@ class ProBudgetCreate(BaseModel):
 
 # --- System Settings Endpoints ---
 
+def _merge_system_settings(doc: Optional[dict]) -> dict:
+    base = {**DEFAULT_SYSTEM_SETTINGS}
+    if not doc:
+        return base
+    merged = {**base, **doc}
+    merged["treasury_settings"] = {**base.get("treasury_settings", {}), **(doc.get("treasury_settings") or {})}
+    merged["indirect_costs"] = {**base.get("indirect_costs", {}), **(doc.get("indirect_costs") or {})}
+    merged["risk_levels"] = {**base.get("risk_levels", {}), **(doc.get("risk_levels") or {})}
+    merged["proposal_modes"] = {**base.get("proposal_modes", {}), **(doc.get("proposal_modes") or {})}
+    merged["company_info"] = {**base.get("company_info", {}), **(doc.get("company_info") or {})}
+    return merged
+
 @api_router.get("/system-settings")
 async def get_system_settings(user=Depends(get_current_user)):
     s = await db.system_settings.find_one({}, {"_id": 0})
-    return s or DEFAULT_SYSTEM_SETTINGS
+    return _merge_system_settings(s)
 
 @api_router.put("/system-settings")
 async def update_system_settings(input: SystemSettingsInput, user=Depends(get_current_user)):
@@ -2531,7 +2547,8 @@ async def update_system_settings(input: SystemSettingsInput, user=Depends(get_cu
         await db.system_settings.update_one({"_id": existing["_id"]}, {"$set": data})
     else:
         await db.system_settings.insert_one({**DEFAULT_SYSTEM_SETTINGS, **data})
-    return await db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+    updated = await db.system_settings.find_one({}, {"_id": 0})
+    return _merge_system_settings(updated)
 
 @api_router.get("/specialties")
 async def get_specialties(user=Depends(get_current_user)):

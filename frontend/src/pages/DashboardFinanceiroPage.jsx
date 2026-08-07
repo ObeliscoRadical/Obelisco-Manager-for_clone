@@ -3,14 +3,32 @@ import api from '../lib/api';
 import { TrendingUp, TrendingDown, Euro, AlertTriangle, Calendar, PieChart as PieIcon, ArrowDownRight, ArrowUpRight, Wallet, Receipt, X, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { TreasurySummaryStrip } from '../components/TreasuryInsightsPanel';
 
 const formatEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
 const MONTHS = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 const PIE_COLORS = ['#facc15', '#f97316', '#ef4444', '#8b5cf6', '#06b6d4', '#10b981', '#f472b6'];
 
+function FinanceMonthTick({ x, y, payload, selectedMonthLabel, monthActive }) {
+  const isSelected = monthActive && selectedMonthLabel === payload?.value;
+  return (
+    <text
+      x={x}
+      y={y + 14}
+      textAnchor="middle"
+      fontSize={11}
+      fill={isSelected ? '#facc15' : '#71717a'}
+      fontWeight={isSelected ? 700 : 400}
+    >
+      {payload?.value}
+    </text>
+  );
+}
+
 export default function DashboardFinanceiroPage() {
   const [data, setData] = useState(null);
   const [clients, setClients] = useState([]);
+  const [treasury, setTreasury] = useState(null);
   const [loading, setLoading] = useState(true);
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(''); // '' = all year
@@ -19,7 +37,7 @@ export default function DashboardFinanceiroPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [dataRes, clientsRes] = await Promise.all([
+      const [dataRes, clientsRes, treasuryRes] = await Promise.all([
         api.get('/dashboard/cashflow', {
           params: {
             year,
@@ -28,9 +46,11 @@ export default function DashboardFinanceiroPage() {
           },
         }),
         api.get('/invoices/clients'),
+        api.get('/bank-analysis/treasury/insights').catch(() => ({ data: null })),
       ]);
       setData(dataRes.data);
       setClients(clientsRes.data);
+      setTreasury(treasuryRes.data);
     } catch (err) {
       console.debug('[dashboard/cashflow]', err?.message);
       toast.error('Erro ao carregar dashboard financeiro');
@@ -174,6 +194,64 @@ export default function DashboardFinanceiroPage() {
         </div>
       </div>
 
+      <TreasurySummaryStrip
+        insights={treasury}
+        loading={loading}
+        title="Tesouraria no radar"
+        linkTo="/analise-bancaria"
+      />
+
+      {treasury && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div data-testid="financeiro-treasury-anomalies" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3 flex items-center gap-1">
+              <AlertTriangle size={12} /> Desvios recentes em custos recorrentes
+            </p>
+            {treasury.anomalies?.items?.length ? (
+              <div className="space-y-2">
+                {treasury.anomalies.items.slice(0, 3).map(item => (
+                  <div key={`${item.desc_key}-${item.last_date}`} className="rounded-xl border border-orange-500/20 bg-orange-500/5 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-white truncate">{item.description}</div>
+                        <div className="text-[11px] text-zinc-500">{item.payment_type} · média {formatEuro(item.baseline_avg)}</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-black text-orange-400">+{item.increase_pct}%</div>
+                        <div className="text-[11px] text-zinc-500">{formatEuro(item.last_amount)}</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 py-8 text-center">Sem anomalias acima do limiar configurado.</p>
+            )}
+          </div>
+
+          <div data-testid="financeiro-treasury-pressure" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
+            <p className="text-xs uppercase tracking-wider text-zinc-500 font-medium mb-3 flex items-center gap-1">
+              <Calendar size={12} /> Próximos dias críticos de saída
+            </p>
+            {treasury.pressure_map?.critical_dates?.length ? (
+              <div className="space-y-2">
+                {treasury.pressure_map.critical_dates.slice(0, 4).map(day => (
+                  <div key={day.date} className="flex items-center justify-between rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2">
+                    <div>
+                      <div className="text-sm font-semibold text-white">{new Date(day.date).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' })}</div>
+                      <div className="text-[11px] text-zinc-500">{day.items_count} compromisso(s) no dia</div>
+                    </div>
+                    <div className="text-sm font-black text-red-400">{formatEuro(day.total_outflow)}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-500 py-8 text-center">Sem picos relevantes de pressão financeira.</p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Current month + Forecast */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div data-testid="current-month-card" className="p-5 rounded-2xl bg-zinc-900 border border-zinc-800">
@@ -222,17 +300,7 @@ export default function DashboardFinanceiroPage() {
                 dataKey="name"
                 stroke="#71717a"
                 fontSize={11}
-                tick={(props) => {
-                  const { x, y, payload } = props;
-                  const isSel = monthActive && MONTHS[data.month - 1] === payload.value;
-                  return (
-                    <text x={x} y={y + 14} textAnchor="middle" fontSize={11}
-                          fill={isSel ? '#facc15' : '#71717a'}
-                          fontWeight={isSel ? 700 : 400}>
-                      {payload.value}
-                    </text>
-                  );
-                }}
+                tick={<FinanceMonthTick monthActive={monthActive} selectedMonthLabel={MONTHS[data.month - 1]} />}
               />
               <YAxis stroke="#71717a" fontSize={11} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip

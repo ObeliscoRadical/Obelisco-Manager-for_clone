@@ -536,6 +536,443 @@ def _project_cashflow(transactions: list, months_ahead: int = 6) -> list:
     return history
 
 
+def _clean_description(desc: str) -> str:
+    """Clean a bank transaction description to a readable supplier/contract name."""
+    d = (desc or "").strip()
+    d = re.sub(r'^\d{2}/\d{2}(/\d{2,4})?\s*', '', d)
+    for pfx in ["COMPRA EL-E", "LEV. ATM EL-E", "LEV.ATM EL-E", "TRF SEPA+ INST", "TRF SEPA+", "PAG.AUT.CARTAO", "PAG.AUT."]:
+        if d.upper().startswith(pfx):
+            d = d[len(pfx):].strip()
+    d = re.sub(r'\b\d{6,}[/\-]?\d*\b', '', d)
+    d = re.sub(r'\bPT\d{10,}\b', '', d)
+    d = re.sub(r'\s+', ' ', d).strip()
+    return d if d else (desc or '')[:60]
+
+
+def _detect_payment_type(desc: str) -> str:
+    """Detect payment type from description."""
+    d = (desc or '').upper()
+    if "PAG.AUT." in d or "DEBITO DIRETO" in d:
+        return "Débito Direto"
+    if "TRF SEPA" in d or "TRANSFERENCIA" in d or "TRF " in d:
+        return "Transferência"
+    if "COMPRA EL-E" in d or "COMPRA" in d:
+        return "Compra Cartão"
+    if "LEV. ATM" in d or "LEV.ATM" in d:
+        return "Levantamento ATM"
+    return "Outro"
+
+
+def _build_recurring_masters_from_analyses(analyses: list) -> list:
+    """Consolidate recurring debit transactions from all analyses into master entries."""
+    all_txns = []
+    for a in analyses:
+        for t in a.get("transactions", []):
+            if t.get("amount", 0) < 0:
+                all_txns.append(t)
+
+    if not all_txns:
+        return []
+
+    from collections import Counter
+    groups = defaultdict(list)
+    for t in all_txns:
+        key = _normalize_desc_key(t.get("description", ""))
+        if key and len(key) >= 4:
+            groups[key].append(t)
+
+    masters = []
+    for key, txns in groups.items():
+        if len(txns) < 2:
+            continue
+        amounts = [abs(float(t.get("amount", 0) or 0)) for t in txns]
+        avg_amount = sum(amounts) / len(amounts)
+        consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
+        days = []
+        months_seen = set()
+        for t in txns:
+            try:
+                dt = datetime.strptime(t["date"], "%Y-%m-%d")
+                days.append(dt.day)
+                months_seen.add(t["date"][:7])
+            except (ValueError, KeyError):
+                pass
+        if len(months_seen) < 2:
+            continue
+        day_counts = Counter(days)
+        typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
+        day_range = f"Dia {min(days)}" if max(days) - min(days) <= 2 else f"Dia {min(days)}-{max(days)}"
+        frequency = "Mensal"
+        clean_name = _clean_description(txns[0].get("description", ""))
+        payment_type = _detect_payment_type(txns[0].get("description", ""))
+        category = txns[0].get("category", "outro")
+        masters.append({
+            "id": str(uuid.uuid4()),
+            "desc_key": key,
+            "description": clean_name,
+            "day_of_month": day_range,
+            "typical_day": typical_day,
+            "category": category,
+            "payment_type": payment_type,
+            "frequency": frequency,
+            "avg_amount": round(avg_amount, 2),
+            "min_amount": round(min(amounts), 2),
+            "max_amount": round(max(amounts), 2),
+            "occurrences": len(txns),
+            "months_seen": len(months_seen),
+            "amount_consistent": consistent,
+            "notes": "",
+            "last_date": max(t["date"] for t in txns),
+            "first_date": min(t["date"] for t in txns),
+        })
+    masters.sort(key=lambda m: m["avg_amount"], reverse=True)
+    return masters
+
+
+async def _load_or_compute_recurring_masters(db):
+    saved = await db.recurring_masters.find({}, {"_id": 0}).sort("avg_amount", -1).to_list(500)
+    if saved:
+        return saved, "saved"
+
+    analyses = await db.bank_analyses.find(
+        {"status": {"$ne": "failed"}}, {"_id": 0, "transactions": 1, "filename": 1}
+    ).to_list(100)
+    masters = _build_recurring_masters_from_analyses(analyses)
+    if masters:
+        await db.recurring_masters.delete_many({})
+        await db.recurring_masters.insert_many([{**m} for m in masters])
+    return masters, "computed"
+
+
+def _normalize_projection_name(text: str) -> str:
+    base = re.sub(r'^[^\w]+', '', text or '').replace('💰', ' ')
+    return _normalize_desc_key(_clean_description(base))
+
+
+def _projection_names_match(left: str, right: str) -> bool:
+    if not left or not right:
+        return False
+    if left in right or right in left:
+        return True
+    return len(_extract_significant_words(left) & _extract_significant_words(right)) > 0
+
+
+def _add_months(base: datetime, months: int) -> datetime:
+    month_idx = (base.month - 1) + months
+    year = base.year + month_idx // 12
+    month = (month_idx % 12) + 1
+    return datetime(year, month, min(base.day, 28))
+
+
+def _parse_master_day(master: dict) -> int:
+    typical_day = int(master.get("typical_day") or 0)
+    if typical_day > 0:
+        return min(typical_day, 28)
+    match = re.search(r'(\d{1,2})', master.get("day_of_month", ""))
+    return min(int(match.group(1)), 28) if match else 15
+
+
+def _build_treasury_projection(recurring_masters: list, predicted_bills: list, days: int, opening_balance: float) -> dict:
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    horizon = today + timedelta(days=days)
+    bill_refs = []
+    items = []
+
+    for bill in predicted_bills:
+        date_str = (bill.get("date") or "")[:10]
+        amount = float(bill.get("predicted_amount", 0) or 0)
+        if not date_str or amount <= 0:
+            continue
+        norm_name = _normalize_projection_name(bill.get("title") or bill.get("notes") or "")
+        bill_refs.append({
+            "date": date_str,
+            "norm_name": norm_name,
+            "amount": amount,
+        })
+        items.append({
+            "date": date_str,
+            "description": bill.get("title") or "Conta prevista",
+            "amount": round(amount, 2),
+            "category": bill.get("predicted_category") or "outro",
+            "frequency": bill.get("predicted_frequency") or "manual",
+            "payment_type": "Compromisso",
+            "source": "predicted_bill",
+        })
+
+    month_cursor = datetime(today.year, today.month, 1)
+    months_limit = max(3, math.ceil((days + 31) / 30) + 1)
+
+    for master in recurring_masters:
+        amount = float(master.get("avg_amount", 0) or 0)
+        if amount <= 0:
+            continue
+        freq = (master.get("frequency") or "mensal").lower()
+        step = 12 if "anual" in freq else (3 if "trimes" in freq else 1)
+        day = _parse_master_day(master)
+        desc_key = master.get("desc_key") or _normalize_projection_name(master.get("description", ""))
+
+        for idx in range(0, months_limit, step):
+            due_dt = _add_months(month_cursor, idx).replace(day=day)
+            if due_dt < today or due_dt > horizon:
+                continue
+
+            due_date = due_dt.strftime("%Y-%m-%d")
+            duplicated_by_bill = any(
+                bill_ref["date"] == due_date
+                and _projection_names_match(bill_ref["norm_name"], desc_key)
+                and abs(bill_ref["amount"] - amount) / max(amount, 0.01) <= 0.25
+                for bill_ref in bill_refs
+            )
+            if duplicated_by_bill:
+                continue
+
+            items.append({
+                "date": due_date,
+                "description": master.get("description") or "Pagamento recorrente",
+                "amount": round(amount, 2),
+                "category": master.get("category") or "outro",
+                "frequency": master.get("frequency") or "Mensal",
+                "payment_type": master.get("payment_type") or "Outro",
+                "source": "recurring_master",
+            })
+
+    items.sort(key=lambda item: (item["date"], -item["amount"], item["description"]))
+    items_by_date = defaultdict(list)
+    for item in items:
+        items_by_date[item["date"]].append(item)
+
+    running_balance = round(float(opening_balance or 0), 2)
+    daily = []
+    for offset in range(days + 1):
+        current = today + timedelta(days=offset)
+        iso = current.strftime("%Y-%m-%d")
+        day_items = items_by_date.get(iso, [])
+        outflows = round(sum(float(i.get("amount", 0) or 0) for i in day_items), 2)
+        running_balance = round(running_balance - outflows, 2)
+        daily.append({
+            "date": iso,
+            "label": current.strftime("%d %b"),
+            "weekday": current.strftime("%a"),
+            "day_of_month": current.day,
+            "outflows": outflows,
+            "balance": running_balance,
+            "items_count": len(day_items),
+        })
+
+    def _summary(limit: int) -> dict:
+        subset = daily[:limit]
+        balances = [round(float(opening_balance or 0), 2)] + [d["balance"] for d in subset]
+        ending_balance = subset[-1]["balance"] if subset else round(float(opening_balance or 0), 2)
+        lowest_balance = min(balances) if balances else round(float(opening_balance or 0), 2)
+        days_negative = sum(1 for d in subset if d["balance"] < 0)
+        next_shortfall_date = next((d["date"] for d in subset if d["balance"] < 0), None)
+        total_outflows = round(sum(d["outflows"] for d in subset), 2)
+        return {
+            "days": limit,
+            "ending_balance": round(ending_balance, 2),
+            "lowest_balance": round(lowest_balance, 2),
+            "days_negative": days_negative,
+            "next_shortfall_date": next_shortfall_date,
+            "total_outflows": total_outflows,
+            "coverage_status": "risk" if lowest_balance < 0 else ("attention" if ending_balance < 0.35 * max(float(opening_balance or 0), 1) else "ok"),
+        }
+
+    critical_dates = sorted(
+        [{"date": d["date"], "total_outflow": d["outflows"], "items_count": d["items_count"]} for d in daily if d["outflows"] > 0],
+        key=lambda row: row["total_outflow"],
+        reverse=True,
+    )[:8]
+    critical_lookup = {row["date"] for row in critical_dates}
+    for d in daily:
+        d["critical"] = d["date"] in critical_lookup
+
+    by_day_of_month = defaultdict(lambda: {"total_outflow": 0.0, "occurrences": 0})
+    for item in items:
+        try:
+            day = int(item["date"][8:10])
+        except Exception:
+            continue
+        by_day_of_month[day]["total_outflow"] += float(item.get("amount", 0) or 0)
+        by_day_of_month[day]["occurrences"] += 1
+
+    top_days = [
+        {
+            "day": day,
+            "label": f"Dia {day}",
+            "total_outflow": round(meta["total_outflow"], 2),
+            "occurrences": meta["occurrences"],
+        }
+        for day, meta in sorted(by_day_of_month.items(), key=lambda item: item[1]["total_outflow"], reverse=True)[:8]
+    ]
+
+    critical_windows = []
+    window_size = 3
+    for idx in range(len(daily) - window_size + 1):
+        chunk = daily[idx:idx + window_size]
+        total = round(sum(day["outflows"] for day in chunk), 2)
+        if total <= 0:
+            continue
+        critical_windows.append({
+            "start": chunk[0]["date"],
+            "end": chunk[-1]["date"],
+            "window_days": window_size,
+            "total_outflow": total,
+        })
+    critical_windows.sort(key=lambda row: row["total_outflow"], reverse=True)
+
+    return {
+        "daily": daily,
+        "items": items[:120],
+        "summary_30d": _summary(30),
+        "summary_60d": _summary(min(60, len(daily))),
+        "pressure_map": {
+            "top_days": top_days,
+            "critical_dates": critical_dates,
+            "critical_windows": critical_windows[:5],
+        },
+    }
+
+
+def _detect_treasury_anomalies(analyses: list, recurring_masters: list, threshold_pct: float) -> list:
+    history_map = defaultdict(list)
+    today = datetime.now(timezone.utc).date()
+
+    for analysis in analyses:
+        for txn in analysis.get("transactions", []):
+            amount = float(txn.get("amount", 0) or 0)
+            if amount >= 0:
+                continue
+            key = _normalize_desc_key(txn.get("description", ""))
+            if key and len(key) >= 4:
+                history_map[key].append(txn)
+
+    anomalies = []
+    for master in recurring_masters:
+        key = master.get("desc_key")
+        history = sorted(history_map.get(key, []), key=lambda row: row.get("date") or "")
+        if len(history) < 3:
+            continue
+
+        try:
+            last_date = datetime.strptime(history[-1]["date"], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        if (today - last_date).days > 150:
+            continue
+
+        previous_amounts = [abs(float(row.get("amount", 0) or 0)) for row in history[:-1][-6:]]
+        previous_amounts = [value for value in previous_amounts if value > 0]
+        if len(previous_amounts) < 2:
+            continue
+
+        last_amount = abs(float(history[-1].get("amount", 0) or 0))
+        baseline_avg = sum(previous_amounts) / len(previous_amounts)
+        if baseline_avg <= 0:
+            continue
+
+        increase_pct = ((last_amount - baseline_avg) / baseline_avg) * 100
+        if increase_pct < threshold_pct:
+            continue
+
+        severity = "high" if increase_pct >= (threshold_pct + 10) else "medium"
+        anomalies.append({
+            "desc_key": key,
+            "description": master.get("description") or history[-1].get("description") or "Pagamento recorrente",
+            "category": master.get("category") or history[-1].get("category") or "outro",
+            "payment_type": master.get("payment_type") or _detect_payment_type(history[-1].get("description", "")),
+            "last_amount": round(last_amount, 2),
+            "baseline_avg": round(baseline_avg, 2),
+            "increase_pct": round(increase_pct, 1),
+            "last_date": history[-1].get("date"),
+            "occurrences": len(history),
+            "severity": severity,
+        })
+
+    anomalies.sort(key=lambda row: (row["severity"] == "high", row["increase_pct"], row["last_amount"]), reverse=True)
+    return anomalies
+
+
+async def _build_treasury_insights(db, days: int = 60, opening_balance_override: Optional[float] = None) -> dict:
+    horizon_days = max(30, min(int(days or 60), 60))
+    settings = await db.system_settings.find_one({}, {"_id": 0}) or {}
+    treasury_settings = settings.get("treasury_settings") or {}
+    anomaly_threshold_pct = float(treasury_settings.get("anomaly_threshold_pct", 18) or 18)
+
+    recurring_masters, recurring_source = await _load_or_compute_recurring_masters(db)
+    analyses = await db.bank_analyses.find(
+        {"status": {"$ne": "failed"}}, {"_id": 0, "id": 1, "filename": 1, "date_from": 1, "date_to": 1, "transactions": 1}
+    ).to_list(100)
+
+    latest_analysis = await db.bank_analyses.find_one(
+        {"status": "completed"},
+        {"_id": 0, "id": 1, "filename": 1, "date_from": 1, "date_to": 1, "transactions": 1},
+        sort=[("date_to", -1), ("created_at", -1)],
+    )
+    automatic_balance = 0.0
+    if latest_analysis:
+        automatic_balance = round(sum(float(t.get("amount", 0) or 0) for t in latest_analysis.get("transactions", [])), 2)
+
+    effective_balance = round(float(opening_balance_override) if opening_balance_override is not None else automatic_balance, 2)
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    horizon_iso = (datetime.now(timezone.utc) + timedelta(days=horizon_days)).strftime("%Y-%m-%d")
+    predicted_bills = await db.appointments.find(
+        {"is_predicted_bill": True, "date": {"$gte": today_iso, "$lte": horizon_iso}},
+        {"_id": 0},
+    ).sort("date", 1).to_list(1000)
+
+    projection = _build_treasury_projection(recurring_masters, predicted_bills, horizon_days, effective_balance)
+    anomalies = _detect_treasury_anomalies(analyses, recurring_masters, anomaly_threshold_pct)
+    critical_window = projection["pressure_map"]["critical_windows"][0] if projection["pressure_map"]["critical_windows"] else None
+    next_critical_date = min(projection["pressure_map"]["critical_dates"], key=lambda row: row["date"], default=None)
+    summary_30d = projection.get("summary_30d", {})
+
+    if summary_30d.get("lowest_balance", 0) < 0:
+        status = "critical"
+    elif anomalies:
+        status = "attention"
+    elif critical_window and critical_window.get("total_outflow", 0) > max(effective_balance, 1) * 0.5:
+        status = "attention"
+    else:
+        status = "ok"
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "settings": {
+            "anomaly_threshold_pct": anomaly_threshold_pct,
+        },
+        "opening_balance": {
+            "automatic": automatic_balance,
+            "effective": effective_balance,
+            "override_applied": opening_balance_override is not None,
+            "source": "saldo_liquido_ultimo_extrato",
+            "source_analysis": {
+                "id": latest_analysis.get("id") if latest_analysis else None,
+                "filename": latest_analysis.get("filename") if latest_analysis else None,
+                "date_from": latest_analysis.get("date_from") if latest_analysis else None,
+                "date_to": latest_analysis.get("date_to") if latest_analysis else None,
+            },
+        },
+        "projection": projection,
+        "anomalies": {
+            "count": len(anomalies),
+            "threshold_pct": anomaly_threshold_pct,
+            "items": anomalies[:12],
+        },
+        "pressure_map": projection.get("pressure_map", {}),
+        "meta": {
+            "recurring_source": recurring_source,
+            "recurring_masters": len(recurring_masters),
+            "predicted_bills": len(predicted_bills),
+        },
+        "summary_badges": {
+            "status": status,
+            "anomaly_count": len(anomalies),
+            "critical_window": critical_window,
+            "next_critical_date": next_critical_date,
+        },
+    }
+
+
 def _estimate_taxes(transactions: list, year: int) -> dict:
     """Estimate Portuguese taxes for IRC regime."""
     total_income = sum(t["amount"] for t in transactions if t["amount"] > 0)
@@ -1067,99 +1504,17 @@ def create_bank_analysis_router(db, get_current_user):
         doc.pop("created_at", None)
         return doc
 
+    @router.get("/treasury/insights")
+    async def get_treasury_insights(days: int = 60, opening_balance: Optional[float] = None, user=Depends(get_current_user)):
+        """Predictive treasury insights: 30/60 day cash pressure, anomaly detection, and critical days."""
+        return await _build_treasury_insights(db, days=days, opening_balance_override=opening_balance)
+
     # ── Recurring Costs Consolidation ─────────────────────────────
-    def _clean_description(desc: str) -> str:
-        """Clean a bank transaction description to a readable supplier/contract name."""
-        d = desc.strip()
-        d = re.sub(r'^\d{2}/\d{2}(/\d{2,4})?\s*', '', d)
-        for pfx in ["COMPRA EL-E", "LEV. ATM EL-E", "LEV.ATM EL-E", "TRF SEPA+ INST", "TRF SEPA+", "PAG.AUT.CARTAO", "PAG.AUT."]:
-            if d.upper().startswith(pfx):
-                d = d[len(pfx):].strip()
-        d = re.sub(r'\b\d{6,}[/\-]?\d*\b', '', d)
-        d = re.sub(r'\bPT\d{10,}\b', '', d)
-        d = re.sub(r'\s+', ' ', d).strip()
-        return d if d else desc[:60]
-
-    def _detect_payment_type(desc: str) -> str:
-        """Detect payment type from description."""
-        d = desc.upper()
-        if "PAG.AUT." in d or "DEBITO DIRETO" in d:
-            return "Débito Direto"
-        if "TRF SEPA" in d or "TRANSFERENCIA" in d or "TRF " in d:
-            return "Transferência"
-        if "COMPRA EL-E" in d or "COMPRA" in d:
-            return "Compra Cartão"
-        if "LEV. ATM" in d or "LEV.ATM" in d:
-            return "Levantamento ATM"
-        return "Outro"
-
     @router.get("/recurring-consolidated")
     async def get_recurring_consolidated(user=Depends(get_current_user)):
         """Consolidate recurring transactions across ALL bank analyses into master entries."""
-        saved = await db.recurring_masters.find({}, {"_id": 0}).sort("avg_amount", -1).to_list(500)
-        if saved:
-            return {"masters": saved, "source": "saved"}
-
-        analyses = await db.bank_analyses.find(
-            {"status": {"$ne": "failed"}}, {"_id": 0, "transactions": 1, "filename": 1}
-        ).to_list(100)
-
-        all_txns = []
-        for a in analyses:
-            for t in a.get("transactions", []):
-                if t.get("amount", 0) < 0:
-                    all_txns.append(t)
-
-        if not all_txns:
-            return {"masters": [], "source": "computed"}
-
-        from collections import Counter
-        groups = defaultdict(list)
-        for t in all_txns:
-            key = _normalize_desc_key(t["description"])
-            if key and len(key) >= 4:
-                groups[key].append(t)
-
-        masters = []
-        for key, txns in groups.items():
-            if len(txns) < 2:
-                continue
-            amounts = [abs(t["amount"]) for t in txns]
-            avg_amount = sum(amounts) / len(amounts)
-            consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
-            days = []
-            months_seen = set()
-            for t in txns:
-                try:
-                    dt = datetime.strptime(t["date"], "%Y-%m-%d")
-                    days.append(dt.day)
-                    months_seen.add(t["date"][:7])
-                except (ValueError, KeyError):
-                    pass
-            if len(months_seen) < 2:
-                continue
-            day_counts = Counter(days)
-            typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
-            day_range = f"Dia {min(days)}" if max(days) - min(days) <= 2 else f"Dia {min(days)}-{max(days)}"
-            frequency = "Mensal"
-            clean_name = _clean_description(txns[0]["description"])
-            payment_type = _detect_payment_type(txns[0]["description"])
-            category = txns[0].get("category", "outro")
-            masters.append({
-                "id": str(uuid.uuid4()), "desc_key": key, "description": clean_name,
-                "day_of_month": day_range, "typical_day": typical_day, "category": category,
-                "payment_type": payment_type, "frequency": frequency,
-                "avg_amount": round(avg_amount, 2), "min_amount": round(min(amounts), 2),
-                "max_amount": round(max(amounts), 2), "occurrences": len(txns),
-                "months_seen": len(months_seen), "amount_consistent": consistent,
-                "notes": "", "last_date": max(t["date"] for t in txns),
-                "first_date": min(t["date"] for t in txns),
-            })
-        masters.sort(key=lambda m: m["avg_amount"], reverse=True)
-        if masters:
-            await db.recurring_masters.delete_many({})
-            await db.recurring_masters.insert_many([{**m} for m in masters])
-        return {"masters": masters, "source": "computed"}
+        masters, source = await _load_or_compute_recurring_masters(db)
+        return {"masters": masters, "source": source}
 
     @router.post("/recurring-consolidated/refresh")
     async def refresh_recurring_consolidated(user=Depends(get_current_user)):
