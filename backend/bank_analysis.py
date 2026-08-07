@@ -1067,6 +1067,138 @@ def create_bank_analysis_router(db, get_current_user):
         doc.pop("created_at", None)
         return doc
 
+    # ── Recurring Costs Consolidation ─────────────────────────────
+    def _clean_description(desc: str) -> str:
+        """Clean a bank transaction description to a readable supplier/contract name."""
+        d = desc.strip()
+        d = re.sub(r'^\d{2}/\d{2}(/\d{2,4})?\s*', '', d)
+        for pfx in ["COMPRA EL-E", "LEV. ATM EL-E", "LEV.ATM EL-E", "TRF SEPA+ INST", "TRF SEPA+", "PAG.AUT.CARTAO", "PAG.AUT."]:
+            if d.upper().startswith(pfx):
+                d = d[len(pfx):].strip()
+        d = re.sub(r'\b\d{6,}[/\-]?\d*\b', '', d)
+        d = re.sub(r'\bPT\d{10,}\b', '', d)
+        d = re.sub(r'\s+', ' ', d).strip()
+        return d if d else desc[:60]
+
+    def _detect_payment_type(desc: str) -> str:
+        """Detect payment type from description."""
+        d = desc.upper()
+        if "PAG.AUT." in d or "DEBITO DIRETO" in d:
+            return "Débito Direto"
+        if "TRF SEPA" in d or "TRANSFERENCIA" in d or "TRF " in d:
+            return "Transferência"
+        if "COMPRA EL-E" in d or "COMPRA" in d:
+            return "Compra Cartão"
+        if "LEV. ATM" in d or "LEV.ATM" in d:
+            return "Levantamento ATM"
+        return "Outro"
+
+    @router.get("/recurring-consolidated")
+    async def get_recurring_consolidated(user=Depends(get_current_user)):
+        """Consolidate recurring transactions across ALL bank analyses into master entries."""
+        saved = await db.recurring_masters.find({}, {"_id": 0}).sort("avg_amount", -1).to_list(500)
+        if saved:
+            return {"masters": saved, "source": "saved"}
+
+        analyses = await db.bank_analyses.find(
+            {"status": {"$ne": "failed"}}, {"_id": 0, "transactions": 1, "filename": 1}
+        ).to_list(100)
+
+        all_txns = []
+        for a in analyses:
+            for t in a.get("transactions", []):
+                if t.get("amount", 0) < 0:
+                    all_txns.append(t)
+
+        if not all_txns:
+            return {"masters": [], "source": "computed"}
+
+        from collections import Counter
+        groups = defaultdict(list)
+        for t in all_txns:
+            key = _normalize_desc_key(t["description"])
+            if key and len(key) >= 4:
+                groups[key].append(t)
+
+        masters = []
+        for key, txns in groups.items():
+            if len(txns) < 2:
+                continue
+            amounts = [abs(t["amount"]) for t in txns]
+            avg_amount = sum(amounts) / len(amounts)
+            consistent = all(abs(a - avg_amount) / max(avg_amount, 0.01) < 0.30 for a in amounts)
+            days = []
+            months_seen = set()
+            for t in txns:
+                try:
+                    dt = datetime.strptime(t["date"], "%Y-%m-%d")
+                    days.append(dt.day)
+                    months_seen.add(t["date"][:7])
+                except (ValueError, KeyError):
+                    pass
+            if len(months_seen) < 2:
+                continue
+            day_counts = Counter(days)
+            typical_day = day_counts.most_common(1)[0][0] if day_counts else 0
+            day_range = f"Dia {min(days)}" if max(days) - min(days) <= 2 else f"Dia {min(days)}-{max(days)}"
+            frequency = "Mensal"
+            clean_name = _clean_description(txns[0]["description"])
+            payment_type = _detect_payment_type(txns[0]["description"])
+            category = txns[0].get("category", "outro")
+            masters.append({
+                "id": str(uuid.uuid4()), "desc_key": key, "description": clean_name,
+                "day_of_month": day_range, "typical_day": typical_day, "category": category,
+                "payment_type": payment_type, "frequency": frequency,
+                "avg_amount": round(avg_amount, 2), "min_amount": round(min(amounts), 2),
+                "max_amount": round(max(amounts), 2), "occurrences": len(txns),
+                "months_seen": len(months_seen), "amount_consistent": consistent,
+                "notes": "", "last_date": max(t["date"] for t in txns),
+                "first_date": min(t["date"] for t in txns),
+            })
+        masters.sort(key=lambda m: m["avg_amount"], reverse=True)
+        if masters:
+            await db.recurring_masters.delete_many({})
+            await db.recurring_masters.insert_many([{**m} for m in masters])
+        return {"masters": masters, "source": "computed"}
+
+    @router.post("/recurring-consolidated/refresh")
+    async def refresh_recurring_consolidated(user=Depends(get_current_user)):
+        """Force re-computation of recurring consolidated data from all analyses."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        await db.recurring_masters.delete_many({})
+        return await get_recurring_consolidated(user=user)
+
+    @router.patch("/recurring-consolidated/{master_id}")
+    async def update_recurring_master(master_id: str, request: Request, user=Depends(get_current_user)):
+        """Update a consolidated recurring entry."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        body = await request.json()
+        updates = {}
+        for field in ("description", "category", "payment_type", "frequency", "notes", "day_of_month"):
+            if field in body:
+                updates[field] = body[field]
+        if "avg_amount" in body:
+            updates["avg_amount"] = float(body["avg_amount"])
+        if not updates:
+            raise HTTPException(400, "Nada para atualizar")
+        result = await db.recurring_masters.update_one({"id": master_id}, {"$set": updates})
+        if result.matched_count == 0:
+            raise HTTPException(404, "Registo não encontrado")
+        doc = await db.recurring_masters.find_one({"id": master_id}, {"_id": 0})
+        return doc
+
+    @router.delete("/recurring-consolidated/{master_id}")
+    async def delete_recurring_master(master_id: str, user=Depends(get_current_user)):
+        """Remove a recurring master entry."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        result = await db.recurring_masters.delete_one({"id": master_id})
+        if result.deleted_count == 0:
+            raise HTTPException(404, "Registo não encontrado")
+        return {"ok": True}
+
     @router.get("/{analysis_id}")
     async def get_analysis(analysis_id: str, user=Depends(get_current_user)):
         """Get full analysis by ID."""

@@ -1,0 +1,23 @@
+{
+  "summary": "Tested backend + frontend for /api/bank-analysis/recurring-consolidated feature. All 6 pytest tests passed (GET, refresh, PATCH, DELETE, 404 handling, route-order fix). Frontend /custos-recorrentes page loads correctly with 8 columns, 4 KPIs, category breakdown cards, 5 master rows, inline edit mode with inputs/selects, and functional Recalcular button.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_recurring_consolidated.py",
+    "/app/test_reports/pytest/recurring_consolidated.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "saveEdit/cancelEdit buttons only have title attributes — consider adding data-testid=\"save-edit-master\" / \"cancel-edit-master\" for easier automation.",
+    "GET /recurring-consolidated returns saved list without recomputing even if underlying analyses changed — user must click Recalcular. This is by design but worth documenting.",
+    "fetch() function shadows global fetch — rename to loadMasters for clarity."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Used existing 5 seeded masters (Diego, Carlos, TSU, EDP, Vodafone). DELETE test removed the smallest master then refresh restored all 5.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is stable. Route order (/recurring-consolidated before /{analysis_id}) is confirmed working — endpoint returns proper JSON with masters array, not 'Análise não encontrada'.",
+  "rca of the issue": "N/A — all tests passing."
+}
