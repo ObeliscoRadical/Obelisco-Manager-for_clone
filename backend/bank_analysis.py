@@ -1499,4 +1499,100 @@ def create_bank_analysis_router(db, get_current_user):
         result = await db.appointments.delete_many({"source_analysis_id": analysis_id, "is_predicted_bill": True})
         return {"removed": result.deleted_count}
 
+    # ── Predicted Bills CRUD ──────────────────────────────────────
+    @router.get("/predicted-bills/list")
+    async def list_predicted_bills(user=Depends(get_current_user)):
+        """List all predicted bill calendar entries."""
+        bills = await db.appointments.find(
+            {"is_predicted_bill": True},
+            {"_id": 0}
+        ).sort("date", 1).to_list(500)
+        return bills
+
+    @router.post("/predicted-bills")
+    async def create_predicted_bill(request: Request, user=Depends(get_current_user)):
+        """Manually create a predicted bill calendar entry."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        body = await request.json()
+        title = (body.get("title") or "").strip()
+        date = (body.get("date") or "").strip()
+        amount = float(body.get("amount", 0) or 0)
+        category = (body.get("category") or "outro").strip()
+        frequency = (body.get("frequency") or "mensal").strip()
+        if not title or not date:
+            raise HTTPException(400, "Título e data são obrigatórios")
+
+        CAT_LABELS = {"fixo": "Custo Fixo", "variavel": "Variável", "obra": "Obra", "imposto": "Imposto", "financeiro": "Financeiro"}
+        cat_label = CAT_LABELS.get(category, category)
+
+        bill = {
+            "id": str(uuid.uuid4()),
+            "title": title,
+            "client_name": "",
+            "date": date,
+            "time_start": "09:00",
+            "time_end": "09:30",
+            "notes": f"Conta Prevista ({cat_label}) · Valor estimado: {amount:.2f}€ · {frequency}",
+            "employee_ids": [],
+            "location": "",
+            "work_id": None,
+            "is_predicted_bill": True,
+            "predicted_amount": amount,
+            "predicted_category": category,
+            "predicted_frequency": frequency,
+            "source_analysis_id": None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.appointments.insert_one(bill)
+        bill.pop("_id", None)
+        return bill
+
+    @router.patch("/predicted-bills/{bill_id}")
+    async def update_predicted_bill(bill_id: str, request: Request, user=Depends(get_current_user)):
+        """Update a predicted bill."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        body = await request.json()
+        updates = {}
+        if "title" in body: updates["title"] = body["title"]
+        if "date" in body: updates["date"] = body["date"]
+        if "amount" in body:
+            updates["predicted_amount"] = float(body["amount"])
+        if "category" in body:
+            updates["predicted_category"] = body["category"]
+        if "frequency" in body:
+            updates["predicted_frequency"] = body["frequency"]
+        if not updates:
+            raise HTTPException(400, "Nada para atualizar")
+
+        # Rebuild notes
+        if any(k in body for k in ("amount", "category", "frequency")):
+            doc = await db.appointments.find_one({"id": bill_id, "is_predicted_bill": True}, {"_id": 0})
+            if doc:
+                amt = updates.get("predicted_amount", doc.get("predicted_amount", 0))
+                cat = updates.get("predicted_category", doc.get("predicted_category", "outro"))
+                freq = updates.get("predicted_frequency", doc.get("predicted_frequency", "mensal"))
+                CAT_LABELS = {"fixo": "Custo Fixo", "variavel": "Variável", "obra": "Obra", "imposto": "Imposto", "financeiro": "Financeiro"}
+                updates["notes"] = f"Conta Prevista ({CAT_LABELS.get(cat, cat)}) · Valor estimado: {amt:.2f}€ · {freq}"
+
+        result = await db.appointments.update_one(
+            {"id": bill_id, "is_predicted_bill": True},
+            {"$set": updates}
+        )
+        if result.matched_count == 0:
+            raise HTTPException(404, "Conta prevista não encontrada")
+        updated = await db.appointments.find_one({"id": bill_id}, {"_id": 0})
+        return updated
+
+    @router.delete("/predicted-bills/{bill_id}")
+    async def delete_predicted_bill(bill_id: str, user=Depends(get_current_user)):
+        """Delete a predicted bill."""
+        if user.get("role") != "admin":
+            raise HTTPException(403, "Apenas administradores")
+        result = await db.appointments.delete_one({"id": bill_id, "is_predicted_bill": True})
+        if result.deleted_count == 0:
+            raise HTTPException(404, "Conta prevista não encontrada")
+        return {"ok": True}
+
     return router

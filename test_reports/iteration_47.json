@@ -1,0 +1,23 @@
+{
+  "summary": "Iter47: Full backend + frontend validation of Contas Previstas CRUD. Backend pytest (4/4 passed): list, create with validation (400 on empty title), create→GET→patch (rebuilds notes with amount/category/frequency)→404 on empty patch body/non-existent id→delete (404 on re-delete), and 401 without auth. Frontend Playwright end-to-end: login OK → /contas-previstas loads (data-testid=contas-previstas-page) → sidebar 'Contas Previstas' link present → bills-table renders 19 existing rows → 'Nova Conta' opens bill-form → filled title/date/amount/category/frequency and saved → row count 19→20 with new TEST_ITER47_UI row visible → edit icon pre-fills form with existing title → title updated to '…EDITED' and persisted in table → delete icon triggers confirm, row removed, toast 'Eliminada' shown. KPIs (Total Previsto, Contas Ativas, per-month) render correctly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_predicted_bills.py", "/app/test_reports/pytest/iter47_predicted_bills.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PATCH rebuild-notes block only runs when amount/category/frequency in body; correctly reuses existing doc values for missing fields. Good.",
+    "Route ordering safe: '/predicted-bills/list' is a distinct static path and doesn't collide with other '/{analysis_id}/…' routes.",
+    "Frontend uses <a href='/agenda'> which triggers full page reload instead of react-router <Link>. Minor SPA nit, non-blocking (same as iter46 comment).",
+    "handleSave catches errors but fetchBills's catch is empty — a failed initial load leaves table empty silently. Consider surfacing a toast on load failure.",
+    "predicted_amount stored as float from raw body — no upper bound / negative check. Consider validating amount >= 0.",
+    "Form always shows 'Frequência' select on a second row while the top row already has 4 cols; layout works but could be a single grid for consistency (design polish, not blocking)."
+  ],
+  "updated_files": ["/app/backend/tests/test_predicted_bills.py"],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (all CRUD flows + sidebar nav verified)"},
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Created and cleaned up TEST_ITER47 (backend test) and TEST_ITER47_UI (frontend test) — both deleted at end of respective tests. DB left in original state (19 predicted bills).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Contas Previstas CRUD page fully functional. Backend at /api/bank-analysis/predicted-bills/{list,POST,PATCH,DELETE}. Frontend at /contas-previstas with data-testids: contas-previstas-page, bills-table, new-bill-btn, bill-form, bill-title, bill-date, bill-amount, bill-category, bill-frequency, save-bill-btn, bill-row-{id}, edit-bill-{id}, delete-bill-{id}. Reusable pytest at /app/backend/tests/test_predicted_bills.py.",
+  "rca_of_the_issue": "N/A — feature works as designed."
+}

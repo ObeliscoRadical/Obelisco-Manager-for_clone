@@ -356,11 +356,11 @@ function AnalysisDetail({ analysis, onBack }) {
               </div>
             </div>
             <a
-              href="/agenda"
+              href="/contas-previstas"
               data-testid="go-to-agenda-btn"
               className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-lg text-sm font-medium hover:bg-blue-500/30 transition-colors"
             >
-              <Calendar size={14} /> Ver Agenda
+              <Calendar size={14} /> Ver Contas Previstas
             </a>
           </div>
         </div>
