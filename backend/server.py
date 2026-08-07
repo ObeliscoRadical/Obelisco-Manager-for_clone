@@ -4411,6 +4411,12 @@ async def seed_admin():
 async def startup():
     await seed_admin()
     await seed_professional_data()
+    await db.expenses.create_index(
+        "hard_dedupe_key",
+        unique=True,
+        partialFilterExpression={"hard_dedupe_key": {"$exists": True}, "dedupe_exempt": False},
+        name="uniq_expenses_hard_dedupe_key",
+    )
     # Start Telegram bot scheduler (commands + payment reminders)
     from telegram_scheduler import run_telegram_scheduler
     asyncio.create_task(run_telegram_scheduler(db))

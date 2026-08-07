@@ -1,0 +1,75 @@
+{
+  "summary": "Comprehensive testing of expense deduplication/reconciliation bug fix and treasury alerts. All 12 backend tests passed. Frontend UI verified working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_dedupe_reconciliation.py",
+    "/app/test_reports/pytest/iter50_dedupe.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_dedupe_reconciliation.py"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "admin@obelisco.pt / obelisco2024",
+  "seed_data_creation": "Created and cleaned up test expense for reconciliation verification",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Deduplication and reconciliation features fully tested and working. Treasury alerts working with idempotent notifications.",
+  "verified_features": {
+    "fiscal_bank_reconciliation": {
+      "status": "PASS",
+      "details": "Creating fiscal expense then bank expense with same value/date results in reconciled_existing action. Single canonical expense maintained with both fiscal_document_history and bank_movement_history."
+    },
+    "hard_duplicate_blocking": {
+      "status": "PASS",
+      "details": "Attempting to create exact duplicate (same date + invoice_number + value) returns 409 with code 'duplicate_invoice' and full details of existing expense."
+    },
+    "sync_preview_structure": {
+      "status": "PASS",
+      "details": "Bank analysis sync_preview correctly shows pending items with will_reconcile field. Items without matching fiscal expenses show will_reconcile=null."
+    },
+    "sync_expenses_endpoint": {
+      "status": "PASS",
+      "details": "POST /api/bank-analysis/{id}/sync-expenses returns created, reconciled, and skipped counts."
+    },
+    "treasury_notifications": {
+      "status": "PASS",
+      "details": "GET /api/notifications returns treasury type notifications. Currently showing 'Saldo em risco nos próximos 30 dias' alert."
+    },
+    "treasury_insights": {
+      "status": "PASS",
+      "details": "GET /api/bank-analysis/treasury/insights returns projection with lowest_balance=-3266.03€, status=critical, next_shortfall=2026-08-07."
+    },
+    "notifications_bell_ui": {
+      "status": "PASS",
+      "details": "NotificationsBell component correctly displays treasury type notifications with yellow warning icon."
+    },
+    "analise_bancaria_page": {
+      "status": "PASS",
+      "details": "Page loads correctly with sync approval panel showing pending items. Treasury radar strip visible on dashboard."
+    }
+  },
+  "api_test_results": {
+    "POST /api/expenses (fiscal)": "201 - Creates fiscal expense",
+    "POST /api/expenses (bank with matching fiscal)": "200 - Returns reconciled_existing action",
+    "POST /api/expenses (hard duplicate)": "409 - Returns duplicate_invoice error",
+    "GET /api/bank-analysis": "200 - Returns list with sync_preview",
+    "GET /api/bank-analysis/{id}": "200 - Returns detail with pending/duplicates",
+    "GET /api/bank-analysis/{id}/check-duplicates": "200 - Returns new/duplicate counts",
+    "POST /api/bank-analysis/{id}/sync-expenses": "200 - Returns created/reconciled/skipped",
+    "GET /api/bank-analysis/treasury/insights": "200 - Returns projection/anomalies",
+    "GET /api/notifications": "200 - Returns items with treasury type"
+  }
+}

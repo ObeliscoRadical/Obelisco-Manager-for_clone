@@ -11,6 +11,8 @@ from pathlib import Path
 from collections import defaultdict
 import uuid, logging, os, io, json, re, math
 
+from expenses import preview_expense_ingestion, upsert_reconciled_expense
+
 logger = logging.getLogger(__name__)
 
 UPLOADS_DIR = Path(__file__).parent / "bank_uploads"
@@ -1067,67 +1069,52 @@ def _fuzzy_match_supplier(txn_desc: str, expense_supplier: str) -> bool:
 
 
 async def _prepare_sync_preview(db, analysis_id, analysis_doc):
-    """Prepare sync preview — does NOT create expenses. Returns pending items + possible duplicates for user review.
-    Uses fuzzy name matching: extracts significant words from bank descriptions and expense suppliers."""
+    """Prepare sync preview using the same reconciliation/deduplication rules used at insertion time."""
     try:
         expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
         to_sync = [t for t in analysis_doc.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
 
-        existing_expenses = await db.expenses.find(
-            {}, {"_id": 0, "id": 1, "date": 1, "supplier": 1, "value_gross": 1, "invoice_number": 1, "bank_txn_id": 1}
-        ).to_list(5000)
-
-        existing_by_txn = {e.get("bank_txn_id") for e in existing_expenses if e.get("bank_txn_id")}
-
         pending = []
         duplicates = []
+        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
 
         for t in to_sync:
-            # Layer 1: Already synced by ID
-            if t["id"] in existing_by_txn:
-                duplicates.append({"id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"],
-                                   "category": t.get("category", "outro"), "reason": "Já sincronizado (ID)", "match_type": "exact"})
-                continue
+            candidate = {
+                "date": t["date"],
+                "supplier": t["description"][:100],
+                "nif": "",
+                "invoice_number": "",
+                "category": t.get("category", "outro").capitalize(),
+                "type": cat_to_type.get(t.get("category", ""), "variavel"),
+                "obra_id": None,
+                "obra_name": None,
+                "value_net": round(abs(t["amount"]) / 1.23, 2),
+                "vat_rate": 23,
+                "vat_amount": round(abs(t["amount"]) - abs(t["amount"]) / 1.23, 2),
+                "value_gross": round(abs(t["amount"]), 2),
+                "payment_method": "Transferência Bancária",
+                "notes": f"Importado do extrato bancário: {analysis_doc.get('filename', '')}",
+                "invoice_file": None,
+                "bank_txn_id": t["id"],
+                "bank_description": t["description"][:180],
+                "bank_analysis_id": analysis_id,
+            }
+            preview = await preview_expense_ingestion(db, candidate, source_kind="bank")
+            hard_duplicate = preview.get("hard_duplicate")
+            reconciliation_candidate = preview.get("reconciliation_candidate")
 
-            # Layer 2: Fuzzy name + (date OR value) matching
-            txn_amount = abs(t["amount"])
-            txn_date = t["date"]
-            found_match = None
-
-            for e in existing_expenses:
-                exp_amount = abs(e.get("value_gross", 0) or 0)
-                exp_date = e.get("date", "")
-                exp_supplier = e.get("supplier", "")
-
-                # Check fuzzy name match
-                if not _fuzzy_match_supplier(t["description"], exp_supplier):
-                    continue
-
-                # Name matches — check date AND/OR value
-                date_match = txn_date == exp_date
-                value_match = exp_amount > 0 and abs(txn_amount - exp_amount) / max(exp_amount, 0.01) < 0.05  # within 5%
-
-                if date_match and value_match:
-                    found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
-                                   "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesma data e valor similar",
-                                   "match_type": "fuzzy_date_value"}
-                    break
-                elif date_match:
-                    found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
-                                   "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesma data ({exp_date})",
-                                   "match_type": "fuzzy_date"}
-                elif value_match:
-                    # Only flag if amounts are very close (within 1%)
-                    if abs(txn_amount - exp_amount) / max(exp_amount, 0.01) < 0.01:
-                        found_match = {"expense_id": e.get("id"), "expense_supplier": exp_supplier, "expense_date": exp_date,
-                                       "expense_value": exp_amount, "reason": f"Possível duplicado: {exp_supplier} — mesmo valor ({exp_amount:.2f}€)",
-                                       "match_type": "fuzzy_value"}
-
-            if found_match:
+            if hard_duplicate:
+                matched = hard_duplicate
                 duplicates.append({
                     "id": t["id"], "description": t["description"], "amount": t["amount"], "date": t["date"],
                     "category": t.get("category", "outro"),
-                    **found_match,
+                    "reason": "Duplicado rígido (data + descrição/documento + valor)",
+                    "match_type": "hard_duplicate",
+                    "expense_id": matched.get("id"),
+                    "expense_supplier": matched.get("supplier"),
+                    "expense_date": matched.get("date"),
+                    "expense_value": matched.get("value_gross"),
+                    "expense_invoice_number": matched.get("invoice_number", ""),
                 })
             else:
                 pending.append({
@@ -1136,6 +1123,12 @@ async def _prepare_sync_preview(db, analysis_id, analysis_doc):
                     "description": t["description"],
                     "amount": t["amount"],
                     "category": t.get("category", "outro"),
+                    "will_reconcile": bool(reconciliation_candidate),
+                    "matched_expense": {
+                        "id": reconciliation_candidate.get("id"),
+                        "supplier": reconciliation_candidate.get("supplier"),
+                        "invoice_number": reconciliation_candidate.get("invoice_number"),
+                    } if reconciliation_candidate else None,
                 })
 
         result = {"pending": pending, "duplicates": duplicates, "pending_count": len(pending), "duplicate_count": len(duplicates), "total_processed": len(to_sync)}
@@ -1666,6 +1659,8 @@ def create_bank_analysis_router(db, get_current_user):
         cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
 
         created = 0
+        reconciled = 0
+        skipped = 0
         for p in to_import:
             t = txn_map.get(p["id"], p)
             expense = {
@@ -1686,10 +1681,17 @@ def create_bank_analysis_router(db, get_current_user):
                 "notes": f"Importado do extrato bancário: {analysis.get('filename', '')}",
                 "invoice_file": None,
                 "bank_txn_id": t.get("id", p.get("id")),
+                "bank_description": t.get("description", p.get("description", ""))[:180],
+                "bank_analysis_id": analysis_id,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            await db.expenses.insert_one(expense)
-            created += 1
+            result = await upsert_reconciled_expense(db, expense, source_kind="bank", user_id=user.get("id", ""))
+            if result["action"] == "created":
+                created += 1
+            elif result["action"] == "reconciled_existing":
+                reconciled += 1
+            else:
+                skipped += 1
 
         # Update sync_preview: remove approved items from pending
         imported_ids = {p["id"] for p in to_import}
@@ -1699,11 +1701,11 @@ def create_bank_analysis_router(db, get_current_user):
             {"$set": {
                 "sync_preview.pending": remaining,
                 "sync_preview.pending_count": len(remaining),
-                "sync_approved": {"created": created, "approved_at": datetime.now(timezone.utc).isoformat()},
+                "sync_approved": {"created": created, "reconciled": reconciled, "skipped": skipped, "approved_at": datetime.now(timezone.utc).isoformat()},
             }}
         )
 
-        return {"created": created, "remaining": len(remaining), "message": f"{created} despesas importadas com sucesso"}
+        return {"created": created, "reconciled": reconciled, "skipped": skipped, "remaining": len(remaining), "message": f"{created} despesas novas, {reconciled} reconciliadas"}
 
     # ── Tax Alerts ────────────────────────────────────────────────
     @router.get("/tax-alerts/upcoming")
@@ -1786,26 +1788,13 @@ def create_bank_analysis_router(db, get_current_user):
             existing_by_match.add(key)
 
         created = 0
+        reconciled = 0
         skipped = 0
         duplicates = []
 
         cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
 
         for t in to_sync:
-            # Check if already synced by ID
-            if t["id"] in existing_by_txn:
-                skipped += 1
-                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Já sincronizado (ID)"})
-                continue
-
-            # Check by date + amount + supplier similarity
-            match_key = f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}"
-            if match_key in existing_by_match:
-                skipped += 1
-                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Duplicado (data + valor + fornecedor)"})
-                continue
-
-            # Create expense
             expense = {
                 "id": str(uuid.uuid4()),
                 "date": t["date"],
@@ -1824,15 +1813,22 @@ def create_bank_analysis_router(db, get_current_user):
                 "notes": f"Importado do extrato bancário: {analysis.get('filename', '')}",
                 "invoice_file": None,
                 "bank_txn_id": t["id"],
+                "bank_description": t["description"][:180],
+                "bank_analysis_id": analysis_id,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
-            await db.expenses.insert_one(expense)
-            existing_by_txn.add(t["id"])
-            existing_by_match.add(match_key)
-            created += 1
+            result = await upsert_reconciled_expense(db, expense, source_kind="bank", user_id=user.get("id", ""))
+            if result["action"] == "created":
+                created += 1
+            elif result["action"] == "reconciled_existing":
+                reconciled += 1
+            else:
+                skipped += 1
+                duplicates.append({"description": t["description"], "amount": t["amount"], "reason": "Duplicado rígido"})
 
         return {
             "created": created,
+            "reconciled": reconciled,
             "skipped": skipped,
             "duplicates": duplicates,
             "total_processed": len(to_sync),
@@ -1849,23 +1845,40 @@ def create_bank_analysis_router(db, get_current_user):
         expense_cats = ("fixo", "variavel", "obra", "imposto", "financeiro", "outro")
         to_check = [t for t in analysis.get("transactions", []) if t["amount"] < 0 and t.get("category") in expense_cats]
 
-        existing = await db.expenses.find(
-            {}, {"_id": 0, "date": 1, "supplier": 1, "value_gross": 1, "bank_txn_id": 1}
-        ).to_list(5000)
-
-        existing_ids = {e.get("bank_txn_id") for e in existing if e.get("bank_txn_id")}
-        existing_keys = set()
-        for e in existing:
-            key = f"{e.get('date', '')}|{abs(e.get('value_gross', 0)):.2f}|{(e.get('supplier', '') or '').lower()[:20]}"
-            existing_keys.add(key)
-
         new_items = []
         dup_items = []
+        cat_to_type = {"fixo": "fixo", "variavel": "variavel", "obra": "obra", "imposto": "fixo", "financeiro": "fixo", "outro": "variavel"}
         for t in to_check:
-            if t["id"] in existing_ids:
-                dup_items.append({**t, "dup_reason": "Já sincronizado"})
-            elif f"{t['date']}|{abs(t['amount']):.2f}|{t['description'].lower()[:20]}" in existing_keys:
-                dup_items.append({**t, "dup_reason": "Data + valor + fornecedor similar"})
+            candidate = {
+                "date": t["date"],
+                "supplier": t["description"][:100],
+                "nif": "",
+                "invoice_number": "",
+                "category": t.get("category", "outro").capitalize(),
+                "type": cat_to_type.get(t.get("category", ""), "variavel"),
+                "obra_id": None,
+                "obra_name": None,
+                "value_net": round(abs(t["amount"]) / 1.23, 2),
+                "vat_rate": 23,
+                "vat_amount": round(abs(t["amount"]) - abs(t["amount"]) / 1.23, 2),
+                "value_gross": round(abs(t["amount"]), 2),
+                "payment_method": "Transferência Bancária",
+                "notes": f"Importado do extrato bancário: {analysis.get('filename', '')}",
+                "invoice_file": None,
+                "bank_txn_id": t["id"],
+                "bank_description": t["description"][:180],
+                "bank_analysis_id": analysis_id,
+            }
+            preview = await preview_expense_ingestion(db, candidate, source_kind="bank")
+            if preview.get("hard_duplicate") or preview.get("reconciliation_candidate"):
+                match = preview.get("hard_duplicate") or preview.get("reconciliation_candidate")
+                dup_items.append({
+                    **t,
+                    "dup_reason": "Duplicado rígido" if preview.get("hard_duplicate") else "Reconciliável com despesa fiscal",
+                    "matched_expense_id": match.get("id"),
+                    "matched_supplier": match.get("supplier"),
+                    "matched_invoice_number": match.get("invoice_number"),
+                })
             else:
                 new_items.append(t)
 

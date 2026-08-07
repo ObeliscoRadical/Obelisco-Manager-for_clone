@@ -233,6 +233,13 @@ async def run_telegram_scheduler(db):
                 sent = await check_and_send_payment_reminders(db)
                 if sent > 0:
                     logger.info(f"Sent {sent} payment reminders via Telegram")
+                try:
+                    from notifications import scan_and_dispatch_treasury_alerts
+                    treasury_result = await scan_and_dispatch_treasury_alerts(db)
+                    if any(treasury_result.get(k, 0) for k in ("notifications", "email", "telegram")):
+                        logger.info(f"Treasury alerts dispatched: {treasury_result}")
+                except Exception as e:
+                    logger.warning(f"Treasury alert scheduler error: {e}")
                 last_reminder_check = now
 
         except Exception as e:

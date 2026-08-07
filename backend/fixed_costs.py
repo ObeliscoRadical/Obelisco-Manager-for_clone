@@ -11,6 +11,8 @@ from typing import Optional, List
 from datetime import datetime, timezone, date as date_cls
 import uuid
 
+from expenses import upsert_reconciled_expense
+
 
 fixed_costs_router = APIRouter(prefix="/api/fixed-costs", tags=["fixed-costs"])
 
@@ -221,7 +223,10 @@ def create_fixed_costs_router(db, get_current_user):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": user.get("id"),
         }
-        await db.expenses.insert_one(expense)
+        result = await upsert_reconciled_expense(db, expense, source_kind="fixed_cost", user_id=user.get("id", ""))
+        if result.get("action") == "hard_duplicate":
+            raise HTTPException(status_code=409, detail="Já existe uma despesa idêntica para esta liquidação")
+        expense = result.get("expense") or expense
 
         # Atualiza instância
         await db.fixed_cost_instances.update_one(

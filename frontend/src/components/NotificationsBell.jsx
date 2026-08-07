@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, X, MessageSquare, Calendar, Truck, Receipt } from 'lucide-react';
+import { Bell, CheckCheck, X, MessageSquare, Calendar, Truck, Receipt, AlertTriangle } from 'lucide-react';
 import { useNotifications } from '../hooks/useNotifications';
 
 const TYPE_ICON = {
@@ -8,6 +8,7 @@ const TYPE_ICON = {
   agenda: Calendar,
   guide: Truck,
   invoice: Receipt,
+  treasury: AlertTriangle,
 };
 
 const TYPE_COLOR = {
@@ -15,6 +16,7 @@ const TYPE_COLOR = {
   agenda: 'text-emerald-400',
   guide: 'text-amber-400',
   invoice: 'text-red-400',
+  treasury: 'text-yellow-400',
 };
 
 function timeAgo(iso) {

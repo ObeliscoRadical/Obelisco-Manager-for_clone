@@ -10,13 +10,17 @@ Funcionalidades:
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from typing import Optional, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 import os
 import json
 import logging
 import base64
 from pathlib import Path
+import re
+from difflib import SequenceMatcher
+
+from pymongo.errors import DuplicateKeyError
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage, FileContentWithMimeType
 
@@ -60,6 +64,12 @@ class ExpenseCreate(BaseModel):
     payment_method: str = ""
     notes: str = ""
     invoice_file: Optional[str] = None    # filename
+    source_kind: Optional[str] = None
+    bank_txn_id: Optional[str] = None
+    bank_description: Optional[str] = None
+    bank_analysis_id: Optional[str] = None
+    dedupe_exempt: bool = False
+    dedupe_exception_reason: str = ""
 
 
 class ExpenseUpdate(BaseModel):
@@ -77,6 +87,8 @@ class ExpenseUpdate(BaseModel):
     value_gross: Optional[float] = None
     payment_method: Optional[str] = None
     notes: Optional[str] = None
+    dedupe_exempt: Optional[bool] = None
+    dedupe_exception_reason: Optional[str] = None
 
 
 async def extract_invoice_data(file_path: Path, mime_type: str) -> dict:
@@ -260,6 +272,325 @@ def _month_prefix(year: int, month: int) -> str:
     return f"{year:04d}-{month:02d}"
 
 
+def _norm_text(value: str) -> str:
+    value = (value or "").strip().lower()
+    value = re.sub(r"[^\w\s]", " ", value)
+    value = re.sub(r"\s+", " ", value).strip()
+    return value
+
+
+def _similarity(a: str, b: str) -> float:
+    return SequenceMatcher(None, _norm_text(a), _norm_text(b)).ratio()
+
+
+def _parse_iso_date(value: str) -> Optional[datetime]:
+    try:
+        return datetime.strptime((value or "")[:10], "%Y-%m-%d")
+    except Exception:
+        return None
+
+
+def _format_date(value) -> str:
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d")
+    return str(value or "")[:10]
+
+
+def _round_money(value) -> float:
+    return round(abs(float(value or 0)), 2)
+
+
+def _expense_anchor(doc: dict) -> str:
+    invoice_number = _norm_text(doc.get("invoice_number") or "")
+    if invoice_number:
+        return invoice_number
+    supplier = _norm_text(doc.get("supplier") or doc.get("description") or "")
+    return supplier[:80]
+
+
+def infer_expense_source_kind(doc: dict) -> str:
+    if doc.get("source_kind"):
+        return doc.get("source_kind")
+    if doc.get("fixed_cost_instance_id"):
+        return "fixed_cost"
+    if doc.get("bank_txn_id") or doc.get("bank_analysis_id"):
+        return "bank"
+    if doc.get("invoice_number") or doc.get("invoice_file"):
+        return "fiscal"
+    return "manual"
+
+
+def build_hard_dedupe_key(doc: dict) -> Optional[str]:
+    date = _format_date(doc.get("date"))
+    amount = _round_money(doc.get("value_gross"))
+    anchor = _expense_anchor(doc)
+    if not date or amount <= 0 or not anchor:
+        return None
+    return f"{date}|{anchor}|{amount:.2f}"
+
+
+def _get_bank_history_entry(doc: dict) -> Optional[dict]:
+    bank_txn_id = doc.get("bank_txn_id")
+    description = (doc.get("bank_description") or doc.get("supplier") or "").strip()
+    if not bank_txn_id and not description:
+        return None
+    return {
+        "bank_txn_id": bank_txn_id,
+        "date": _format_date(doc.get("bank_txn_date") or doc.get("date")),
+        "description": description[:180],
+        "amount": _round_money(doc.get("bank_amount") or doc.get("value_gross")),
+        "analysis_id": doc.get("bank_analysis_id"),
+        "matched_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _merge_bank_history(existing: dict, incoming: dict) -> list:
+    history = list(existing.get("bank_movement_history") or [])
+    if existing.get("bank_txn_id") and not history:
+        entry = _get_bank_history_entry({
+            "bank_txn_id": existing.get("bank_txn_id"),
+            "bank_txn_date": existing.get("date"),
+            "bank_description": existing.get("supplier"),
+            "bank_amount": existing.get("value_gross"),
+            "bank_analysis_id": existing.get("bank_analysis_id"),
+        })
+        if entry:
+            history.append(entry)
+    incoming_entry = _get_bank_history_entry(incoming)
+    if incoming_entry:
+        seen = {item.get("bank_txn_id") or f"{item.get('date')}|{item.get('description')}|{item.get('amount')}" for item in history}
+        key = incoming_entry.get("bank_txn_id") or f"{incoming_entry.get('date')}|{incoming_entry.get('description')}|{incoming_entry.get('amount')}"
+        if key not in seen:
+            history.append(incoming_entry)
+    return history
+
+
+def _merge_fiscal_history(existing: dict, incoming: dict) -> list:
+    history = list(existing.get("fiscal_document_history") or [])
+    invoice_number = (incoming.get("invoice_number") or "").strip()
+    invoice_file = incoming.get("invoice_file")
+    if not invoice_number and not invoice_file:
+        return history
+    entry = {
+        "supplier": (incoming.get("supplier") or "")[:180],
+        "invoice_number": invoice_number,
+        "invoice_file": invoice_file,
+        "nif": incoming.get("nif") or "",
+        "date": _format_date(incoming.get("date")),
+        "value_gross": _round_money(incoming.get("value_gross")),
+        "linked_at": datetime.now(timezone.utc).isoformat(),
+    }
+    seen = {f"{item.get('invoice_number','')}|{item.get('invoice_file','')}|{item.get('date','')}|{item.get('value_gross',0)}" for item in history}
+    key = f"{entry['invoice_number']}|{entry['invoice_file']}|{entry['date']}|{entry['value_gross']}"
+    if key not in seen:
+        history.append(entry)
+    return history
+
+
+async def find_hard_duplicate_expense(db, expense_doc: dict, exclude_id: Optional[str] = None) -> Optional[dict]:
+    if expense_doc.get("dedupe_exempt"):
+        return None
+    hard_key = build_hard_dedupe_key(expense_doc)
+    if hard_key:
+        query = {"hard_dedupe_key": hard_key, "dedupe_exempt": {"$ne": True}}
+        if exclude_id:
+            query["id"] = {"$ne": exclude_id}
+        match = await db.expenses.find_one(query, {"_id": 0})
+        if match:
+            return match
+
+    date = _format_date(expense_doc.get("date"))
+    amount = _round_money(expense_doc.get("value_gross"))
+    anchor = _expense_anchor(expense_doc)
+    if not date or amount <= 0 or not anchor:
+        return None
+    query = {
+        "date": date,
+        "value_gross": {"$gte": amount - 0.001, "$lte": amount + 0.001},
+        "dedupe_exempt": {"$ne": True},
+    }
+    if exclude_id:
+        query["id"] = {"$ne": exclude_id}
+    candidates = await db.expenses.find(query, {"_id": 0}).to_list(20)
+    for candidate in candidates:
+        if _expense_anchor(candidate) == anchor:
+            return candidate
+    return None
+
+
+async def find_reconciliation_candidate(db, expense_doc: dict, source_kind: str, exclude_id: Optional[str] = None) -> Optional[dict]:
+    date_dt = _parse_iso_date(expense_doc.get("date"))
+    amount = _round_money(expense_doc.get("value_gross"))
+    if not date_dt or amount <= 0:
+        return None
+
+    query = {
+        "date": {
+            "$gte": _format_date(date_dt - timedelta(days=2)),
+            "$lte": _format_date(date_dt + timedelta(days=2)),
+        },
+        "value_gross": {"$gte": amount - 0.001, "$lte": amount + 0.001},
+    }
+    if exclude_id:
+        query["id"] = {"$ne": exclude_id}
+
+    candidates = await db.expenses.find(query, {"_id": 0}).to_list(50)
+    preferred = []
+    for candidate in candidates:
+        candidate_source = infer_expense_source_kind(candidate)
+        candidate_has_fiscal = bool(candidate.get("invoice_number") or candidate.get("invoice_file") or candidate.get("fiscal_document_history"))
+        candidate_has_bank = bool(candidate.get("bank_txn_id") or candidate.get("bank_movement_history"))
+        if source_kind == "fiscal":
+            incoming_invoice = (expense_doc.get("invoice_number") or "").strip()
+            same_invoice = bool(incoming_invoice and incoming_invoice == (candidate.get("invoice_number") or "").strip())
+            if not candidate_has_bank:
+                continue
+            if candidate_has_fiscal and not same_invoice:
+                continue
+        elif source_kind == "bank":
+            existing_bank_ids = {item.get("bank_txn_id") for item in (candidate.get("bank_movement_history") or []) if item.get("bank_txn_id")}
+            if candidate.get("bank_txn_id"):
+                existing_bank_ids.add(candidate.get("bank_txn_id"))
+            incoming_bank_txn = expense_doc.get("bank_txn_id")
+            if not candidate_has_fiscal:
+                continue
+            if existing_bank_ids and incoming_bank_txn not in existing_bank_ids:
+                continue
+        else:
+            continue
+
+        diff_days = abs((_parse_iso_date(candidate.get("date")) - date_dt).days) if _parse_iso_date(candidate.get("date")) else 99
+        supplier_score = _similarity(expense_doc.get("supplier", ""), candidate.get("supplier", ""))
+        preferred.append((diff_days, -supplier_score, candidate))
+
+    preferred.sort(key=lambda row: (row[0], row[1]))
+    return preferred[0][2] if preferred else None
+
+
+async def preview_expense_ingestion(db, expense_doc: dict, source_kind: str, exclude_id: Optional[str] = None) -> dict:
+    hard_duplicate = await find_hard_duplicate_expense(db, expense_doc, exclude_id=exclude_id)
+    reconciliation_candidate = await find_reconciliation_candidate(db, expense_doc, source_kind=source_kind, exclude_id=exclude_id)
+    return {
+        "hard_duplicate": hard_duplicate,
+        "reconciliation_candidate": reconciliation_candidate,
+    }
+
+
+async def upsert_reconciled_expense(db, expense_doc: dict, source_kind: str, user_id: str = "", *, force: bool = False) -> dict:
+    now_iso = datetime.now(timezone.utc).isoformat()
+    incoming = {**expense_doc}
+    incoming["date"] = _format_date(incoming.get("date"))
+    incoming["value_gross"] = _round_money(incoming.get("value_gross"))
+    incoming["value_net"] = round(float(incoming.get("value_net", 0) or 0), 2)
+    incoming["vat_amount"] = round(float(incoming.get("vat_amount", 0) or 0), 2)
+    incoming["source_kind"] = source_kind
+    incoming.setdefault("dedupe_exempt", False)
+    incoming.setdefault("dedupe_exception_reason", "")
+    incoming.setdefault("created_at", now_iso)
+    if user_id:
+        incoming.setdefault("created_by", user_id)
+
+    if not incoming.get("id"):
+        incoming["id"] = str(uuid.uuid4())
+
+    if incoming.get("value_gross") and not incoming.get("value_net"):
+        vat_rate = float(incoming.get("vat_rate", 23) or 23)
+        incoming["value_net"] = round(incoming["value_gross"] / (1 + vat_rate / 100), 2)
+        incoming["vat_amount"] = round(incoming["value_gross"] - incoming["value_net"], 2)
+
+    preview = await preview_expense_ingestion(db, incoming, source_kind=source_kind)
+    if preview["hard_duplicate"] and not force:
+        return {
+            "action": "hard_duplicate",
+            "expense": preview["hard_duplicate"],
+            "reason": "duplicate_hard",
+        }
+
+    reconciliation_candidate = preview["reconciliation_candidate"]
+    if reconciliation_candidate:
+        update_doc = {**reconciliation_candidate}
+        if source_kind == "fiscal":
+            update_doc.update({
+                "supplier": (incoming.get("supplier") or reconciliation_candidate.get("supplier") or "")[:100],
+                "nif": incoming.get("nif") or reconciliation_candidate.get("nif") or "",
+                "invoice_number": (incoming.get("invoice_number") or reconciliation_candidate.get("invoice_number") or "")[:80],
+                "invoice_file": incoming.get("invoice_file") or reconciliation_candidate.get("invoice_file"),
+                "category": incoming.get("category") or reconciliation_candidate.get("category") or "Outros",
+                "type": incoming.get("type") or reconciliation_candidate.get("type") or "variavel",
+                "payment_method": incoming.get("payment_method") or reconciliation_candidate.get("payment_method") or "",
+                "notes": incoming.get("notes") or reconciliation_candidate.get("notes") or "",
+                "value_net": incoming.get("value_net") or reconciliation_candidate.get("value_net") or 0,
+                "vat_rate": incoming.get("vat_rate") or reconciliation_candidate.get("vat_rate") or 23,
+                "vat_amount": incoming.get("vat_amount") or reconciliation_candidate.get("vat_amount") or 0,
+                "value_gross": incoming.get("value_gross") or reconciliation_candidate.get("value_gross") or 0,
+            })
+        else:
+            if incoming.get("payment_method"):
+                update_doc["payment_method"] = incoming.get("payment_method")
+            if incoming.get("notes"):
+                base_notes = reconciliation_candidate.get("notes") or ""
+                if incoming.get("notes") not in base_notes:
+                    update_doc["notes"] = (base_notes + "\n" + incoming.get("notes")).strip()
+
+        bank_history = _merge_bank_history(reconciliation_candidate, incoming)
+        fiscal_history = _merge_fiscal_history(reconciliation_candidate, incoming)
+        source_kinds = sorted({*(reconciliation_candidate.get("source_kinds") or [infer_expense_source_kind(reconciliation_candidate)]), source_kind})
+        update_doc.update({
+            "source_kind": "reconciled",
+            "source_kinds": source_kinds,
+            "reconciled": True,
+            "reconciled_at": now_iso,
+            "reconciliation_status": "matched_fiscal_bank",
+            "reconciliation_rule": "date±2d+exact_amount",
+            "bank_movement_history": bank_history,
+            "fiscal_document_history": fiscal_history,
+            "display_description": " · ".join(part for part in [update_doc.get("supplier"), update_doc.get("invoice_number")] if part),
+            "hard_dedupe_key": build_hard_dedupe_key(update_doc),
+        })
+        if bank_history:
+            update_doc["bank_txn_id"] = bank_history[0].get("bank_txn_id")
+            update_doc["bank_description"] = bank_history[0].get("description")
+            update_doc["bank_analysis_id"] = bank_history[0].get("analysis_id")
+
+        await db.expenses.update_one({"id": reconciliation_candidate["id"]}, {"$set": update_doc})
+        refreshed = await db.expenses.find_one({"id": reconciliation_candidate["id"]}, {"_id": 0})
+        return {
+            "action": "reconciled_existing",
+            "expense": refreshed,
+            "reason": "matched_fiscal_bank",
+        }
+
+    incoming["source_kinds"] = [source_kind]
+    incoming["reconciled"] = bool(incoming.get("reconciled"))
+    incoming["display_description"] = " · ".join(part for part in [incoming.get("supplier"), incoming.get("invoice_number")] if part)
+    incoming["hard_dedupe_key"] = build_hard_dedupe_key(incoming)
+    if source_kind == "bank":
+        bank_history = _merge_bank_history({}, incoming)
+        if bank_history:
+            incoming["bank_movement_history"] = bank_history
+            incoming["bank_description"] = bank_history[0].get("description")
+    if source_kind == "fiscal":
+        fiscal_history = _merge_fiscal_history({}, incoming)
+        if fiscal_history:
+            incoming["fiscal_document_history"] = fiscal_history
+
+    try:
+        await db.expenses.insert_one(incoming)
+    except DuplicateKeyError:
+        existing = await find_hard_duplicate_expense(db, incoming)
+        return {
+            "action": "hard_duplicate",
+            "expense": existing or incoming,
+            "reason": "duplicate_index",
+        }
+    incoming.pop("_id", None)
+    return {
+        "action": "created",
+        "expense": incoming,
+        "reason": None,
+    }
+
+
 def create_expenses_router(db, get_current_user):
 
     async def _find_duplicate(invoice_number: str, nif: str = "", supplier: str = "", exclude_id: Optional[str] = None) -> Optional[dict]:
@@ -350,33 +681,20 @@ def create_expenses_router(db, get_current_user):
 
         # ── Duplicate detection (3 layers) ──────────────────────
         duplicate = None
-        # Layer 1: Exact invoice number match
-        if isinstance(extracted, dict) and extracted.get("invoice_number"):
-            dup = await _find_duplicate(
-                extracted.get("invoice_number", ""),
-                extracted.get("nif", ""),
-                extracted.get("supplier", ""),
-            )
-            if dup:
-                duplicate = {
-                    "id": dup.get("id"),
-                    "supplier": dup.get("supplier"),
-                    "invoice_number": dup.get("invoice_number"),
-                    "date": dup.get("date"),
-                    "value_gross": dup.get("value_gross"),
-                    "reason": "Mesmo número de fatura e fornecedor",
-                }
-
-        # Layer 2: Date + amount + supplier similarity (fuzzy)
-        if not duplicate and isinstance(extracted, dict) and extracted.get("date") and extracted.get("value_gross"):
-            fuzzy_q = {"date": extracted["date"]}
-            gross = extracted["value_gross"]
-            # Match within 1% of amount
-            fuzzy_q["value_gross"] = {"$gte": gross * 0.99, "$lte": gross * 1.01}
-            if extracted.get("supplier"):
-                import re as _re
-                fuzzy_q["supplier"] = {"$regex": _re.escape(extracted["supplier"][:15]), "$options": "i"}
-            match = await db.expenses.find_one(fuzzy_q, {"_id": 0, "id": 1, "supplier": 1, "date": 1, "value_gross": 1, "invoice_number": 1})
+        if isinstance(extracted, dict) and extracted.get("date") and extracted.get("value_gross"):
+            preview_doc = {
+                "date": extracted.get("date"),
+                "supplier": extracted.get("supplier", ""),
+                "nif": extracted.get("nif", ""),
+                "invoice_number": extracted.get("invoice_number", ""),
+                "value_net": extracted.get("value_net", 0),
+                "vat_rate": extracted.get("vat_rate", 23),
+                "vat_amount": extracted.get("vat_amount", 0),
+                "value_gross": extracted.get("value_gross", 0),
+                "invoice_file": saved_name,
+            }
+            preview = await preview_expense_ingestion(db, preview_doc, source_kind="fiscal")
+            match = preview.get("hard_duplicate") or preview.get("reconciliation_candidate")
             if match:
                 duplicate = {
                     "id": match.get("id"),
@@ -384,23 +702,8 @@ def create_expenses_router(db, get_current_user):
                     "invoice_number": match.get("invoice_number"),
                     "date": match.get("date"),
                     "value_gross": match.get("value_gross"),
-                    "reason": "Mesma data, valor e fornecedor similar",
-                }
-
-        # Layer 3: Bank sync check (bank_txn_id)
-        if not duplicate and isinstance(extracted, dict) and extracted.get("date") and extracted.get("value_gross"):
-            bank_match = await db.expenses.find_one(
-                {"bank_txn_id": {"$exists": True, "$ne": None}, "date": extracted["date"],
-                 "value_gross": {"$gte": extracted["value_gross"] * 0.99, "$lte": extracted["value_gross"] * 1.01}},
-                {"_id": 0, "id": 1, "supplier": 1, "date": 1, "value_gross": 1}
-            )
-            if bank_match:
-                duplicate = {
-                    "id": bank_match.get("id"),
-                    "supplier": bank_match.get("supplier"),
-                    "date": bank_match.get("date"),
-                    "value_gross": bank_match.get("value_gross"),
-                    "reason": "Já importado do extrato bancário",
+                    "reason": "Fatura já existente" if preview.get("hard_duplicate") else "Será reconciliado com movimento bancário existente",
+                    "match_mode": "hard_duplicate" if preview.get("hard_duplicate") else "reconciliation_candidate",
                 }
 
         return {
@@ -414,31 +717,30 @@ def create_expenses_router(db, get_current_user):
 
     @expenses_router.post("")
     async def create_expense(input: ExpenseCreate, force: bool = False, user=Depends(get_current_user)):
-        # Duplicate guard: invoice_number + (NIF or supplier)
-        if not force and (input.invoice_number or "").strip():
-            dup = await _find_duplicate(input.invoice_number, input.nif, input.supplier)
-            if dup:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "duplicate_invoice",
-                        "message": f"Fatura {input.invoice_number} já registada para {dup.get('supplier', '—')} em {dup.get('date', '—')}.",
-                        "existing": dup,
-                    },
-                )
         doc = {
             **input.model_dump(),
             "id": str(uuid.uuid4()),
             "created_at": datetime.now(timezone.utc).isoformat(),
             "created_by": user["id"],
         }
-        # If gross not set but net+vat set, compute gross
         if not doc.get("value_gross") and doc.get("value_net"):
             doc["value_gross"] = round(doc["value_net"] * (1 + doc.get("vat_rate", 23) / 100), 2)
             doc["vat_amount"] = round(doc["value_gross"] - doc["value_net"], 2)
-        await db.expenses.insert_one(doc)
-        doc.pop("_id", None)
-        return doc
+        source_kind = infer_expense_source_kind(doc)
+        result = await upsert_reconciled_expense(db, doc, source_kind=source_kind, user_id=user["id"], force=force)
+        if result["action"] == "hard_duplicate":
+            existing = result.get("expense") or {}
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "duplicate_invoice",
+                    "message": f"Despesa já registada para {existing.get('supplier', '—')} em {existing.get('date', '—')}.",
+                    "existing": existing,
+                },
+            )
+        expense = result["expense"]
+        expense["ingestion_action"] = result["action"]
+        return expense
 
     @expenses_router.get("")
     async def list_expenses(
@@ -533,22 +835,21 @@ def create_expenses_router(db, get_current_user):
         data = input.model_dump(exclude_none=True)
         if not data:
             raise HTTPException(status_code=400, detail="Nada para atualizar")
-        # Duplicate guard if invoice fields changed
-        if not force and "invoice_number" in data and data.get("invoice_number"):
-            current = await db.expenses.find_one({"id": expense_id}, {"_id": 0}) or {}
-            nif = data.get("nif", current.get("nif", ""))
-            sup = data.get("supplier", current.get("supplier", ""))
-            dup = await _find_duplicate(data["invoice_number"], nif, sup, exclude_id=expense_id)
+        current = await db.expenses.find_one({"id": expense_id}, {"_id": 0}) or {}
+        candidate = {**current, **data}
+        candidate["hard_dedupe_key"] = build_hard_dedupe_key(candidate)
+        if not force:
+            dup = await find_hard_duplicate_expense(db, candidate, exclude_id=expense_id)
             if dup:
                 raise HTTPException(
                     status_code=409,
                     detail={
                         "code": "duplicate_invoice",
-                        "message": f"Fatura {data['invoice_number']} já registada para {dup.get('supplier', '—')} em {dup.get('date', '—')}.",
+                        "message": f"Despesa já registada para {dup.get('supplier', '—')} em {dup.get('date', '—')}.",
                         "existing": dup,
                     },
                 )
-        r = await db.expenses.update_one({"id": expense_id}, {"$set": data})
+        r = await db.expenses.update_one({"id": expense_id}, {"$set": candidate})
         if r.matched_count == 0:
             raise HTTPException(status_code=404, detail="Despesa não encontrada")
         e = await db.expenses.find_one({"id": expense_id}, {"_id": 0})

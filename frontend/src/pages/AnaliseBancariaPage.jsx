@@ -453,8 +453,17 @@ function AnalysisDetail({
                   <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleItem(p.id)}
                     className="w-4 h-4 rounded border-zinc-600 text-yellow-400 focus:ring-yellow-400 bg-zinc-800" />
                   <span className="text-xs text-zinc-400 font-mono w-20 flex-shrink-0">{p.date}</span>
-                  <span className="text-sm text-white flex-1 truncate">{p.description}</span>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-white truncate block">{p.description}</span>
+                    {p.will_reconcile && (
+                      <p className="text-[10px] text-blue-400 truncate mt-0.5">
+                        Vai reconciliar com {p.matched_expense?.supplier || 'despesa fiscal existente'}
+                        {p.matched_expense?.invoice_number ? ` · #${p.matched_expense.invoice_number}` : ''}
+                      </p>
+                    )}
+                  </div>
                   <span className="text-xs px-2 py-0.5 rounded" style={{ color: cat.color, background: cat.color + '15' }}>{cat.label}</span>
+                  {p.will_reconcile && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/20">Reconcilia</span>}
                   <span className="text-sm text-red-400 font-mono flex-shrink-0 w-24 text-right">{fmt(p.amount)}</span>
                 </label>
               );
@@ -493,9 +502,9 @@ function AnalysisDetail({
       )}
 
       {/* Previously approved */}
-      {syncApproved?.created > 0 && pendingItems.length === 0 && (
+      {(syncApproved?.created > 0 || syncApproved?.reconciled > 0) && pendingItems.length === 0 && (
         <div className="p-3 rounded-xl border border-green-500/20 bg-green-500/5 text-sm text-green-400 flex items-center gap-2">
-          <Receipt size={14} /> {syncApproved.created} despesas já importadas
+          <Receipt size={14} /> {syncApproved.created || 0} despesas importadas · {syncApproved.reconciled || 0} reconciliadas
         </div>
       )}
 

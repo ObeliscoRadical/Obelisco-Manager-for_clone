@@ -81,6 +81,126 @@ async def notify_admins(db, get_admin_users_fn, **kwargs) -> None:
         await create_notification(db, user_id=a["id"], user_kind="user", **kwargs)
 
 
+async def _mark_dispatch(db, channel: str, dispatch_key: str, payload: Optional[dict] = None):
+    await db.notification_dispatches.update_one(
+        {"channel": channel, "dispatch_key": dispatch_key},
+        {"$set": {"channel": channel, "dispatch_key": dispatch_key, "payload": payload or {}, "sent_at": _now_iso()}},
+        upsert=True,
+    )
+
+
+async def _was_dispatched(db, channel: str, dispatch_key: str) -> bool:
+    existing = await db.notification_dispatches.find_one({"channel": channel, "dispatch_key": dispatch_key}, {"_id": 0, "channel": 1})
+    return bool(existing)
+
+
+def _build_treasury_email_html(title: str, message: str, link: str) -> str:
+    cta = f'<a href="{link}" style="display:inline-block;padding:12px 18px;border-radius:999px;background:#FACC15;color:#18181B;text-decoration:none;font-weight:700;">Abrir painel</a>' if (link or '').startswith('http') else '<div style="font-size:13px;color:#a1a1aa;line-height:1.7;">Abra o painel de Análise Bancária no Obelisco Manager para ver o detalhe.</div>'
+    return f"""<!DOCTYPE html><html><body style=\"margin:0;background:#09090B;font-family:Arial,Helvetica,sans-serif;\">
+    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#09090B;padding:32px 0;\"><tr><td align=\"center\">
+      <table width=\"620\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#18181B;border-radius:18px;overflow:hidden;\">
+        <tr><td style=\"background:#09090B;padding:24px 32px;border-bottom:3px solid #FACC15;\">
+          <div style=\"color:#FACC15;font-size:22px;font-weight:700;letter-spacing:1px;\">OBELISCO RADICAL</div>
+          <div style=\"color:#a1a1aa;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-top:2px;\">Alerta de Tesouraria</div>
+        </td></tr>
+        <tr><td style=\"padding:32px;\">
+          <div style=\"font-size:22px;color:#ffffff;font-weight:700;line-height:1.35;margin-bottom:8px;\">{title}</div>
+          <div style=\"font-size:14px;color:#d4d4d8;line-height:1.7;margin-bottom:18px;\">{message}</div>
+          {cta}
+        </td></tr>
+      </table>
+    </td></tr></table></body></html>"""
+
+
+async def scan_and_dispatch_treasury_alerts(db) -> dict:
+    """Cria notificações idempotentes e envia email/Telegram para alertas de tesouraria."""
+    try:
+        from bank_analysis import _build_treasury_insights
+        from service_orders import send_email_raw, send_telegram_notification, EMAIL_KEY, MANAGER_BOT_TOKEN, TELEGRAM_ADMIN_CHAT_ID
+
+        insights = await _build_treasury_insights(db, days=60)
+        today_key = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        admins = await db.users.find({"role": "admin"}, {"email": 1, "name": 1}).to_list(100)
+        result = {"notifications": 0, "email": 0, "telegram": 0, "alerts": []}
+
+        alert_specs = []
+        summary30 = insights.get("projection", {}).get("summary_30d", {})
+        shortfall_date = summary30.get("next_shortfall_date")
+        if shortfall_date or summary30.get("lowest_balance", 0) < 0:
+            alert_specs.append({
+                "dispatch_key": f"treasury-negative:{today_key}:{shortfall_date or 'none'}",
+                "title": "Saldo em risco nos próximos 30 dias",
+                "message": f"A projeção indica saldo mínimo de {summary30.get('lowest_balance', 0):.2f}€ e possível défice a partir de {shortfall_date or 'data não definida'}.",
+                "link": "/analise-bancaria",
+                "type": "treasury",
+                "meta": {"kind": "negative_projection", "next_shortfall_date": shortfall_date, "lowest_balance": summary30.get("lowest_balance")},
+            })
+
+        anomalies = insights.get("anomalies", {}).get("items", [])
+        if anomalies:
+            top = anomalies[0]
+            alert_specs.append({
+                "dispatch_key": f"treasury-anomaly:{today_key}:{top.get('desc_key', 'generic')}:{insights.get('anomalies', {}).get('count', 0)}",
+                "title": "Débito anómalo detetado",
+                "message": f"{top.get('description', 'Custo recorrente')} subiu {top.get('increase_pct', 0):.1f}% para {top.get('last_amount', 0):.2f}€.",
+                "link": "/analise-bancaria",
+                "type": "treasury",
+                "meta": {"kind": "anomaly", "desc_key": top.get("desc_key"), "increase_pct": top.get("increase_pct"), "count": insights.get("anomalies", {}).get("count", 0)},
+            })
+
+        if not alert_specs:
+            return result
+
+        for alert in alert_specs:
+            for admin in admins:
+                admin_id = str(admin.get("_id") or admin.get("id") or "")
+                if not admin_id:
+                    continue
+                created = await create_notification(
+                    db,
+                    user_id=admin_id,
+                    user_kind="user",
+                    type=alert["type"],
+                    title=alert["title"],
+                    message=alert["message"],
+                    link=alert["link"],
+                    dedup_key=alert["dispatch_key"],
+                    meta=alert["meta"],
+                )
+                if created:
+                    result["notifications"] += 1
+
+            if EMAIL_KEY and not await _was_dispatched(db, "email", alert["dispatch_key"]):
+                sent_all = 0
+                for admin in admins:
+                    email = (admin.get("email") or "").strip()
+                    if not email:
+                        continue
+                    ok = await send_email_raw(
+                        email,
+                        f"Obelisco Manager — {alert['title']}",
+                        _build_treasury_email_html(alert["title"], alert["message"], f"/analise-bancaria"),
+                    )
+                    if ok:
+                        sent_all += 1
+                if sent_all:
+                    await _mark_dispatch(db, "email", alert["dispatch_key"], {"sent": sent_all})
+                    result["email"] += sent_all
+
+            if MANAGER_BOT_TOKEN and TELEGRAM_ADMIN_CHAT_ID and not await _was_dispatched(db, "telegram", alert["dispatch_key"]):
+                await send_telegram_notification(
+                    f"⚠️ <b>{alert['title']}</b>\n\n{alert['message']}\n\nAbra o painel de Análise Bancária para detalhe."
+                )
+                await _mark_dispatch(db, "telegram", alert["dispatch_key"], {"chat_id": TELEGRAM_ADMIN_CHAT_ID})
+                result["telegram"] += 1
+
+            result["alerts"].append(alert["dispatch_key"])
+
+        return result
+    except Exception:
+        return {"notifications": 0, "email": 0, "telegram": 0, "alerts": []}
+
+
 def create_notifications_router(db, get_current_user, get_tech_user):
     router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -140,6 +260,7 @@ def create_notifications_router(db, get_current_user, get_tech_user):
         # Scan on-demand para admins (idempotente via dedup_key)
         if (user.get("role") or "").lower() == "admin":
             await _scan_invoice_alerts_for_admin(rec["user_id"])
+            await scan_and_dispatch_treasury_alerts(db)
         q = {"user_id": rec["user_id"]}
         if unread_only:
             q["read"] = False
