@@ -4,16 +4,17 @@ Tests: GET /api/bank-analysis/treasury/insights, GET/PUT /api/system-settings
 """
 import pytest
 import requests
-import os
+from auth_test_helpers import get_admin_credentials, get_base_url
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+BASE_URL = get_base_url()
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 
 @pytest.fixture(scope="session")
 def auth_token():
     """Get admin auth token"""
     resp = requests.post(f"{BASE_URL}/api/auth/login", json={
-        "email": "admin@obelisco.pt",
-        "password": "obelisco2024"
+        "email": ADMIN_EMAIL,
+        "password": ADMIN_PASSWORD
     })
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     token = resp.json().get("access_token")

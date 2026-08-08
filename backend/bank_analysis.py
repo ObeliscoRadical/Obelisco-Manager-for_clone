@@ -810,21 +810,17 @@ def _parse_master_day(master: dict) -> int:
     return min(int(match.group(1)), 28) if match else 15
 
 
-def _build_treasury_projection(recurring_masters: list, predicted_bills: list, days: int, opening_balance: float) -> dict:
-    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
-    horizon = today + timedelta(days=days)
+def _collect_predicted_bill_projection_data(predicted_bills: list) -> tuple[list, list]:
     bill_refs = []
     items = []
-
     for bill in predicted_bills:
         date_str = (bill.get("date") or "")[:10]
         amount = float(bill.get("predicted_amount", 0) or 0)
         if not date_str or amount <= 0:
             continue
-        norm_name = _normalize_projection_name(bill.get("title") or bill.get("notes") or "")
         bill_refs.append({
             "date": date_str,
-            "norm_name": norm_name,
+            "norm_name": _normalize_projection_name(bill.get("title") or bill.get("notes") or ""),
             "amount": amount,
         })
         items.append({
@@ -836,34 +832,47 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
             "payment_type": "Compromisso",
             "source": "predicted_bill",
         })
+    return bill_refs, items
 
-    month_cursor = datetime(today.year, today.month, 1)
-    months_limit = max(3, math.ceil((days + 31) / 30) + 1)
 
+def _projection_step_from_frequency(frequency: str) -> int:
+    freq = (frequency or "mensal").lower()
+    if "anual" in freq:
+        return 12
+    if "trimes" in freq:
+        return 3
+    return 1
+
+
+def _master_due_dates(master: dict, today: datetime, horizon: datetime, month_cursor: datetime, months_limit: int):
+    step = _projection_step_from_frequency(master.get("frequency") or "mensal")
+    day = _parse_master_day(master)
+    for idx in range(0, months_limit, step):
+        due_dt = _add_months(month_cursor, idx).replace(day=day)
+        if today <= due_dt <= horizon:
+            yield due_dt
+
+
+def _bill_matches_master_projection(bill_refs: list, due_date: str, desc_key: str, amount: float) -> bool:
+    return any(
+        bill_ref["date"] == due_date
+        and _projection_names_match(bill_ref["norm_name"], desc_key)
+        and abs(bill_ref["amount"] - amount) / max(amount, 0.01) <= 0.25
+        for bill_ref in bill_refs
+    )
+
+
+def _collect_recurring_master_projection_items(recurring_masters: list, bill_refs: list, today: datetime, horizon: datetime, month_cursor: datetime, months_limit: int) -> list:
+    items = []
     for master in recurring_masters:
         amount = float(master.get("avg_amount", 0) or 0)
         if amount <= 0:
             continue
-        freq = (master.get("frequency") or "mensal").lower()
-        step = 12 if "anual" in freq else (3 if "trimes" in freq else 1)
-        day = _parse_master_day(master)
         desc_key = master.get("desc_key") or _normalize_projection_name(master.get("description", ""))
-
-        for idx in range(0, months_limit, step):
-            due_dt = _add_months(month_cursor, idx).replace(day=day)
-            if due_dt < today or due_dt > horizon:
-                continue
-
+        for due_dt in _master_due_dates(master, today, horizon, month_cursor, months_limit):
             due_date = due_dt.strftime("%Y-%m-%d")
-            duplicated_by_bill = any(
-                bill_ref["date"] == due_date
-                and _projection_names_match(bill_ref["norm_name"], desc_key)
-                and abs(bill_ref["amount"] - amount) / max(amount, 0.01) <= 0.25
-                for bill_ref in bill_refs
-            )
-            if duplicated_by_bill:
+            if _bill_matches_master_projection(bill_refs, due_date, desc_key, amount):
                 continue
-
             items.append({
                 "date": due_date,
                 "description": master.get("description") or "Pagamento recorrente",
@@ -873,12 +882,18 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
                 "payment_type": master.get("payment_type") or "Outro",
                 "source": "recurring_master",
             })
+    return items
 
+
+def _group_projection_items_by_date(items: list) -> dict:
     items.sort(key=lambda item: (item["date"], -item["amount"], item["description"]))
     items_by_date = defaultdict(list)
     for item in items:
         items_by_date[item["date"]].append(item)
+    return items_by_date
 
+
+def _build_daily_projection_series(today: datetime, days: int, opening_balance: float, items_by_date: dict) -> list:
     running_balance = round(float(opening_balance or 0), 2)
     daily = []
     for offset in range(days + 1):
@@ -896,34 +911,42 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
             "balance": running_balance,
             "items_count": len(day_items),
         })
+    return daily
 
-    def _summary(limit: int) -> dict:
-        subset = daily[:limit]
-        balances = [round(float(opening_balance or 0), 2)] + [d["balance"] for d in subset]
-        ending_balance = subset[-1]["balance"] if subset else round(float(opening_balance or 0), 2)
-        lowest_balance = min(balances) if balances else round(float(opening_balance or 0), 2)
-        days_negative = sum(1 for d in subset if d["balance"] < 0)
-        next_shortfall_date = next((d["date"] for d in subset if d["balance"] < 0), None)
-        total_outflows = round(sum(d["outflows"] for d in subset), 2)
-        return {
-            "days": limit,
-            "ending_balance": round(ending_balance, 2),
-            "lowest_balance": round(lowest_balance, 2),
-            "days_negative": days_negative,
-            "next_shortfall_date": next_shortfall_date,
-            "total_outflows": total_outflows,
-            "coverage_status": "risk" if lowest_balance < 0 else ("attention" if ending_balance < 0.35 * max(float(opening_balance or 0), 1) else "ok"),
-        }
 
+def _summarize_projection_window(daily: list, limit: int, opening_balance: float) -> dict:
+    subset = daily[:limit]
+    safe_opening_balance = round(float(opening_balance or 0), 2)
+    balances = [safe_opening_balance] + [d["balance"] for d in subset]
+    ending_balance = subset[-1]["balance"] if subset else safe_opening_balance
+    lowest_balance = min(balances) if balances else safe_opening_balance
+    days_negative = sum(1 for d in subset if d["balance"] < 0)
+    next_shortfall_date = next((d["date"] for d in subset if d["balance"] < 0), None)
+    total_outflows = round(sum(d["outflows"] for d in subset), 2)
+    return {
+        "days": limit,
+        "ending_balance": round(ending_balance, 2),
+        "lowest_balance": round(lowest_balance, 2),
+        "days_negative": days_negative,
+        "next_shortfall_date": next_shortfall_date,
+        "total_outflows": total_outflows,
+        "coverage_status": "risk" if lowest_balance < 0 else ("attention" if ending_balance < 0.35 * max(safe_opening_balance, 1) else "ok"),
+    }
+
+
+def _mark_projection_critical_dates(daily: list) -> list:
     critical_dates = sorted(
         [{"date": d["date"], "total_outflow": d["outflows"], "items_count": d["items_count"]} for d in daily if d["outflows"] > 0],
         key=lambda row: row["total_outflow"],
         reverse=True,
     )[:8]
     critical_lookup = {row["date"] for row in critical_dates}
-    for d in daily:
-        d["critical"] = d["date"] in critical_lookup
+    for day in daily:
+        day["critical"] = day["date"] in critical_lookup
+    return critical_dates
 
+
+def _build_projection_top_days(items: list) -> list:
     by_day_of_month = defaultdict(lambda: {"total_outflow": 0.0, "occurrences": 0})
     for item in items:
         try:
@@ -932,8 +955,7 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
             continue
         by_day_of_month[day]["total_outflow"] += float(item.get("amount", 0) or 0)
         by_day_of_month[day]["occurrences"] += 1
-
-    top_days = [
+    return [
         {
             "day": day,
             "label": f"Dia {day}",
@@ -943,8 +965,9 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
         for day, meta in sorted(by_day_of_month.items(), key=lambda item: item[1]["total_outflow"], reverse=True)[:8]
     ]
 
+
+def _build_projection_critical_windows(daily: list, window_size: int = 3) -> list:
     critical_windows = []
-    window_size = 3
     for idx in range(len(daily) - window_size + 1):
         chunk = daily[idx:idx + window_size]
         total = round(sum(day["outflows"] for day in chunk), 2)
@@ -957,12 +980,29 @@ def _build_treasury_projection(recurring_masters: list, predicted_bills: list, d
             "total_outflow": total,
         })
     critical_windows.sort(key=lambda row: row["total_outflow"], reverse=True)
+    return critical_windows
+
+
+def _build_treasury_projection(recurring_masters: list, predicted_bills: list, days: int, opening_balance: float) -> dict:
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    horizon = today + timedelta(days=days)
+    bill_refs, items = _collect_predicted_bill_projection_data(predicted_bills)
+
+    month_cursor = datetime(today.year, today.month, 1)
+    months_limit = max(3, math.ceil((days + 31) / 30) + 1)
+    items.extend(_collect_recurring_master_projection_items(recurring_masters, bill_refs, today, horizon, month_cursor, months_limit))
+
+    items_by_date = _group_projection_items_by_date(items)
+    daily = _build_daily_projection_series(today, days, opening_balance, items_by_date)
+    critical_dates = _mark_projection_critical_dates(daily)
+    top_days = _build_projection_top_days(items)
+    critical_windows = _build_projection_critical_windows(daily)
 
     return {
         "daily": daily,
         "items": items[:120],
-        "summary_30d": _summary(30),
-        "summary_60d": _summary(min(60, len(daily))),
+        "summary_30d": _summarize_projection_window(daily, 30, opening_balance),
+        "summary_60d": _summarize_projection_window(daily, min(60, len(daily)), opening_balance),
         "pressure_map": {
             "top_days": top_days,
             "critical_dates": critical_dates,
