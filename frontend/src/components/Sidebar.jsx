@@ -22,6 +22,7 @@ const navItems = [
   { path: '/analise-bancaria', label: 'Análise Bancária', icon: Building2, mod: 'financeiro' },
   { path: '/contas-previstas', label: 'Contas Previstas', icon: CalendarCheck, mod: 'financeiro' },
   { path: '/custos-recorrentes', label: 'Custos Recorrentes', icon: Repeat, mod: 'financeiro' },
+  { path: '/cfo-virtual', label: 'CFO Virtual', icon: BrainCircuit, mod: 'financeiro' },
   { path: '/ponto-equilibrio', label: 'Ponto Equilíbrio', icon: Target, mod: 'ponto_equilibrio' },
   { path: '/contabilista', label: 'Contabilista IA', icon: BrainCircuit, mod: 'contabilista' },
   { path: '/relatorios', label: 'Relatórios', icon: FileBarChart, mod: 'relatorios' },

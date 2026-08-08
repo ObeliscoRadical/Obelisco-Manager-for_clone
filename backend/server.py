@@ -4417,6 +4417,9 @@ async def startup():
         partialFilterExpression={"hard_dedupe_key": {"$exists": True}, "dedupe_exempt": False},
         name="uniq_expenses_hard_dedupe_key",
     )
+    await db.active_debts.create_index([("status", 1), ("data_vencimento", 1)])
+    await db.cfo_virtual_reports.create_index("created_at")
+    await db.cfo_virtual_simulations.create_index("created_at")
     # Start Telegram bot scheduler (commands + payment reminders)
     from telegram_scheduler import run_telegram_scheduler
     asyncio.create_task(run_telegram_scheduler(db))
@@ -4493,6 +4496,10 @@ app.include_router(create_push_router(db, get_current_user))
 # Bank Statement Analysis (Análise Bancária)
 from bank_analysis import create_bank_analysis_router
 app.include_router(create_bank_analysis_router(db, get_current_user))
+
+# CFO Virtual / Recuperação de Crédito
+from cfo_virtual import create_cfo_virtual_router
+app.include_router(create_cfo_virtual_router(db, get_current_user))
 
 _default_origins = [
     os.environ.get("FRONTEND_URL", "http://localhost:3000"),
