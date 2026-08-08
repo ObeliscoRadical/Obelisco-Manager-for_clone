@@ -206,7 +206,11 @@ def create_tech_extras_router(db, get_current_user):
 
     @tech_extra_router.get("/appointments/my")
     async def list_my_appointments(user=Depends(get_tech_user)):
-        """Agenda do técnico — próximos 30 dias filtrada por employee_id (ou tudo se admin)."""
+        """Agenda do portal técnico.
+
+        - Admin em modo supervisor: pode ver todos os compromissos, incluindo contas previstas.
+        - Técnico real: vê apenas compromissos operacionais atribuídos a si, nunca pagamentos futuros.
+        """
         emp_id = user.get("id")
         from datetime import timedelta
         today = date_cls.today()
@@ -215,7 +219,11 @@ def create_tech_extras_router(db, get_current_user):
         if user.get("_is_admin"):
             q = date_filter
         else:
-            q = {**date_filter, "employee_ids": emp_id}
+            q = {
+                **date_filter,
+                "employee_ids": emp_id,
+                "is_predicted_bill": {"$ne": True},
+            }
         appts = await db.appointments.find(q, {"_id": 0}).sort("date", 1).to_list(200)
         return appts
 

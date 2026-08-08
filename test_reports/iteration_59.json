@@ -1,0 +1,87 @@
+{
+  "summary": "Iteration 59: Bug fix validation - Tech agenda predicted bills filtering. CONFIRMED WORKING. Admin sees 4 appointments (3 with is_predicted_bill=true), Tech sees 0 appointments (correctly filtered). Backend: 6/6 tests passed. Frontend: Both admin and tech views verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_tech_agenda_predicted_bills.py",
+    "/app/test_reports/pytest/iter59_tech_agenda_predicted_bills.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix in tech_extras.py line 225: query for tech users now includes 'is_predicted_bill': {'$ne': True}",
+    "Admin users (_is_admin=True) continue to see all appointments including predicted bills",
+    "Tech users only see operational appointments assigned to them (employee_ids filter + no predicted bills)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tech_agenda_predicted_bills.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 tests passed)",
+    "frontend": "100% (both admin and tech views verified)"
+  },
+  "test_credentials": "Read from /app/memory/test_credentials.md - Admin: admin@obelisco.pt/obelisco2024, Tech: d.oliveira1986@gmail.com/A24d22r04",
+  "seed_data_creation": "No test data created - used existing predicted bills in dataset",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug fix for tech agenda predicted bills filtering validated. Key verification: (1) Admin via /api/tech/appointments/my returns 4 entries, 3 with is_predicted_bill=true (VODAFONE x2, GALP), (2) Tech via /api/tech/appointments/my returns 0 entries (correctly filtered), (3) Frontend /tech/agenda shows predicted bills for admin (💰 icons visible), (4) Frontend /tech/agenda shows empty state for tech user (no predicted bills). Fix location: /app/backend/tech_extras.py line 225.",
+  "verification_results": {
+    "backend_api": {
+      "admin_appointments": {
+        "endpoint": "GET /api/tech/appointments/my (admin token)",
+        "total_count": 4,
+        "predicted_bills_count": 3,
+        "predicted_bills": ["VODAFONE COMUNICACOES", "VODAFONE PORTUGAL COMUNICACOES", "GALP ENERGIA COMBUSTIVEL"],
+        "status": "PASS - Admin can see predicted bills"
+      },
+      "tech_appointments": {
+        "endpoint": "GET /api/tech/appointments/my (tech token)",
+        "total_count": 0,
+        "predicted_bills_count": 0,
+        "status": "PASS - Tech cannot see predicted bills"
+      }
+    },
+    "frontend_ui": {
+      "admin_tech_agenda": {
+        "url": "/tech/agenda (admin logged in)",
+        "shows_predicted_bills": true,
+        "predicted_bill_icons": "💰 visible for VODAFONE and GALP entries",
+        "admin_badge": "ADMIN badge visible in header",
+        "status": "PASS"
+      },
+      "tech_agenda": {
+        "url": "/tech/agenda (tech logged in)",
+        "shows_predicted_bills": false,
+        "empty_state": "'Sem compromissos marcados' displayed",
+        "user_name": "Daniel Oliveira visible in header",
+        "status": "PASS"
+      }
+    },
+    "pytest_results": {
+      "test_file": "/app/backend/tests/test_tech_agenda_predicted_bills.py",
+      "tests_passed": 6,
+      "tests_failed": 0,
+      "test_cases": [
+        "test_admin_login_success",
+        "test_tech_login_success",
+        "test_admin_can_see_predicted_bills_in_agenda",
+        "test_tech_cannot_see_predicted_bills_in_agenda",
+        "test_admin_vs_tech_comparison",
+        "test_endpoint_not_broken"
+      ]
+    }
+  },
+  "bug_fix_summary": {
+    "bug_description": "Técnico real estava a ver contas previstas (is_predicted_bill=true) na agenda do portal técnico",
+    "fix_location": "/app/backend/tech_extras.py, function list_my_appointments(), line 225",
+    "fix_applied": "Added 'is_predicted_bill': {'$ne': True} to query filter for non-admin users",
+    "fix_verified": true,
+    "note_for_production": "Fix applied in PREVIEW environment. User reported issue in PRODUCTION - requires redeploy to apply fix to production."
+  }
+}
