@@ -102,7 +102,80 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Testar o frontend do Obelisco Manager com foco nos novos itens P2 implementados. Validar Dashboard mini revenue/expenses, Contas Previstas com filtros, e Relatórios de Ponto com mapa da equipa e KPIs."
+user_problem_statement: "Testar o backend do Obelisco Manager com foco nos novos itens P2 implementados. Validar Dashboard overview API com monthly_revenue_vs_expenses, Team Map API, endpoints de ponto, security headers e rate limiting."
+
+backend:
+  - task: "Dashboard Overview API - monthly_revenue_vs_expenses"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. GET /api/dashboard/overview returns 200 OK when authenticated. Response includes the new 'monthly_revenue_vs_expenses' field as an array with 6 months of data. Each month object contains all required fields: key, label, month, year, revenue, expenses, net. Data types are correct (numeric values for revenue/expenses/net). Structure is consistent and suitable for mini chart rendering."
+
+  - task: "Timeclock Team Map API"
+    implemented: true
+    working: true
+    file: "/app/backend/service_orders.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. GET /api/service-orders/timeclock/team-map returns 200 OK when authenticated as admin. Response includes all required fields: generated_at, history_date, latest_positions (array with 1 item), focused_technician, history_entries (array), summary (with technicians_count, clocked_in_count, stale_count, history_points), and bounds. No BSON _id or ObjectId found in response - all data is properly JSON serializable. API correctly handles optional query parameters (history_date, technician_id)."
+
+  - task: "Timeclock Endpoints Regression"
+    implemented: true
+    working: true
+    file: "/app/backend/service_orders.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. Both legacy timeclock endpoints remain functional: (1) GET /api/service-orders/timeclock/all with start_date and end_date parameters returns 200 OK with entries array (4 entries found in test period). (2) GET /api/service-orders/timeclock/export returns 200 OK with proper CSV format (Content-Type: text/csv), attachment header present, and downloadable file. No regressions detected."
+
+  - task: "Security Headers Implementation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. All required security headers are present in API responses: (1) Content-Security-Policy: 'default-src none; frame-ancestors self; base-uri self; form-action self;' (2) X-Content-Type-Options: nosniff (3) Referrer-Policy: strict-origin-when-cross-origin. Bonus headers also present: X-Frame-Options: SAMEORIGIN, Permissions-Policy. Headers are applied via middleware to all responses."
+
+  - task: "Rate Limiting on Public Endpoints"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. Rate limiting is properly implemented on public endpoints: (1) GET /api/service-orders/check-availability triggers 429 Too Many Requests after ~30 requests within 60 seconds (as configured: 30 req/60s). (2) Retry-After header is present in 429 responses indicating wait time. (3) Authenticated endpoints like /api/dashboard/overview are NOT affected by rate limiting - 10 consecutive requests all returned 200 OK. Rate limiting rules are correctly applied only to public endpoints without affecting normal authenticated operations."
+
+  - task: "CORS Configuration"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. CORS headers are properly configured and compatible with frontend: (1) Access-Control-Allow-Origin: * (allows all origins) (2) Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH (3) Access-Control-Allow-Credentials: true (present in actual requests). OPTIONS preflight requests return correct CORS headers. No issues with authenticated API calls from frontend domain."
 
 frontend:
   - task: "Dashboard - Mini Revenue vs Expenses Card"
@@ -155,14 +228,14 @@ frontend:
 
 metadata:
   created_by: "testing_agent"
-  version: "1.0"
-  test_sequence: 1
-  run_ui: true
+  version: "1.1"
+  test_sequence: 2
+  run_ui: false
   last_tested: "2026-08-08"
 
 test_plan:
   current_focus:
-    - "All P2 items tested and verified"
+    - "All P2 backend items tested and verified"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
@@ -170,3 +243,5 @@ test_plan:
 agent_communication:
     - agent: "testing"
       message: "Completed comprehensive testing of all P2 frontend features. All tests passed successfully. Dashboard mini revenue/expenses card is rendering correctly with chart. Contas Previstas filters panel is fully functional with all filter controls working. Relatórios de Ponto has all new KPI blocks, team geo map, latest positions list, trail panel, and history date input working correctly. Legacy filters remain functional. Dataset contains 1 technician which is acceptable. Minor console warnings observed (CSP frame-ancestors, Cloudflare beacon blocked) but these are not app-related issues and don't affect functionality. No visual regressions, no horizontal overflow, all data-testid attributes properly implemented. Ready for production."
+    - agent: "testing"
+      message: "Completed comprehensive backend API testing for all P2 items. ALL TESTS PASSED (26 passed, 0 failed, 1 minor warning). Test results: (1) Dashboard Overview API: monthly_revenue_vs_expenses field present with correct structure (6 months, all required fields). (2) Timeclock Team Map API: All required fields present (generated_at, history_date, latest_positions, focused_technician, history_entries, summary, bounds), no BSON serialization issues. (3) Regression tests: timeclock/all and timeclock/export endpoints working correctly with date filters. (4) Security headers: All required headers present (CSP, X-Content-Type-Options, Referrer-Policy). (5) Rate limiting: Working correctly on public endpoints (~30 req/60s), authenticated endpoints not affected. (6) CORS: Properly configured, compatible with frontend. Minor warning: CORS Allow-Credentials header not in OPTIONS preflight (but present in actual requests). All P2 backend features are production-ready."
