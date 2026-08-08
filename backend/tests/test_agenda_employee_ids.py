@@ -3,7 +3,7 @@ import os
 import requests
 from datetime import date, timedelta
 
-BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://custos-preview.preview.emergentagent.com").rstrip("/")
+BASE = os.environ.get("REACT_APP_BACKEND_URL", "https://bank-consolidate.preview.emergentagent.com").rstrip("/")
 API = f"{BASE}/api"
 
 ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
