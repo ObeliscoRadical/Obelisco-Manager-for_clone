@@ -2,6 +2,26 @@
 
 ---
 
+## Aug 08, 2026 — Code Quality Phase 3
+
+### Frontend modularization
+- `DespesasPage.jsx` dividido em 5 componentes (`ExpensesToolbar`, `ExpensesOverview`, `ExpensesTable`, `ExpenseAuditReports`, `ExpenseFormDialog`)
+- `FaturasPage.jsx` dividido em 5 componentes (`InvoicesToolbar`, `InvoicesSummaryFilters`, `InvoicesTable`, `InvoiceFormDialog`, `InvoicePaymentsDialog`)
+- `GuiasPage.jsx` dividido em 4 componentes (`GuidesToolbar`, `GuidesGrid`, `GuideCreateDialog`, `GuideDetailDialog`)
+
+### Backend complexity reduction
+- `bank_analysis.py`: `_build_treasury_projection` repartida em helpers menores para projeção, agrupamento, sumários e pressure map
+
+### Test hygiene
+- `test_treasury_insights.py` alinhado com `auth_test_helpers.py`
+
+### Validação
+- **testing agent iteration 58**: backend 11/11 + frontend 100%
+- `/despesas`, `/faturas`, `/guias` sem regressão funcional; diálogos abrem corretamente
+- `GET /api/bank-analysis/treasury/insights` mantém estrutura esperada
+
+---
+
 ## Aug 08, 2026 — Code Quality Phase 2
 
 ### Hook dependencies / callbacks

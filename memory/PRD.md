@@ -151,6 +151,43 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - frontend: páginas técnicas e admin críticas sem erros JS
   - nota cosmética apenas: aviso de dimensão do gráfico em `DespesasPage` quando o chart ainda não está visível no viewport
 
+## Atualização 2026-08-08 — Code Quality / Fase 3
+- **Componentes grandes divididos**
+  - `DespesasPage.jsx` dividido em:
+    - `ExpensesToolbar.jsx`
+    - `ExpensesOverview.jsx`
+    - `ExpensesTable.jsx`
+    - `ExpenseAuditReports.jsx`
+    - `ExpenseFormDialog.jsx`
+  - `FaturasPage.jsx` dividido em:
+    - `InvoicesToolbar.jsx`
+    - `InvoicesSummaryFilters.jsx`
+    - `InvoicesTable.jsx`
+    - `InvoiceFormDialog.jsx`
+    - `InvoicePaymentsDialog.jsx`
+  - `GuiasPage.jsx` dividido em:
+    - `GuidesToolbar.jsx`
+    - `GuidesGrid.jsx`
+    - `GuideCreateDialog.jsx`
+    - `GuideDetailDialog.jsx`
+- **Complexidade reduzida em `bank_analysis.py`**
+  - `_build_treasury_projection` foi repartida em helpers menores:
+    - `_collect_predicted_bill_projection_data`
+    - `_collect_recurring_master_projection_items`
+    - `_group_projection_items_by_date`
+    - `_build_daily_projection_series`
+    - `_summarize_projection_window`
+    - `_mark_projection_critical_dates`
+    - `_build_projection_top_days`
+    - `_build_projection_critical_windows`
+- **Higiene de testes**
+  - `test_treasury_insights.py` passou a usar `auth_test_helpers.get_base_url()` e `get_admin_credentials()`
+- **Validação formal**
+  - testing agent iteration 58: tudo aprovado
+  - backend: `11/11` testes de tesouraria aprovados
+  - frontend: `/despesas`, `/faturas`, `/guias` validadas sem erros JS e com diálogos funcionais
+  - nota apenas cosmética: warning de dimensão do chart em `DespesasPage` quando o gráfico ainda não entrou no viewport
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -196,10 +233,11 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes
-- Code Quality Fase 3: dividir componentes grandes + reduzir complexidade em `bank_analysis.py`
+- Code Quality Fase 4: reduzir componentes grandes remanescentes (`MateriaisPage`, `MascaraDinPage`, `DashboardPage`) + continuar type hints
 
 ### P2
 - TOC Online integration (se credenciais fornecidas)
 - Alertas Telegram automáticos de IVA/PPC perto do vencimento
 - Refactor server.py (>4000 linhas)
 - Hardening de CSP para scripts externos legítimos sem warnings cosméticos no browser
+- Code Quality Fase 5: refactor adicional de complexidade em `_build_recurring_masters_from_analyses`, `_normalize_df`, `_detect_recurring`, `_pre_categorize`, `_ai_categorize_batch`, `_parse_pdf`
