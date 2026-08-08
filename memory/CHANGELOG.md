@@ -2,6 +2,42 @@
 
 ---
 
+## Aug 08, 2026 — Code Quality Phase 2
+
+### Hook dependencies / callbacks
+- `TechPerfilPage.jsx`: `loadProfile` estabilizado com `useCallback`
+- `TechPedidosPage.jsx`: headers memoizados + callbacks do detalhe estabilizados
+- `PontoEquilibrioPage.jsx`: cálculo repartido em vários `useMemo`
+
+### Empty catches removidos
+- `TechPontoPage.jsx`
+- `WidgetPedidoPage.jsx`
+- `AgendaPage.jsx`
+
+### Array index keys removidas dos alvos desta fase
+- `ProcessamentoSalarialPage.jsx`
+- `ObrasPage.jsx`
+- `MateriaisPage.jsx`
+- `DespesasPage.jsx`
+- `GuiasPage.jsx`
+- `CaixaObraPage.jsx`
+- `TechObraDetailPage.jsx`
+- `ConfiguracoesSalariaisPage.jsx`
+- `SupplierRequestDialog.jsx`
+- `ImportarPropostaButton.jsx`
+- `CustosFixosPage.jsx`
+
+### Bugfix descoberto durante a fase
+- `AuthContext.js` volta a expor `token` no contexto
+- `service_orders.py` aceita token técnico nos pedidos do portal com filtro por `assigned_technician_id`
+- `/tech/pedidos` volta a abrir sem toast de erro
+
+### Validação
+- **testing agent iteration 57**: backend 28/28 + frontend 100%
+- páginas validadas: `/tech/pedidos`, `/tech/ponto`, `/tech/perfil`, `/ponto-equilibrio`, `/agenda`, `/obras`, `/despesas`
+
+---
+
 ## Aug 08, 2026 — Code Quality Phase 1
 
 ### Segurança / testes

@@ -120,6 +120,37 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - testing agent iteration 56: backend 64/64 passed (4 skipped), frontend 100%
   - verificado: login admin/técnico, persistência por sessão, ausência de tokens em `localStorage`, páginas críticas sem regressão
 
+## Atualização 2026-08-08 — Code Quality / Fase 2
+- **Hook dependencies / callbacks estabilizados**
+  - `TechPerfilPage.jsx`: `loadProfile` refeito com `useCallback` + `useEffect`
+  - `TechPedidosPage.jsx`: `headers`, `fetchOrders`, `fetchOrder`, `addNote` e `uploadPhoto` estabilizados
+  - `PontoEquilibrioPage.jsx`: cálculo grande dividido em vários `useMemo` menores
+- **Empty catch blocks removidos**
+  - `TechPontoPage.jsx`
+  - `WidgetPedidoPage.jsx`
+  - `AgendaPage.jsx`
+- **Array index keys substituídas por chaves estáveis**
+  - `ProcessamentoSalarialPage.jsx`
+  - `ObrasPage.jsx`
+  - `MateriaisPage.jsx`
+  - `DespesasPage.jsx`
+  - `GuiasPage.jsx`
+  - `CaixaObraPage.jsx`
+  - `TechObraDetailPage.jsx`
+  - `ConfiguracoesSalariaisPage.jsx`
+  - `SupplierRequestDialog.jsx`
+  - `ImportarPropostaButton.jsx`
+  - `CustosFixosPage.jsx`
+- **Bug real corrigido durante a fase**
+  - `AuthContext.js` voltou a expor `token` no contexto para páginas que dependem dele
+  - `service_orders.py` passou a aceitar token técnico em `GET /api/service-orders`, `GET /api/service-orders/{id}`, `POST /api/service-orders/{id}/notes` e `POST /api/service-orders/{id}/photos`, sempre filtrando por `assigned_technician_id`
+  - Resultado: `/tech/pedidos` deixou de disparar toast de erro e volta a abrir normalmente para técnicos
+- **Validação formal**
+  - testing agent iteration 57: tudo aprovado
+  - backend: `28/28` testes aprovados
+  - frontend: páginas técnicas e admin críticas sem erros JS
+  - nota cosmética apenas: aviso de dimensão do gráfico em `DespesasPage` quando o chart ainda não está visível no viewport
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -165,10 +196,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes
-- Code Quality Fase 2: sweep de hook dependencies remanescentes + empty catches + mais index keys
+- Code Quality Fase 3: dividir componentes grandes + reduzir complexidade em `bank_analysis.py`
 
 ### P2
 - TOC Online integration (se credenciais fornecidas)
 - Alertas Telegram automáticos de IVA/PPC perto do vencimento
 - Refactor server.py (>4000 linhas)
-- Code Quality Fase 3: refactor de componentes grandes + refactor de complexidade em `bank_analysis.py`
+- Hardening de CSP para scripts externos legítimos sem warnings cosméticos no browser
