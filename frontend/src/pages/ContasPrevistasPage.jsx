@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
-import { Calendar, Plus, Pencil, Trash2, Loader2, X, Check, ArrowLeft } from 'lucide-react';
+import { Calendar, Plus, Pencil, Trash2, Loader2, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 
 const fmt = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -30,12 +30,13 @@ export default function ContasPrevistasPage() {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [filters, setFilters] = useState({ category: 'all', startDate: '', endDate: '' });
 
   const fetchBills = useCallback(async () => {
     try {
       const { data } = await api.get('/bank-analysis/predicted-bills/list');
       setBills(data);
-    } catch { }
+    } catch (err) { console.debug('[predicted-bills/list]', err?.message); }
     finally { setLoading(false); }
   }, []);
 
@@ -82,12 +83,23 @@ export default function ContasPrevistasPage() {
     } catch { toast.error('Erro ao eliminar'); }
   };
 
-  const total = bills.reduce((s, b) => s + (b.predicted_amount || 0), 0);
+  const filteredBills = bills.filter((bill) => {
+    if (filters.category !== 'all' && (bill.predicted_category || 'outro') !== filters.category) return false;
+    if (filters.startDate && (bill.date || '') < filters.startDate) return false;
+    if (filters.endDate && (bill.date || '') > filters.endDate) return false;
+    return true;
+  });
+
+  const total = filteredBills.reduce((s, b) => s + (b.predicted_amount || 0), 0);
   const byMonth = {};
-  bills.forEach(b => {
+  filteredBills.forEach(b => {
     const m = (b.date || '').slice(0, 7);
     if (m) byMonth[m] = (byMonth[m] || 0) + (b.predicted_amount || 0);
   });
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const upcomingCount = filteredBills.filter(b => (b.date || '') >= todayIso).length;
+  const overdueCount = filteredBills.filter(b => (b.date || '') < todayIso).length;
+  const hasFilters = filters.category !== 'all' || filters.startDate || filters.endDate;
 
   return (
     <div className="space-y-6" data-testid="contas-previstas-page">
@@ -117,15 +129,69 @@ export default function ContasPrevistasPage() {
           <p className="text-xl font-bold text-yellow-400 mt-1">{fmt(total)}</p>
         </div>
         <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
-          <p className="text-xs text-zinc-500 uppercase tracking-wider">Contas Ativas</p>
-          <p className="text-xl font-bold text-white mt-1">{bills.length}</p>
+          <p className="text-xs text-zinc-500 uppercase tracking-wider">Linhas Visíveis</p>
+          <p className="text-xl font-bold text-white mt-1">{filteredBills.length}</p>
         </div>
-        {Object.entries(byMonth).slice(0, 2).map(([m, v]) => (
-          <div key={m} className="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
-            <p className="text-xs text-zinc-500 uppercase tracking-wider">{m}</p>
-            <p className="text-xl font-bold text-blue-400 mt-1">{fmt(v)}</p>
+        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider">Próximas</p>
+          <p className="text-xl font-bold text-emerald-400 mt-1">{upcomingCount}</p>
+        </div>
+        <div className="p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider">Em atraso</p>
+          <p className="text-xl font-bold text-red-400 mt-1">{overdueCount}</p>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4" data-testid="bill-filters-panel">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Categoria</label>
+            <select
+              data-testid="bill-filter-category"
+              value={filters.category}
+              onChange={e => setFilters(prev => ({ ...prev, category: e.target.value }))}
+              className="mt-1 h-10 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+            >
+              <option value="all">Todas</option>
+              {CAT_OPTIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
           </div>
-        ))}
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Data inicial</label>
+            <input
+              data-testid="bill-filter-start-date"
+              type="date"
+              value={filters.startDate}
+              onChange={e => setFilters(prev => ({ ...prev, startDate: e.target.value }))}
+              className="mt-1 h-10 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-zinc-500 uppercase tracking-wider">Data final</label>
+            <input
+              data-testid="bill-filter-end-date"
+              type="date"
+              value={filters.endDate}
+              onChange={e => setFilters(prev => ({ ...prev, endDate: e.target.value }))}
+              className="mt-1 h-10 rounded-lg border border-zinc-700 bg-zinc-950 px-3 text-sm text-white"
+            />
+          </div>
+          {hasFilters && (
+            <button
+              data-testid="bill-filters-clear"
+              onClick={() => setFilters({ category: 'all', startDate: '', endDate: '' })}
+              className="h-10 rounded-lg border border-zinc-700 bg-zinc-800 px-4 text-xs font-semibold text-zinc-300 hover:bg-zinc-700"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-zinc-500">
+          {Object.entries(byMonth).slice(0, 3).map(([m, v]) => (
+            <span key={m} className="rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1">{m}: <span className="text-blue-400 font-semibold">{fmt(v)}</span></span>
+          ))}
+          {hasFilters && <span className="rounded-full border border-yellow-400/20 bg-yellow-400/10 px-3 py-1 text-yellow-300">Filtros ativos</span>}
+        </div>
       </div>
 
       {/* Form (Create/Edit) */}
@@ -186,6 +252,12 @@ export default function ContasPrevistasPage() {
           <p className="text-zinc-500 mb-2">Nenhuma conta prevista</p>
           <p className="text-xs text-zinc-600">Carregue um extrato bancário ou crie manualmente.</p>
         </div>
+      ) : filteredBills.length === 0 ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-12 text-center" data-testid="bills-empty-filtered">
+          <Calendar className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
+          <p className="text-zinc-500 mb-2">Nenhuma conta prevista com estes filtros</p>
+          <p className="text-xs text-zinc-600">Ajuste o intervalo de datas ou a categoria.</p>
+        </div>
       ) : (
         <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden" data-testid="bills-table">
           <div className="overflow-x-auto">
@@ -201,7 +273,7 @@ export default function ContasPrevistasPage() {
                 </tr>
               </thead>
               <tbody>
-                {bills.map(b => {
+                {filteredBills.map(b => {
                   const cm = catMeta(b.predicted_category);
                   const freq = b.predicted_frequency || b.notes?.match(/mensal|trimestral|anual/)?.[0] || '—';
                   const isPast = b.date && b.date < new Date().toISOString().slice(0, 10);

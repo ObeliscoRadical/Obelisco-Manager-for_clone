@@ -710,6 +710,81 @@ def create_service_orders_router(db, get_current_user):
         entries = await cursor.to_list(length=5000)
         return {"entries": entries, "total": len(entries)}
 
+    @router.get("/timeclock/team-map")
+    async def get_team_map(
+        history_date: Optional[str] = None,
+        technician_id: Optional[str] = None,
+        user=Depends(get_current_user),
+    ):
+        if not _is_admin(user):
+            raise HTTPException(403, "Apenas administradores")
+
+        now = datetime.now(timezone.utc)
+        all_entries = await db.service_timeclock.find({}, {"_id": 0}).sort("timestamp", -1).to_list(length=5000)
+
+        latest_positions = []
+        seen = set()
+        for entry in all_entries:
+            tid = entry.get("technician_id")
+            if not tid or tid in seen:
+                continue
+            lat = entry.get("latitude")
+            lon = entry.get("longitude")
+            if lat is None or lon is None:
+                continue
+            seen.add(tid)
+            try:
+                stamp = datetime.fromisoformat((entry.get("timestamp") or "").replace("Z", "+00:00"))
+                minutes_since = int((now - stamp).total_seconds() // 60)
+            except Exception:
+                minutes_since = None
+            latest_positions.append({
+                **entry,
+                "is_clocked_in": entry.get("type") == "entrada",
+                "minutes_since_update": minutes_since,
+            })
+
+        history_date = history_date or now.date().isoformat()
+        history_query = {
+            "timestamp": {
+                "$gte": f"{history_date}T00:00:00",
+                "$lte": f"{history_date}T23:59:59",
+            }
+        }
+        if technician_id:
+            history_query["technician_id"] = technician_id
+
+        history_entries = await db.service_timeclock.find(history_query, {"_id": 0}).sort("timestamp", 1).to_list(length=1000)
+        focused_technician = None
+        if technician_id:
+            focused_technician = next((item for item in latest_positions if item.get("technician_id") == technician_id), None)
+
+        bounds = None
+        if latest_positions:
+            lats = [float(item["latitude"]) for item in latest_positions]
+            lons = [float(item["longitude"]) for item in latest_positions]
+            bounds = {
+                "min_lat": min(lats),
+                "max_lat": max(lats),
+                "min_lon": min(lons),
+                "max_lon": max(lons),
+            }
+
+        return {
+            "generated_at": now.isoformat(),
+            "history_date": history_date,
+            "latest_positions": latest_positions,
+            "focused_technician": focused_technician,
+            "history_entries": history_entries,
+            "summary": {
+                "technicians_count": len(latest_positions),
+                "clocked_in_count": len([item for item in latest_positions if item.get("is_clocked_in")]),
+                "stale_count": len([item for item in latest_positions if (item.get("minutes_since_update") or 0) > 240]),
+                "history_points": len(history_entries),
+            },
+            "bounds": bounds,
+        }
+
     @router.get("/timeclock/export")
     async def export_timeclock_csv(
         start_date: Optional[str] = None,

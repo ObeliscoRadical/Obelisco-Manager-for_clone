@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent / '.env')
 
 from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
@@ -13,9 +13,12 @@ import uuid
 import bcrypt
 import jwt
 import asyncio
+import re
+import time
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
+from collections import defaultdict, deque
 
 # MongoDB
 mongo_url = os.environ['MONGO_URL']
@@ -29,6 +32,42 @@ api_router = APIRouter(prefix="/api")
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+_RATE_LIMIT_BUCKETS = defaultdict(deque)
+_RATE_LIMIT_RULES = [
+    (re.compile(r"^/api/auth/login$"), {"POST"}, 10, 60, "Demasiadas tentativas de login. Aguarde 1 minuto."),
+    (re.compile(r"^/api/auth/refresh$"), {"POST"}, 20, 60, "Demasiados refresh tokens. Aguarde 1 minuto."),
+    (re.compile(r"^/api/tech/auth/login$"), {"POST"}, 10, 60, "Demasiadas tentativas de login técnico. Aguarde 1 minuto."),
+    (re.compile(r"^/api/public/proposal/[^/]+$"), {"GET"}, 60, 60, "Limite temporário do link público atingido."),
+    (re.compile(r"^/api/public/proposal/[^/]+/sign$"), {"POST"}, 8, 600, "Muitas tentativas de assinatura pública. Aguarde 10 minutos."),
+    (re.compile(r"^/api/service-orders$"), {"POST"}, 8, 600, "Muitos pedidos públicos submetidos. Aguarde 10 minutos."),
+    (re.compile(r"^/api/service-orders/check-availability$"), {"GET"}, 30, 60, "Muitas verificações de disponibilidade. Aguarde 1 minuto."),
+    (re.compile(r"^/api/service-orders/[^/]+/photos/public$"), {"POST"}, 10, 600, "Muitos uploads públicos. Aguarde 10 minutos."),
+]
+
+
+def _get_client_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    if forwarded:
+        return forwarded
+    real_ip = (request.headers.get("x-real-ip") or "").strip()
+    if real_ip:
+        return real_ip
+    return request.client.host if request.client else "unknown"
+
+
+def _build_cors_allow_list() -> List[str]:
+    values = []
+    for key in ("CORS_ORIGINS", "FRONTEND_URL"):
+        raw = os.environ.get(key)
+        if not raw:
+            continue
+        for part in raw.split(","):
+            origin = part.strip().strip('"').rstrip("/")
+            if origin.startswith("http"):
+                values.append(origin)
+    # keep deterministic order and de-dup
+    return list(dict.fromkeys(values))
 
 # JWT Config
 JWT_ALGORITHM = "HS256"
@@ -2873,6 +2912,7 @@ async def get_dashboard_overview(user=Depends(get_current_user)):
     y = today.year
     m = today.month
     month_prefix = f"{y:04d}-{m:02d}"
+    month_labels_short = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
 
     # ---- Data
     budgets = await db.budgets.find({}, {"_id": 0}).to_list(2000)
@@ -3024,6 +3064,51 @@ async def get_dashboard_overview(user=Depends(get_current_user)):
     recent_activity.sort(key=lambda x: x.get("when") or "", reverse=True)
     recent_activity = recent_activity[:8]
 
+    # ---- Mini gráfico mensal receitas vs despesas (últimos 6 meses)
+    month_series = []
+    month_index = {}
+    for offset in range(5, -1, -1):
+        mm = m - offset
+        yy = y
+        while mm <= 0:
+            mm += 12
+            yy -= 1
+        key = f"{yy:04d}-{mm:02d}"
+        month_index[key] = len(month_series)
+        month_series.append({
+            "key": key,
+            "label": f"{month_labels_short[mm - 1]} {str(yy)[2:]}",
+            "month": mm,
+            "year": yy,
+            "revenue": 0.0,
+            "expenses": 0.0,
+            "net": 0.0,
+        })
+
+    for inv in invoices:
+        for p in (inv.get("payments") or []):
+            key = (p.get("date") or "")[:7]
+            idx = month_index.get(key)
+            if idx is not None:
+                month_series[idx]["revenue"] += float(p.get("amount", 0) or 0)
+
+    for e in expenses:
+        key = (e.get("date") or "")[:7]
+        idx = month_index.get(key)
+        if idx is not None:
+            month_series[idx]["expenses"] += float(e.get("value_gross", 0) or 0)
+
+    for run in payroll_runs:
+        key = f"{int(run.get('year') or y):04d}-{int(run.get('month') or m):02d}"
+        idx = month_index.get(key)
+        if idx is not None:
+            month_series[idx]["expenses"] += float(run.get("total_custo_empresa", 0) or 0)
+
+    for item in month_series:
+        item["revenue"] = round(item["revenue"], 2)
+        item["expenses"] = round(item["expenses"], 2)
+        item["net"] = round(item["revenue"] - item["expenses"], 2)
+
     return {
         "period": {"year": y, "month": m, "month_label": month_prefix},
         "highlights": {
@@ -3065,6 +3150,7 @@ async def get_dashboard_overview(user=Depends(get_current_user)):
             "loans_outstanding": round(loans_outstanding, 2),
         },
         "recent_activity": recent_activity,
+        "monthly_revenue_vs_expenses": month_series,
     }
 
 
@@ -4502,17 +4588,47 @@ from cfo_virtual import create_cfo_virtual_router
 app.include_router(create_cfo_virtual_router(db, get_current_user))
 
 _default_origins = [
-    os.environ.get("FRONTEND_URL", "http://localhost:3000"),
-    "https://tech-app-obelisco.emergent.host",
+    *_build_cors_allow_list(),
 ]
+
+@app.middleware("http")
+async def security_hardening_middleware(request: Request, call_next):
+    path = request.url.path
+    client_ip = _get_client_ip(request)
+    now = time.time()
+
+    for pattern, methods, limit, window_seconds, message in _RATE_LIMIT_RULES:
+        if request.method not in methods or not pattern.match(path):
+            continue
+        bucket = _RATE_LIMIT_BUCKETS[f"{pattern.pattern}:{client_ip}"]
+        while bucket and now - bucket[0] > window_seconds:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            retry_after = max(1, int(window_seconds - (now - bucket[0])))
+            return JSONResponse(
+                status_code=429,
+                content={"detail": message},
+                headers={"Retry-After": str(retry_after)},
+            )
+        bucket.append(now)
+        break
+
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(self), microphone=(), camera=()"
+    response.headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'self'; base-uri 'self'; form-action 'self';"
+    return response
+
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_default_origins,
-    allow_origin_regex=r"https://.*\.emergentagent\.com|https://.*\.emergent\.host",
+    allow_origin_regex=r"^https://([a-z0-9-]+\.)*(emergentagent\.com|emergent\.host)$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 @app.on_event("shutdown")

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { TreasurySummaryStrip } from '../components/TreasuryInsightsPanel';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip } from 'recharts';
 
 const fmtEuro = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
 const fmtEuroFull = (v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -61,6 +62,11 @@ export default function DashboardPage() {
   const { highlights, commercial, operational, stock, hr, recent_activity, period } = data;
   const isPositive = highlights.cash_month.amount >= 0;
   const greeting = getGreeting(userName);
+  const miniRevenueVsExpenses = (data.monthly_revenue_vs_expenses || []).map(item => ({
+    label: item.label,
+    Receitas: item.revenue,
+    Despesas: item.expenses,
+  }));
 
   return (
     <div data-testid="dashboard-page" className="space-y-8">
@@ -254,6 +260,29 @@ export default function DashboardPage() {
         title="Radar de tesouraria"
         linkTo="/analise-bancaria"
       />
+
+      {miniRevenueVsExpenses.length > 0 && (
+        <div data-testid="dashboard-mini-revenue-expenses" className="rounded-[28px] border border-zinc-800 bg-zinc-900/70 p-5">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+            <div>
+              <h2 className="text-white font-black uppercase tracking-wide text-sm">Receitas vs despesas</h2>
+              <p className="text-xs text-zinc-500 mt-1">Mini leitura mensal dos últimos 6 meses.</p>
+            </div>
+            <div className="text-xs text-zinc-500 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1">Base real: pagamentos + despesas + salários</div>
+          </div>
+          <div className="h-56" data-testid="dashboard-mini-revenue-expenses-chart">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={miniRevenueVsExpenses} barGap={8}>
+                <XAxis dataKey="label" stroke="#71717a" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis stroke="#71717a" tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} axisLine={false} tickLine={false} width={42} />
+                <Tooltip formatter={(value) => fmtEuroFull(value)} contentStyle={{ background: '#09090b', border: '1px solid #27272a', borderRadius: 16 }} />
+                <Bar dataKey="Receitas" radius={[8, 8, 0, 0]} fill="#22c55e" />
+                <Bar dataKey="Despesas" radius={[8, 8, 0, 0]} fill="#ef4444" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {treasury && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4" data-testid="dashboard-treasury-detail-grid">
