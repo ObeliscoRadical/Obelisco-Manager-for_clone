@@ -74,8 +74,8 @@ export const CfoSimulator = ({ dashboard }) => {
             <Card className="border-zinc-800 bg-zinc-950/60"><CardContent className="pt-5"><p className="text-xs text-zinc-500">Recuperação</p><p data-testid="sim-recovery-window" className="text-xl font-black text-white mt-1">{result.recovery_month === 0 ? 'Já positivo' : result.recovery_month ? `M${result.recovery_month}` : 'Sem viragem'}</p></CardContent></Card>
           </div>
 
-          <div data-testid="simulator-chart" className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4" style={{ height: 300 }}>
-            <ResponsiveContainer>
+          <div data-testid="simulator-chart" className="min-w-0 rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+            <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={result.projection}>
                 <defs>
                   <linearGradient id="cashFill" x1="0" y1="0" x2="0" y2="1">

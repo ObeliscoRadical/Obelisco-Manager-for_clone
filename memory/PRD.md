@@ -8,7 +8,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Backend**: FastAPI + MongoDB (port 8001)
 - **Auth**: JWT (localStorage Bearer tokens)
 - **PDF**: jsPDF + jspdf-autotable
-- **AI**: Emergent LLM Key → GPT-4o-mini (bank categorization), Gemini 3.1 Pro (OCR, invoice extraction, PDF bank statement extraction)
+- **AI**: Emergent LLM Key → GPT-4o-mini (bank categorization), **GPT-5.4 (CFO Virtual)**, Gemini 3.1 Pro (OCR, invoice extraction, PDF bank statement extraction)
 - **Integrations**: Telegram Bot (Ponto + Manager), Google Calendar, Emergent Email, Web Push (VAPID)
 - **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
 
@@ -47,6 +47,33 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Auditoria de Reconciliação** (relatórios Excel persistidos por operação, com download posterior e histórico visível em Despesas)
 - **AI Expense Re-Categorization** (bulk re-categorize existing expenses using keyword matching + GPT-4o-mini)
 - **Category Overrides Management** (Definições > Regras IA — view, edit inline, and delete learned category rules)
+- **CFO Virtual / Recuperação & Reestruturação de Crédito** (`/cfo-virtual` — diagnóstico financeiro rigoroso com cruzamento obrigatório de saldo real, extratos recentes, custos fixos, dívidas ativas, recebimentos urgentes e oportunidades de margem em obras)
+- **Coleção de Dívidas Ativas** (`active_debts` com CRUD visual + backend FastAPI para passivo fiscal, segurança social, fornecedores e dívida bancária)
+- **Simulador de Fôlego Financeiro** (projeção tática com cortes exequíveis, cobrança extra, limites realistas e comentário do CFO sem promessas mágicas)
+
+## Atualização 2026-08-08 — CFO Virtual / Recuperação de Crédito
+- Entregue o novo módulo **Gabinete do CFO** com rota protegida `GET /cfo-virtual` e entrada própria na sidebar
+- Backend novo (`/app/backend/cfo_virtual.py`):
+  - `GET /api/cfo-virtual/dashboard`
+  - `GET/POST/PUT/DELETE /api/cfo-virtual/debts`
+  - `POST /api/cfo-virtual/analyze`
+  - `POST /api/cfo-virtual/simulator`
+- Regras críticas implementadas:
+  - bloqueio do diagnóstico/simulador sem extrato bancário carregado
+  - **anti-ilusão**: sem caixa livre, não existe sugestão de pagamento positivo
+  - alocação de caixa exata calculada no backend antes da IA responder
+  - uso obrigatório de dados reais: saldo do último extrato, movimentos recentes, custos fixos, dívidas, recebimentos urgentes e margem/cobrança de obras
+- Frontend novo:
+  - `CfoVirtualPage.jsx`
+  - `CfoDebtsTable.jsx`
+  - `CfoSimulator.jsx`
+- Persistência nova:
+  - `active_debts`
+  - `cfo_virtual_reports`
+  - `cfo_virtual_simulations`
+- Testado com sucesso:
+  - curl/manual: login, dashboard, CRUD dívida, análise e simulador
+  - testing agent iteration 54: backend 22/22 + frontend 100%
 
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
@@ -86,6 +113,9 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Testado com sucesso: testing agent iteration 52 (backend 10/10, frontend 100%)
 
 ## Backlog
+### P0
+- Migração Multiempresa / SaaS Fase 1 (`company_id` em coleções core + isolamento por tenant)
+
 ### P1
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
