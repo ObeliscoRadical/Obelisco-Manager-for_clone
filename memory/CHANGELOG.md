@@ -2,6 +2,29 @@
 
 ---
 
+## Aug 08, 2026 — Code Quality Phase 1
+
+### Segurança / testes
+- Criado `backend/tests/auth_test_helpers.py`
+- Removidas credenciais hardcoded dos testes-alvo reportados pela revisão de código
+
+### Frontend auth/storage
+- `src/lib/api.js`: fallback auth passou de `localStorage` para `sessionStorage` + memória
+- `src/contexts/AuthContext.js`: `obelisco_user_kind` passou para `sessionStorage`
+- Novo helper `src/lib/browserStorage.js`
+
+### Outras melhorias desta fase
+- `LegendaQuadroPage.jsx` e `MascaraDinPage.jsx`: migração de storage para `sessionStorage`
+- `PontoGPSPage.jsx`: hooks e tratamento de erros melhorados
+- Chaves React estabilizadas em páginas do Dashboard e CFO
+- Criado `/app/auth_testing.md`
+
+### Validação
+- **testing agent iteration 56**: backend 64/64 passed (4 skipped) + frontend 100%
+- Confirmado: tokens ausentes de `localStorage`, presentes apenas em `sessionStorage`, login admin/técnico OK, reload OK, páginas críticas sem regressão
+
+---
+
 ## Aug 08, 2026 — P2: Filtros, mini gráfico, GPS equipa e segurança
 
 ### Contas Previstas

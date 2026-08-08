@@ -102,6 +102,24 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - deep_testing_backend_v2 aprovado
   - testing agent iteration 55: backend 30/30 + frontend 100%
 
+## Atualização 2026-08-08 — Code Quality / Fase 1
+- **Testes backend sem segredos hardcoded**
+  - criado `backend/tests/auth_test_helpers.py` para ler credenciais de teste por env ou `/app/memory/test_credentials.md`
+  - removidos valores fixos dos testes-alvo reportados na revisão de código
+- **Auth frontend endurecido sem localStorage sensível**
+  - `src/lib/api.js`: tokens migrados de `localStorage` para `sessionStorage` + memória
+  - `src/contexts/AuthContext.js`: `obelisco_user_kind` migrado para `sessionStorage`
+  - criado `src/lib/browserStorage.js` para acesso seguro ao storage do browser
+- **Sessões de UI técnica movidas para sessionStorage**
+  - `LegendaQuadroPage.jsx` e `MascaraDinPage.jsx` deixaram de usar `localStorage`
+- **Melhorias de qualidade adicional nesta fase**
+  - `PontoGPSPage.jsx`: hooks estabilizados com `useCallback/useMemo` e tratamento de erros melhorado
+  - chaves React estabilizadas em `DashboardPage.jsx`, `DashboardFinanceiroPage.jsx`, `CfoVirtualPage.jsx` e `CfoSimulator.jsx`
+  - criado `/app/auth_testing.md` para guiar a validação desta ronda
+- **Validação formal**
+  - testing agent iteration 56: backend 64/64 passed (4 skipped), frontend 100%
+  - verificado: login admin/técnico, persistência por sessão, ausência de tokens em `localStorage`, páginas críticas sem regressão
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -147,8 +165,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes
+- Code Quality Fase 2: sweep de hook dependencies remanescentes + empty catches + mais index keys
 
 ### P2
 - TOC Online integration (se credenciais fornecidas)
 - Alertas Telegram automáticos de IVA/PPC perto do vencimento
 - Refactor server.py (>4000 linhas)
+- Code Quality Fase 3: refactor de componentes grandes + refactor de complexidade em `bank_analysis.py`
