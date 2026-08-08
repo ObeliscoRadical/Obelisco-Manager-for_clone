@@ -2,6 +2,23 @@
 
 ---
 
+## Aug 08, 2026 — Tech Agenda bugfix: predicted bills only for admin
+
+### Fix
+- `backend/tech_extras.py` → `GET /api/tech/appointments/my`
+- Técnicos reais agora recebem query com `is_predicted_bill: { $ne: true }`
+- Admin em modo supervisor continua a ver contas previstas na agenda técnica
+
+### Validation
+- **testing agent iteration 59**: backend 6/6 + frontend 100%
+- Admin `/tech/agenda`: 4 compromissos, 3 contas previstas visíveis
+- Técnico `/tech/agenda`: 0 contas previstas, estado vazio correto
+
+### Production note
+- Bug report veio de produção; fix foi aplicado e validado em preview e precisa de redeploy para produção
+
+---
+
 ## Aug 08, 2026 — Code Quality Phase 3
 
 ### Frontend modularization

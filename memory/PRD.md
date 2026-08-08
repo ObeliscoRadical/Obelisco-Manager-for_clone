@@ -188,6 +188,17 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - frontend: `/despesas`, `/faturas`, `/guias` validadas sem erros JS e com diálogos funcionais
   - nota apenas cosmética: warning de dimensão do chart em `DespesasPage` quando o gráfico ainda não entrou no viewport
 
+## Atualização 2026-08-08 — Bugfix Agenda Técnica / Pagamentos Futuros
+- Corrigido o filtro de `GET /api/tech/appointments/my` em `backend/tech_extras.py`
+- Regra aplicada:
+  - **admin em modo supervisor** continua a ver todos os compromissos, incluindo `is_predicted_bill=true`
+  - **técnico real** vê apenas compromissos operacionais atribuídos a si e **nunca** contas previstas/pagamentos futuros
+- Implementação: query de técnico passou a incluir `"is_predicted_bill": {"$ne": True}`
+- Validação formal: testing agent iteration 59
+  - backend: `6/6` testes aprovados
+  - frontend: admin vê pagamentos futuros em `/tech/agenda`; técnico vê estado vazio/compromissos operacionais sem pagamentos
+- Nota operacional: o utilizador reportou o problema em produção; a correção foi aplicada e validada em preview, exigindo redeploy para chegar à produção
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
