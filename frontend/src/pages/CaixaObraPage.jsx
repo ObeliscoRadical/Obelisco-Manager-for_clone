@@ -403,8 +403,8 @@ export default function CaixaObraPage() {
                         )}
                       </div>
                       <div className="text-[11px] text-zinc-500 mt-0.5 flex flex-wrap gap-x-2">
-                        {a.punches.map((p, i) => (
-                          <span key={i} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
+                        {a.punches.map((p) => (
+                          <span key={p.id || `${p.action}-${p.at}`} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
                             {p.action === 'in' ? '→' : '←'} {new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         ))}

@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Clock, Play, Square, Coffee, Undo2, MapPin, Loader2, AlertCircle, MapPinned } from 'lucide-react';
 import { toast } from 'sonner';
+import { devLog } from '../lib/browserStorage';
 
 const ACTION_LABEL = { in: 'Entrada', out: 'Saída', break_start: 'Início pausa', break_end: 'Fim pausa' };
 const ACTION_ICON = { in: Play, out: Square, break_start: Coffee, break_end: Undo2 };
@@ -25,7 +26,7 @@ export default function TechPontoPage() {
       setToday(t.data);
       setWeek(w.data || []);
     } catch (err) {
-      console.debug('[ponto]', err.message);
+      devLog('[ponto]', err?.message || err);
     } finally { setLoading(false); }
   }, []);
 
@@ -56,7 +57,9 @@ export default function TechPontoPage() {
         const geoRes = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.latitude}&lon=${loc.longitude}`);
         const geoData = await geoRes.json();
         address = geoData.display_name;
-      } catch { /* continue without address */ }
+      } catch (err) {
+        devLog('[tech-ponto/reverse-geocode]', err?.message || err);
+      }
 
       const { data } = await api.post('/tech/timesheet/punch', {
         action,
@@ -138,7 +141,7 @@ export default function TechPontoPage() {
         <CardContent className="p-4">
           <p className="text-xs uppercase tracking-widest text-zinc-500 font-semibold mb-2">Marcações de hoje</p>
           {(today?.punches || []).length === 0 && (
-            <p className="text-sm text-zinc-500 italic py-3">Sem marcações. Comece com "Entrada".</p>
+            <p className="text-sm text-zinc-500 italic py-3">Sem marcações. Comece com &quot;Entrada&quot;.</p>
           )}
           <div className="space-y-1.5">
             {(today?.punches || []).map(p => {

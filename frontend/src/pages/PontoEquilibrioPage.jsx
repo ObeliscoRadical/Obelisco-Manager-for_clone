@@ -102,57 +102,85 @@ export default function PontoEquilibrioPage() {
   useEffect(() => { fetchPrefill(); }, [fetchPrefill]);
 
   // === CÁLCULOS ===
-  const calc = useMemo(() => {
+  const fixedModel = useMemo(() => {
     const totalFixed = num(fixedCosts) + num(payroll) + num(extraFixed);
-    // Componente fixa das despesas variáveis (média das variáveis + varFixed)
     const fixedishVar = num(variableExpenses) + (varMode !== 'percent' ? num(varFixed) : 0);
-    const vPct = (varMode !== 'fixed' ? num(varPercent) : 0) / 100;
+    return {
+      fixedishVar,
+      totalFixedReal: totalFixed + fixedishVar,
+    };
+  }, [fixedCosts, payroll, extraFixed, variableExpenses, varMode, varFixed]);
 
-    // Custos totais fixos "reais"
-    const F = totalFixed + fixedishVar;
+  const variableModel = useMemo(() => ({
+    vPct: (varMode !== 'fixed' ? num(varPercent) : 0) / 100,
+  }), [varMode, varPercent]);
 
-    // Ponto de equilíbrio: Faturação × (1 - v%) = F  =>  BE = F / (1 - v%)
-    const denom = 1 - vPct;
+  const targetModel = useMemo(() => {
+    const F = fixedModel.totalFixedReal;
+    const denom = 1 - variableModel.vPct;
     const breakEven = denom > 0 ? F / denom : F;
 
-    // Lucro desejado
-    let target;
+    let rawTarget;
     if (profitMode === 'value') {
-      target = denom > 0 ? (F + num(profitValue)) / denom : F + num(profitValue);
+      rawTarget = denom > 0 ? (F + num(profitValue)) / denom : F + num(profitValue);
     } else {
-      // Se lucro é % sobre faturação: Faturação × (1 - v% - lucro%) = F
-      const totalMargin = 1 - vPct - num(profitPercent) / 100;
-      target = totalMargin > 0 ? F / totalMargin : Infinity;
+      const totalMargin = 1 - variableModel.vPct - num(profitPercent) / 100;
+      rawTarget = totalMargin > 0 ? F / totalMargin : Infinity;
     }
 
-    // Impostos aplicados sobre o alvo
-    const vatLiquid = includeVAT ? target * (num(vatRate) / 100) : 0;
-    const grossProfit = target - F - (target * vPct);
-    const ircDue = includeIRC ? Math.max(0, grossProfit) * (num(ircRate) / 100) : 0;
-    const netProfit = grossProfit - ircDue;
+    return {
+      breakEven,
+      denom,
+      target: isFinite(rawTarget) ? rawTarget : 0,
+      warning: !isFinite(rawTarget) || rawTarget <= 0
+        ? 'A margem desejada é impossível com os custos variáveis actuais. Reduza a % variável ou o lucro desejado.'
+        : null,
+    };
+  }, [fixedModel, variableModel, profitMode, profitPercent, profitValue]);
 
-    // Repartições
+  const progressModel = useMemo(() => {
     const wDays = prefill?.working_days_month || 22;
-    const perDay = target / wDays;
-    const perWeek = target / 4.33;
-    const perHour = perDay / 8;
-
-    // Progresso vs meta
-    const revenue = num(prefill?.current_month_revenue);
-    const progress = target > 0 && isFinite(target) ? Math.min(100, (revenue / target) * 100) : 0;
     const elapsed = prefill?.working_days_elapsed || 0;
-    const expectedByNow = target * (elapsed / wDays);
-    const pace = expectedByNow > 0 ? (revenue / expectedByNow) * 100 : 0;
+    const revenue = num(prefill?.current_month_revenue);
+    return { wDays, elapsed, revenue };
+  }, [prefill]);
+
+  const taxSettings = useMemo(() => ({
+    includeVAT,
+    vatRate: num(vatRate),
+    includeIRC,
+    ircRate: num(ircRate),
+  }), [includeVAT, vatRate, includeIRC, ircRate]);
+
+  const calc = useMemo(() => {
+    const target = targetModel.target;
+    const progress = target > 0 ? Math.min(100, (progressModel.revenue / target) * 100) : 0;
+    const expectedByNow = target * (progressModel.elapsed / progressModel.wDays);
+    const pace = expectedByNow > 0 ? (progressModel.revenue / expectedByNow) * 100 : 0;
+    const vatLiquid = taxSettings.includeVAT ? target * (taxSettings.vatRate / 100) : 0;
+    const grossProfit = target - fixedModel.totalFixedReal - (target * variableModel.vPct);
+    const ircDue = taxSettings.includeIRC ? Math.max(0, grossProfit) * (taxSettings.ircRate / 100) : 0;
 
     return {
-      totalFixed: F, breakEven, target: isFinite(target) ? target : 0,
-      vatLiquid, ircDue, grossProfit, netProfit,
-      perDay, perWeek, perHour,
-      progress, revenue, expectedByNow, pace,
-      wDays, elapsed,
-      warning: !isFinite(target) || target <= 0 ? 'A margem desejada é impossível com os custos variáveis actuais. Reduza a % variável ou o lucro desejado.' : null,
+      totalFixed: fixedModel.totalFixedReal,
+      breakEven: targetModel.breakEven,
+      target,
+      vatLiquid,
+      ircDue,
+      grossProfit,
+      netProfit: grossProfit - ircDue,
+      perDay: target / progressModel.wDays,
+      perWeek: target / 4.33,
+      perHour: (target / progressModel.wDays) / 8,
+      progress,
+      revenue: progressModel.revenue,
+      expectedByNow,
+      pace,
+      wDays: progressModel.wDays,
+      elapsed: progressModel.elapsed,
+      warning: targetModel.warning,
     };
-  }, [fixedCosts, payroll, extraFixed, variableExpenses, varMode, varPercent, varFixed, profitMode, profitPercent, profitValue, includeVAT, vatRate, includeIRC, ircRate, prefill]);
+  }, [fixedModel, targetModel, variableModel, progressModel, taxSettings]);
 
   if (loading) {
     return (

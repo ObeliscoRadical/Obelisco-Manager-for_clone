@@ -168,7 +168,7 @@ export default function CustosFixosPage() {
             <div>
               <Label className="text-[10px] text-zinc-500 uppercase tracking-wider">Mês</Label>
               <select value={month} onChange={e => setMonth(parseInt(e.target.value))} className="mt-1 h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[140px]">
-                {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
               </select>
             </div>
             <div className="flex-1" />
@@ -219,7 +219,7 @@ export default function CustosFixosPage() {
                 {items.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} className="text-center text-zinc-500 py-8">
-                      Nenhum custo fixo neste mês. Cria modelos no separador acima e clica em "Gerar custos do mês".
+                      Nenhum custo fixo neste mês. Cria modelos no separador acima e clica em &quot;Gerar custos do mês&quot;.
                     </TableCell>
                   </TableRow>
                 ) : items.map(it => {
@@ -295,7 +295,7 @@ export default function CustosFixosPage() {
               </TableHeader>
               <TableBody>
                 {templates.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center text-zinc-500 py-8">Sem modelos. Clica em "Novo Modelo" para começar.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center text-zinc-500 py-8">Sem modelos. Clica em &quot;Novo Modelo&quot; para começar.</TableCell></TableRow>
                 ) : templates.map(t => (
                   <TableRow key={t.id} className="border-zinc-800/50 hover:bg-zinc-800/30">
                     <TableCell className="text-white font-medium">{t.name}</TableCell>
@@ -380,7 +380,7 @@ export default function CustosFixosPage() {
             <div className="col-span-2"><Label className="text-zinc-400 text-xs">Notas</Label><Input value={payForm.notes} onChange={e => setPayForm({ ...payForm, notes: e.target.value })} placeholder="Opcional" className="bg-zinc-900 border-zinc-700 text-white mt-1" /></div>
           </div>
           <div className="text-xs text-zinc-500 italic">
-            Será criada automaticamente uma despesa correspondente nas Despesas, do tipo "fixo".
+            Será criada automaticamente uma despesa correspondente nas Despesas, do tipo &quot;fixo&quot;.
           </div>
           <div className="flex justify-end gap-2 mt-2">
             <Button variant="outline" onClick={() => setPayDialog({ open: false, instance: null })} className="border-zinc-700 text-zinc-300">Cancelar</Button>

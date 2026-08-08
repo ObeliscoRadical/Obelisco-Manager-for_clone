@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
 import { Zap, CheckCircle, AlertCircle, Loader2, Camera, X, Clock, Calendar, MapPin, Phone, Mail, User } from 'lucide-react';
+import { devLog } from '../lib/browserStorage';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -56,7 +57,9 @@ export default function WidgetPedidoPage() {
           await axios.post(`${API}/api/service-orders/${orderId}/photos/public`, {
             image_data: photo.data, caption: 'Foto enviada pelo cliente',
           });
-        } catch { /* continue */ }
+        } catch (err) {
+          devLog('[widget/order-photo-upload]', err?.message || err);
+        }
       }
       setSuccess(true);
     } catch (err) {

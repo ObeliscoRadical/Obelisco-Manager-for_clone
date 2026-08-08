@@ -2,7 +2,7 @@
 Service Orders module — migrated from Obelisco-Tecnicos-main.
 Manages service requests from clients (instalação, reparação, manutenção, etc.)
 """
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from pydantic import BaseModel, Field, EmailStr
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -12,6 +12,7 @@ import logging
 import os
 import asyncio
 import httpx
+import jwt
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +333,43 @@ def create_service_orders_router(db, get_current_user):
     def _now():
         return datetime.now(timezone.utc).isoformat()
 
+    async def _get_current_service_user(request: Request):
+        try:
+            user = await get_current_user(request)
+            return {**user, "_is_admin": _is_admin(user)}
+        except HTTPException:
+            pass
+
+        auth_header = request.headers.get("Authorization", "")
+        if not auth_header.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Não autenticado")
+
+        token = auth_header[7:]
+        try:
+            payload = jwt.decode(token, os.environ["JWT_SECRET"], algorithms=["HS256"])
+        except jwt.PyJWTError:
+            raise HTTPException(status_code=401, detail="Token inválido ou expirado")
+
+        if payload.get("type") != "tech":
+            raise HTTPException(status_code=401, detail="Token inválido")
+
+        employee = await db.employees.find_one({"id": payload.get("sub")}, {"_id": 0})
+        if not employee or not employee.get("active", True):
+            raise HTTPException(status_code=401, detail="Funcionário inativo ou inexistente")
+
+        employee.pop("password_hash", None)
+        return {
+            **employee,
+            "sub": employee.get("id"),
+            "_is_admin": False,
+            "is_tech": True,
+        }
+
+    def _is_order_visible_to_user(order: dict, user: dict) -> bool:
+        if user.get("_is_admin"):
+            return True
+        return str(order.get("assigned_technician_id") or "") == str(user.get("id") or user.get("sub") or "")
+
     # ── Dashboard ─────────────────────────────────────────────────
     @router.get("/dashboard/stats")
     async def get_dashboard_stats(user=Depends(get_current_user)):
@@ -448,10 +486,12 @@ def create_service_orders_router(db, get_current_user):
         return order
 
     @router.get("")
-    async def list_orders(status: Optional[str] = None, user=Depends(get_current_user)):
+    async def list_orders(status: Optional[str] = None, user=Depends(_get_current_service_user)):
         query = {}
         if status and status != "all":
             query["status"] = status
+        if not user.get("_is_admin"):
+            query["assigned_technician_id"] = str(user.get("id") or user.get("sub") or "")
         cursor = db.service_orders.find(query, {"_id": 0}).sort("created_at", -1)
         return await cursor.to_list(length=500)
 
@@ -469,10 +509,12 @@ def create_service_orders_router(db, get_current_user):
         return {"orders": orders, "total": total, "page": page, "pages": (total + limit - 1) // limit}
 
     @router.get("/{order_id}")
-    async def get_order(order_id: str, user=Depends(get_current_user)):
+    async def get_order(order_id: str, user=Depends(_get_current_service_user)):
         order = await db.service_orders.find_one({"id": order_id}, {"_id": 0})
         if not order:
             raise HTTPException(404, "Pedido não encontrado")
+        if not _is_order_visible_to_user(order, user):
+            raise HTTPException(403, "Sem acesso a este pedido")
         return order
 
     @router.patch("/{order_id}")
@@ -502,10 +544,12 @@ def create_service_orders_router(db, get_current_user):
 
     # ── Notes ─────────────────────────────────────────────────────
     @router.post("/{order_id}/notes")
-    async def add_note(order_id: str, data: NoteCreate, user=Depends(get_current_user)):
+    async def add_note(order_id: str, data: NoteCreate, user=Depends(_get_current_service_user)):
         order = await db.service_orders.find_one({"id": order_id})
         if not order:
             raise HTTPException(404, "Pedido não encontrado")
+        if not _is_order_visible_to_user(order, user):
+            raise HTTPException(403, "Sem acesso a este pedido")
         note = {
             "id": str(uuid.uuid4()),
             "text": data.text,
@@ -538,10 +582,12 @@ def create_service_orders_router(db, get_current_user):
 
     # ── Photos ────────────────────────────────────────────────────
     @router.post("/{order_id}/photos")
-    async def upload_photo(order_id: str, data: PhotoUpload, user=Depends(get_current_user)):
+    async def upload_photo(order_id: str, data: PhotoUpload, user=Depends(_get_current_service_user)):
         order = await db.service_orders.find_one({"id": order_id})
         if not order:
             raise HTTPException(404, "Pedido não encontrado")
+        if not _is_order_visible_to_user(order, user):
+            raise HTTPException(403, "Sem acesso a este pedido")
         photo = {
             "id": str(uuid.uuid4()),
             "image_data": data.image_data,

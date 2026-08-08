@@ -685,7 +685,7 @@ function WorkAnalysisDialog({ open, workId, onOpenChange }) {
                   {allHistory.length > 0 && (
                     <div className="space-y-2 max-h-72 overflow-y-auto">
                       {allHistory.map((h, i) => (
-                        <div key={i} className="flex items-center justify-between text-sm border-l-2 border-yellow-400/40 pl-3 py-1">
+                        <div key={`${h.at}-${h.item}-${h.by || 'user'}-${i}`} className="flex items-center justify-between text-sm border-l-2 border-yellow-400/40 pl-3 py-1">
                           <div>
                             <div className="text-white">{h.item}</div>
                             <div className="text-xs text-zinc-500">

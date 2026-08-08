@@ -295,7 +295,7 @@ export default function ImportarPropostaButton({ onImported }) {
                       {form.items.map((it, idx) => {
                         const lineSale = Number(it.unit_cost || 0) * (1 + Number(it.margin || 0)) * Number(it.quantity || 0);
                         return (
-                          <tr key={idx} className="border-t border-zinc-800/60 hover:bg-zinc-900/40" data-testid={`import-item-${idx}`}>
+                          <tr key={`${it.name}-${it.category}-${it.quantity}-${idx}`} className="border-t border-zinc-800/60 hover:bg-zinc-900/40" data-testid={`import-item-${idx}`}>
                             <td className="px-2 py-1">
                               <Input value={it.category} onChange={e => updateItem(idx, { category: e.target.value })}
                                 className="h-8 bg-zinc-900 border-zinc-800 text-white text-xs" />

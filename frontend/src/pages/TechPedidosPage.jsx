@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import TechLayout from '../components/TechLayout';
@@ -7,6 +7,7 @@ import {
   Loader2, AlertCircle, CheckCircle, Send, Trash2, Camera, X, Calendar, Zap
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { devLog } from '../lib/browserStorage';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -39,7 +40,7 @@ export default function TechPedidosPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selectedId, setSelectedId] = useState(null);
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true);
@@ -47,9 +48,12 @@ export default function TechPedidosPage() {
       const params = filter !== 'all' ? { status: filter } : {};
       const res = await axios.get(`${API}/api/service-orders`, { headers, params });
       setOrders(res.data);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      devLog('[tech-orders/list]', err?.message || err);
+      toast.error('Erro ao carregar pedidos');
+    }
     finally { setLoading(false); }
-  }, [filter, token]);
+  }, [filter, headers]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -112,45 +116,54 @@ export default function TechPedidosPage() {
 
 /* Detail for tech */
 function TechOrderDetail({ orderId, onBack }) {
-  const { user, token } = useAuth();
+  const { token } = useAuth();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
   const [newNote, setNewNote] = useState('');
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
   const fileInputRef = useRef(null);
 
-  const fetchOrder = async () => {
+  const fetchOrder = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/service-orders/${orderId}`, { headers });
       setOrder(res.data);
-    } catch { toast.error('Erro'); }
+    } catch (err) {
+      devLog('[tech-orders/detail]', err?.message || err);
+      toast.error('Erro ao carregar pedido');
+    }
     finally { setLoading(false); }
-  };
+  }, [headers, orderId]);
 
-  useEffect(() => { fetchOrder(); }, [orderId]);
+  useEffect(() => { fetchOrder(); }, [fetchOrder]);
 
-  const addNote = async () => {
+  const addNote = useCallback(async () => {
     if (!newNote.trim()) return;
     try {
       await axios.post(`${API}/api/service-orders/${orderId}/notes`, { text: newNote }, { headers });
       setNewNote('');
-      fetchOrder();
-    } catch { toast.error('Erro'); }
-  };
+      await fetchOrder();
+    } catch (err) {
+      devLog('[tech-orders/add-note]', err?.message || err);
+      toast.error('Erro ao guardar nota');
+    }
+  }, [fetchOrder, headers, newNote, orderId]);
 
-  const uploadPhoto = async (e) => {
+  const uploadPhoto = useCallback(async (e) => {
     const file = e.target.files?.[0];
     if (!file || file.size > 5 * 1024 * 1024) return;
     const reader = new FileReader();
     reader.onloadend = async () => {
       try {
         await axios.post(`${API}/api/service-orders/${orderId}/photos`, { image_data: reader.result, caption: '' }, { headers });
-        fetchOrder();
-      } catch { toast.error('Erro'); }
+        await fetchOrder();
+      } catch (err) {
+        devLog('[tech-orders/upload-photo]', err?.message || err);
+        toast.error('Erro ao enviar foto');
+      }
     };
     reader.readAsDataURL(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
+  }, [fetchOrder, headers, orderId]);
 
   if (loading) return <TechLayout><div className="flex justify-center py-20"><Loader2 className="w-7 h-7 text-yellow-400 animate-spin" /></div></TechLayout>;
   if (!order) return <TechLayout><div className="text-center py-20 text-zinc-500">Não encontrado</div></TechLayout>;

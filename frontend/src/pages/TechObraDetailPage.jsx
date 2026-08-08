@@ -146,8 +146,8 @@ export default function TechObraDetailPage() {
         {punchesForThisWork.length > 0 && (
           <div className="text-[11px] text-zinc-500 flex flex-wrap gap-x-3 gap-y-1" data-testid="tech-obra-punch-log">
             <span className="text-zinc-400 font-bold uppercase tracking-wider text-[10px]">Hoje aqui:</span>
-            {punchesForThisWork.map((p, i) => (
-              <span key={i} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
+            {punchesForThisWork.map((p) => (
+              <span key={p.id || `${p.action}-${p.at}`} className={p.action === 'in' ? 'text-emerald-400' : 'text-red-400'}>
                 {p.action === 'in' ? '→' : '←'} {new Date(p.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
               </span>
             ))}

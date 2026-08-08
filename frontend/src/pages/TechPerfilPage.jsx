@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { usePushNotifications } from '../hooks/usePushNotifications';
@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { User, Mail, Phone, MapPin, Building, Briefcase, Calendar, Euro, Clock, Sandwich, FileText, Bell, BellOff, BellRing, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { devLog } from '../lib/browserStorage';
 
 const Row = ({ icon: Icon, label, value }) => (
   <div className="flex items-start gap-3 py-2 border-b border-zinc-800/60 last:border-0">
@@ -26,14 +27,23 @@ export default function TechPerfilPage() {
   const [loading, setLoading] = useState(true);
   const push = usePushNotifications(token);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await api.get('/tech/profile');
-        setProfile(data);
-      } finally { setLoading(false); }
-    })();
+  const loadProfile = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/tech/profile');
+      setProfile(data);
+    } catch (err) {
+      devLog('[tech-profile]', err?.message || err);
+      toast.error('Erro ao carregar perfil.');
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
 
   if (loading) return (
     <div className="flex items-center justify-center py-24"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>

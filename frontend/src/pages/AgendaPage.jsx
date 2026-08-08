@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Clock, CalendarDays, Users, MapPin, Pencil, HardHat, AlertTriangle, CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { devLog } from '../lib/browserStorage';
 import { format } from 'date-fns';
 
 const emptyForm = { title: '', client_name: '', date: '', time_start: '09:00', time_end: '10:00', notes: '', employee_ids: [], location: '', work_id: '' };
@@ -134,7 +135,9 @@ export default function AgendaPage() {
       setForm(prev => ({ ...prev, date, time_start: `${hours}:${mins}`, time_end: newEnd }));
       setCalendarCheck(null);
       toast.success(`Horário alterado para ${s.display}`);
-    } catch { /* ignore */ }
+    } catch (err) {
+      devLog('[agenda/slot-select]', err?.message || err);
+    }
   };
 
   const handleSave = async () => {

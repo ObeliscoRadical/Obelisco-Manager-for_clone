@@ -8,6 +8,7 @@ const USER_KIND_KEY = 'obelisco_user_kind_session';
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const token = tokenStore.getAccess();
 
   const checkAuth = useCallback(async () => {
     const lastKind = safeSessionGetText(USER_KIND_KEY, null);
@@ -86,7 +87,7 @@ export function AuthProvider({ children }) {
     setUser(false);
   }, [user]);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const value = useMemo(() => ({ user, loading, token, login, logout }), [user, loading, token, login, logout]);
 
   return (
     <AuthContext.Provider value={value}>

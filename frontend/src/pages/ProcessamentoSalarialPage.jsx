@@ -332,7 +332,7 @@ export default function ProcessamentoSalarialPage() {
               <div className="flex flex-wrap gap-2">
                 {payDialog.plan.plan.map((line, i) => (
                   <button
-                    key={i}
+                    key={`${line.label}-${line.date}-${line.amount}-${i}`}
                     data-testid={`plan-line-${i}`}
                     onClick={() => fillFromPlan(line)}
                     className="text-xs bg-zinc-900 border border-zinc-700 hover:border-purple-400 rounded-lg px-3 py-2 text-left"

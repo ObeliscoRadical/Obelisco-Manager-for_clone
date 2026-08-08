@@ -635,7 +635,7 @@ export default function GuiasPage() {
                     <h4 className="text-white font-bold text-sm uppercase mb-2">Histórico</h4>
                     <div className="space-y-1.5 text-xs">
                       {detailGuide.history.slice().reverse().map((h, i) => (
-                        <div key={i} className="flex items-start gap-2 text-zinc-400">
+                        <div key={`${h.at}-${h.action}-${h.by || 'user'}-${i}`} className="flex items-start gap-2 text-zinc-400">
                           <span className="text-zinc-600 shrink-0">{new Date(h.at).toLocaleString('pt-PT')}</span>
                           <span className="text-yellow-400 font-semibold">{h.action}</span>
                           <span className="text-zinc-500">· {h.by}</span>

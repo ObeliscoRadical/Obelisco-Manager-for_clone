@@ -396,7 +396,7 @@ export default function MateriaisPage() {
                         const decision = importDialog.decisions[idx] || 'skip';
                         const badge = MATCH_BADGES[ln.match_status] || MATCH_BADGES.new;
                         return (
-                          <tr key={idx} data-testid={`import-line-${idx}`} className="border-t border-zinc-800 hover:bg-zinc-950/40">
+                          <tr key={`${ln.existing_id || ln.description}-${ln.quantity || idx}`} data-testid={`import-line-${idx}`} className="border-t border-zinc-800 hover:bg-zinc-950/40">
                             <td className="px-3 py-2">
                               <Badge className={`${badge.color} text-[10px]`}>{badge.label}</Badge>
                               {ln.match_status === 'fuzzy' && <div className="text-[10px] text-zinc-500 mt-1">sim {Math.round(ln.match_score * 100)}%</div>}

@@ -88,7 +88,7 @@ export default function ConfiguracoesSalariaisPage() {
           <p className="text-xs text-zinc-500 mb-3">Defina os limites brutos mensais (EUR) e a taxa aplicada. Para conformidade exata, valide com contabilista.</p>
           <div className="space-y-2">
             {(s.irs_brackets || []).map((b, i) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_40px] gap-2">
+              <div key={`${b.limit}-${b.rate}-${i}`} className="grid grid-cols-[1fr_1fr_40px] gap-2">
                 <Input type="number" value={b.limit} onChange={e => updateBracket(i, 'limit', e.target.value)} placeholder="Limite EUR" className="bg-zinc-900 border-zinc-700 text-white" />
                 <Input type="number" step="0.01" value={b.rate} onChange={e => updateBracket(i, 'rate', e.target.value)} placeholder="Taxa %" className="bg-zinc-900 border-zinc-700 text-white" />
                 <button onClick={() => removeBracket(i)} className="text-zinc-400 hover:text-red-400 flex items-center justify-center"><Trash2 size={14} /></button>

@@ -346,8 +346,8 @@ export default function DespesasPage() {
                     cursor={{ fill: 'rgba(250, 204, 21, 0.05)' }}
                   />
                   <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                    {monthlyChartData.map((d, i) => (
-                      <Cell key={i} fill={d.monthNum === month ? '#facc15' : '#3f3f46'} />
+                    {monthlyChartData.map((d) => (
+                      <Cell key={d.name || d.monthNum} fill={d.monthNum === month ? '#facc15' : '#3f3f46'} />
                     ))}
                   </Bar>
                 </BarChart>

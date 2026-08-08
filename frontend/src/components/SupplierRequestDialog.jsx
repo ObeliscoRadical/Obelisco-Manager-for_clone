@@ -185,7 +185,7 @@ export default function SupplierRequestDialog({ budget, settings, logoBase64, op
             const qtyChanged = ov.quantity !== undefined && Number(ov.quantity) !== Number(it.quantity);
             return (
               <div
-                key={idx}
+                key={it.id || `${it.name}-${it.category || 'cat'}-${idx}`}
                 data-testid={`supplier-item-${idx}`}
                 className={`w-full px-3 py-2.5 flex items-center gap-3 transition-colors ${checked ? 'bg-yellow-500/5' : 'hover:bg-zinc-900/60'}`}
               >
