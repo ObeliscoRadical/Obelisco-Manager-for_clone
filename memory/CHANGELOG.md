@@ -2,6 +2,38 @@
 
 ---
 
+## Aug 08, 2026 — P2: Filtros, mini gráfico, GPS equipa e segurança
+
+### Contas Previstas
+- **Frontend** (`ContasPrevistasPage.jsx`): nova barra de filtros por categoria + intervalo de datas
+- Estado vazio específico quando os filtros não devolvem linhas
+
+### Dashboard principal
+- **Backend** (`server.py`): `GET /api/dashboard/overview` agora devolve `monthly_revenue_vs_expenses`
+- **Frontend** (`DashboardPage.jsx`): novo mini gráfico mensal receitas vs despesas (últimos 6 meses)
+
+### GPS da equipa
+- **Backend** (`service_orders.py`): novo endpoint `GET /api/service-orders/timeclock/team-map`
+  - devolve `latest_positions`, `history_entries`, `summary`, `bounds`
+- **Frontend**:
+  - novo componente `TeamGeoMap.jsx`
+  - `RelatoriosPontoPage.jsx` agora mostra KPIs do mapa, última posição por técnico e trilho diário
+
+### Hardening segurança
+- **Backend** (`server.py`):
+  - CORS allow-list baseado em env + regex para domínios emergent
+  - rate limiting em rotas públicas (login, refresh, disponibilidade pública, propostas públicas, uploads públicos)
+  - headers de segurança em todas as respostas API
+- **Frontend** (`public/index.html`): meta CSP adicionada
+
+### Testes
+- Self-test backend/manual aprovado
+- `auto_frontend_testing_agent`: 100%
+- `deep_testing_backend_v2`: aprovado
+- **testing agent iteration 55**: backend 30/30 + frontend 100%
+
+---
+
 ## Aug 08, 2026 — CFO Virtual / Recuperação e Reestruturação de Crédito
 
 ### Novo módulo financeiro executivo

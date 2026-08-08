@@ -270,8 +270,8 @@ export default function DashboardPage() {
             </div>
             <div className="text-xs text-zinc-500 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1">Base real: pagamentos + despesas + salários</div>
           </div>
-          <div className="h-56" data-testid="dashboard-mini-revenue-expenses-chart">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="min-w-0 h-56" data-testid="dashboard-mini-revenue-expenses-chart">
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={miniRevenueVsExpenses} barGap={8}>
                 <XAxis dataKey="label" stroke="#71717a" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis stroke="#71717a" tick={{ fontSize: 11 }} tickFormatter={(v) => `${Math.round(v / 1000)}k`} axisLine={false} tickLine={false} width={42} />

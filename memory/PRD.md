@@ -50,6 +50,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **CFO Virtual / Recuperação & Reestruturação de Crédito** (`/cfo-virtual` — diagnóstico financeiro rigoroso com cruzamento obrigatório de saldo real, extratos recentes, custos fixos, dívidas ativas, recebimentos urgentes e oportunidades de margem em obras)
 - **Coleção de Dívidas Ativas** (`active_debts` com CRUD visual + backend FastAPI para passivo fiscal, segurança social, fornecedores e dívida bancária)
 - **Simulador de Fôlego Financeiro** (projeção tática com cortes exequíveis, cobrança extra, limites realistas e comentário do CFO sem promessas mágicas)
+- **Contas Previstas com Filtros** (filtro por categoria + intervalo de datas diretamente na página `/contas-previstas`)
+- **Mini gráfico mensal receitas vs despesas** (dashboard principal com leitura dos últimos 6 meses baseada em pagamentos recebidos vs despesas+salários)
+- **Mapa GPS da Equipa** (`/relatorios-ponto` com última posição por técnico, KPIs do mapa e trilho diário do técnico selecionado)
+- **Hardening Segurança Fase 1** (CORS allow-list baseado em env + regex emergent, rate limiting de rotas públicas, headers de segurança no backend e CSP no frontend)
 
 ## Atualização 2026-08-08 — CFO Virtual / Recuperação de Crédito
 - Entregue o novo módulo **Gabinete do CFO** com rota protegida `GET /cfo-virtual` e entrada própria na sidebar
@@ -74,6 +78,29 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Testado com sucesso:
   - curl/manual: login, dashboard, CRUD dívida, análise e simulador
   - testing agent iteration 54: backend 22/22 + frontend 100%
+
+## Atualização 2026-08-08 — P2 concluído (filtros, mini gráfico, GPS equipa, segurança)
+- **Contas Previstas**
+  - nova barra de filtros por `categoria`, `data inicial` e `data final`
+  - estado vazio específico quando os filtros não devolvem resultados
+- **Dashboard principal**
+  - novo bloco `monthly_revenue_vs_expenses` em `GET /api/dashboard/overview`
+  - mini gráfico mensal de receitas vs despesas com base real em pagamentos recebidos, despesas e salários
+- **Relatórios de Ponto**
+  - novo endpoint `GET /api/service-orders/timeclock/team-map`
+  - KPIs do mapa, lista de últimas posições, foco por técnico e trilho diário por data
+  - componente visual `TeamGeoMap.jsx`
+- **Hardening Segurança**
+  - CORS allow-list baseado em `CORS_ORIGINS` / `FRONTEND_URL`
+  - rate limit em login, refresh, disponibilidade pública, links públicos e uploads públicos
+  - headers: `Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`
+  - CSP também adicionada ao `frontend/public/index.html`
+- Testado com sucesso:
+  - self-test backend (headers, rate limit, team-map, dashboard overview)
+  - smoke test visual dashboard + contas previstas + relatórios ponto
+  - auto_frontend_testing_agent 100%
+  - deep_testing_backend_v2 aprovado
+  - testing agent iteration 55: backend 30/30 + frontend 100%
 
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
@@ -122,10 +149,6 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Exportar Custos Recorrentes
 
 ### P2
-- Filtros em Contas Previstas
-- Mini gráfico receitas vs despesas no dashboard
-- Mapa de equipa GPS
-- Hardening segurança (CORS allow-list, rate limiting, CSP)
 - TOC Online integration (se credenciais fornecidas)
 - Alertas Telegram automáticos de IVA/PPC perto do vencimento
 - Refactor server.py (>4000 linhas)
