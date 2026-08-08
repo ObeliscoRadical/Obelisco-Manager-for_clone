@@ -99,7 +99,7 @@ export const CfoSimulator = ({ dashboard }) => {
             <p className="text-sm text-zinc-300">{result.commentary?.recovery_window}</p>
             <ul className="space-y-2 text-sm text-zinc-300">
               {(result.commentary?.non_negotiables || []).map((item, idx) => (
-                <li key={idx} className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">{item}</li>
+                <li key={`${item}-${idx}`} className="rounded-xl border border-zinc-800 bg-zinc-950/60 px-3 py-2">{item}</li>
               ))}
             </ul>
             <p className="text-xs text-red-300">{result.commentary?.warning}</p>

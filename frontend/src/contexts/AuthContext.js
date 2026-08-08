@@ -1,26 +1,26 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import api, { tokenStore } from '../lib/api';
+import { devLog, safeSessionGetText, safeSessionRemove, safeSessionSetText } from '../lib/browserStorage';
 
 const AuthContext = createContext(null);
+const USER_KIND_KEY = 'obelisco_user_kind_session';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const checkAuth = useCallback(async () => {
-    // Se guardámos o kind na última sessão, tenta o endpoint correcto primeiro
-    let lastKind = null;
-    try { lastKind = localStorage.getItem('obelisco_user_kind'); } catch (e) {}
+    const lastKind = safeSessionGetText(USER_KIND_KEY, null);
 
     const tryTech = async () => {
       const { data } = await api.get('/tech/auth/me');
       setUser({ ...data, __kind: 'tech' });
-      try { localStorage.setItem('obelisco_user_kind', 'tech'); } catch (e) {}
+      safeSessionSetText(USER_KIND_KEY, 'tech');
     };
     const tryAdmin = async () => {
       const { data } = await api.get('/auth/me');
       setUser({ ...data, __kind: 'admin' });
-      try { localStorage.setItem('obelisco_user_kind', 'admin'); } catch (e) {}
+      safeSessionSetText(USER_KIND_KEY, 'admin');
     };
 
     try {
@@ -30,7 +30,7 @@ export function AuthProvider({ children }) {
         try { await tryAdmin(); } catch (e) { await tryTech(); }
       }
     } catch (err) {
-      console.debug('Auth check failed:', err?.response?.status || err.message);
+      devLog('Auth check failed:', err?.response?.status || err.message);
       setUser(false);
     } finally {
       setLoading(false);
@@ -49,6 +49,7 @@ export function AuthProvider({ children }) {
         tokenStore.set(data.access_token, data.refresh_token);
       }
       const u = { ...data, __kind: 'admin' };
+      safeSessionSetText(USER_KIND_KEY, 'admin');
       setUser(u);
       return u;
     } catch (adminErr) {
@@ -59,7 +60,7 @@ export function AuthProvider({ children }) {
           const { data } = await api.post('/tech/auth/login', { email, password });
           if (data.access_token) tokenStore.set(data.access_token, null);
           const u = { ...(data.employee || {}), __kind: 'tech' };
-          try { localStorage.setItem('obelisco_user_kind', 'tech'); } catch (e) {}
+          safeSessionSetText(USER_KIND_KEY, 'tech');
           setUser(u);
           return u;
         } catch (techErr) {
@@ -78,10 +79,10 @@ export function AuthProvider({ children }) {
         await api.post('/auth/logout');
       }
     } catch (err) {
-      console.error('Logout error:', err.message);
+      devLog('Logout error:', err?.message || err);
     }
     tokenStore.clear();
-    try { localStorage.removeItem('obelisco_user_kind'); } catch (e) {}
+    safeSessionRemove(USER_KIND_KEY);
     setUser(false);
   }, [user]);
 

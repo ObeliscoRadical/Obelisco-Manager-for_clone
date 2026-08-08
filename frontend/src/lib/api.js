@@ -1,26 +1,38 @@
 import axios from 'axios';
+import { devLog, safeSessionGetText, safeSessionRemove, safeSessionSetText } from './browserStorage';
 
-const ACCESS_KEY = 'obelisco_access_token';
-const REFRESH_KEY = 'obelisco_refresh_token';
+const ACCESS_KEY = 'obelisco_access_token_session';
+const REFRESH_KEY = 'obelisco_refresh_token_session';
+const inMemoryTokens = { access: null, refresh: null };
 
 export const tokenStore = {
   getAccess: () => {
-    try { return localStorage.getItem(ACCESS_KEY); } catch (err) { console.debug('[tokenStore.getAccess]', err); return null; }
+    if (inMemoryTokens.access) return inMemoryTokens.access;
+    const access = safeSessionGetText(ACCESS_KEY, null);
+    inMemoryTokens.access = access;
+    return access;
   },
   getRefresh: () => {
-    try { return localStorage.getItem(REFRESH_KEY); } catch (err) { console.debug('[tokenStore.getRefresh]', err); return null; }
+    if (inMemoryTokens.refresh) return inMemoryTokens.refresh;
+    const refresh = safeSessionGetText(REFRESH_KEY, null);
+    inMemoryTokens.refresh = refresh;
+    return refresh;
   },
   set: (access, refresh) => {
-    try {
-      if (access) localStorage.setItem(ACCESS_KEY, access);
-      if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
-    } catch (err) { console.debug('[tokenStore.set]', err); }
+    if (access) {
+      inMemoryTokens.access = access;
+      safeSessionSetText(ACCESS_KEY, access);
+    }
+    if (refresh) {
+      inMemoryTokens.refresh = refresh;
+      safeSessionSetText(REFRESH_KEY, refresh);
+    }
   },
   clear: () => {
-    try {
-      localStorage.removeItem(ACCESS_KEY);
-      localStorage.removeItem(REFRESH_KEY);
-    } catch (err) { console.debug('[tokenStore.clear]', err); }
+    inMemoryTokens.access = null;
+    inMemoryTokens.refresh = null;
+    safeSessionRemove(ACCESS_KEY);
+    safeSessionRemove(REFRESH_KEY);
   },
 };
 
@@ -30,7 +42,7 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
-// Attach Bearer token from localStorage (works in iframes where cookies are blocked)
+// Attach Bearer token from session-scoped fallback storage (works in iframes where cookies are blocked)
 api.interceptors.request.use((config) => {
   const token = tokenStore.getAccess();
   if (token) {
@@ -92,6 +104,9 @@ api.interceptors.response.use(
       }
     }
 
+    if (status === 401) {
+      devLog('[api] 401 without refresh', original?.url);
+    }
     return Promise.reject(error);
   }
 );

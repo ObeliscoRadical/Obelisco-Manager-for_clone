@@ -160,8 +160,8 @@ export default function DashboardPage() {
             </>
           ) : (
             <div className="space-y-2 mt-2">
-              {highlights.alerts.slice(0, 3).map((a, i) => (
-                <div key={i} className={`text-xs flex items-start gap-2 ${a.level === 'danger' ? 'text-red-300' : a.level === 'warning' ? 'text-yellow-300' : 'text-blue-300'}`}>
+              {highlights.alerts.slice(0, 3).map((a) => (
+                <div key={`${a.level}-${a.text}`} className={`text-xs flex items-start gap-2 ${a.level === 'danger' ? 'text-red-300' : a.level === 'warning' ? 'text-yellow-300' : 'text-blue-300'}`}>
                   <CircleDot size={10} className="mt-1 shrink-0" />
                   <span>{a.text}</span>
                 </div>
@@ -453,8 +453,8 @@ export default function DashboardPage() {
       {recent_activity.length > 0 && (
         <SectionCard title="Última atividade" icon={ClipboardList} link="/financeiro" linkLabel="Ver financeiro">
           <div className="space-y-2">
-            {recent_activity.map((a, i) => (
-              <div key={i} className="flex items-center justify-between text-sm border-b border-zinc-800 pb-2 last:border-0">
+            {recent_activity.map((a) => (
+              <div key={`${a.type}-${a.when}-${a.title}`} className="flex items-center justify-between text-sm border-b border-zinc-800 pb-2 last:border-0">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <ActivityIcon type={a.type} />
                   <div className="min-w-0 flex-1">

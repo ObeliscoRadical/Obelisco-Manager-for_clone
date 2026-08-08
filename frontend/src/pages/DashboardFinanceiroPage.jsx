@@ -129,7 +129,7 @@ export default function DashboardFinanceiroPage() {
             className="h-10 bg-zinc-900 border border-zinc-700 text-white rounded-md px-3 text-sm min-w-[140px]"
           >
             <option value="">Todos (ano)</option>
-            {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[220px]">
@@ -311,17 +311,17 @@ export default function DashboardFinanceiroPage() {
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="Entradas" radius={[4, 4, 0, 0]}>
                 {chartData.map((entry, i) => (
-                  <Cell key={`e-${i}`} fill="#22c55e" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                  <Cell key={`e-${entry.name}`} fill="#22c55e" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
                 ))}
               </Bar>
               <Bar dataKey="Saídas" radius={[4, 4, 0, 0]}>
                 {chartData.map((entry, i) => (
-                  <Cell key={`s-${i}`} fill="#ef4444" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                  <Cell key={`s-${entry.name}`} fill="#ef4444" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
                 ))}
               </Bar>
               <Bar dataKey="Resultado" radius={[4, 4, 0, 0]}>
                 {chartData.map((entry, i) => (
-                  <Cell key={`r-${i}`} fill="#facc15" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
+                  <Cell key={`r-${entry.name}`} fill="#facc15" fillOpacity={monthActive && (i + 1) !== data.month ? 0.25 : 1} />
                 ))}
               </Bar>
             </BarChart>
@@ -342,7 +342,7 @@ export default function DashboardFinanceiroPage() {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2}>
-                    {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    {pieData.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                   </Pie>
                   <Tooltip
                     contentStyle={{ background: '#18181b', border: '1px solid #3f3f46', borderRadius: 8, fontSize: 12 }}

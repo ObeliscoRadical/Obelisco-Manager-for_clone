@@ -13,15 +13,11 @@ import requests
 import os
 import io
 import uuid
+from auth_test_helpers import get_admin_credentials, get_base_url
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-if not BASE_URL:
-    # Fallback for local testing
-    BASE_URL = "https://bank-consolidate.preview.emergentagent.com"
+BASE_URL = get_base_url()
 
-# Test credentials from test_credentials.md
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 
 
 @pytest.fixture(scope="module")

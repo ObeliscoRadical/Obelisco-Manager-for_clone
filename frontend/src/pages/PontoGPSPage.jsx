@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Clock, MapPin, CheckCircle, Loader2, AlertCircle, LogIn, LogOut as LogOutIcon, MapPinned
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { devLog } from '../lib/browserStorage';
 
 const API = process.env.REACT_APP_BACKEND_URL;
 
@@ -15,35 +16,35 @@ export default function PontoGPSPage() {
   const [registering, setRegistering] = useState(false);
   const [locationError, setLocationError] = useState('');
   const [todayEntries, setTodayEntries] = useState([]);
-  const headers = { Authorization: `Bearer ${token}` };
+  const headers = useMemo(() => ({ Authorization: `Bearer ${token}` }), [token]);
   const isAdmin = user?.role === 'admin';
 
-  const fetchStatus = async () => {
+  const fetchStatus = useCallback(async () => {
     try {
       const res = await axios.get(`${API}/api/service-orders/timeclock/my-status`, { headers });
       setStatus(res.data);
       setTodayEntries(res.data.today_entries || []);
     } catch (err) {
-      console.error(err);
+      devLog('[ponto/status]', err?.message || err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [headers]);
 
-  const fetchAllToday = async () => {
+  const fetchAllToday = useCallback(async () => {
     if (!isAdmin) return;
     try {
       const res = await axios.get(`${API}/api/service-orders/timeclock/today`, { headers });
       setTodayEntries(res.data);
     } catch (err) {
-      console.error(err);
+      devLog('[ponto/today]', err?.message || err);
     }
-  };
+  }, [headers, isAdmin]);
 
   useEffect(() => {
     fetchStatus();
     if (isAdmin) fetchAllToday();
-  }, []);
+  }, [fetchAllToday, fetchStatus, isAdmin]);
 
   const getLocation = () => new Promise((resolve, reject) => {
     if (!navigator.geolocation) { reject(new Error('Geolocalização não suportada')); return; }
@@ -67,7 +68,9 @@ export default function PontoGPSPage() {
         const geo = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${loc.latitude}&lon=${loc.longitude}`);
         const data = await geo.json();
         address = data.display_name;
-      } catch { /* optional */ }
+      } catch (err) {
+        devLog('[ponto/reverse-geocode]', err?.message || err);
+      }
 
       await axios.post(`${API}/api/service-orders/timeclock`, {
         type, latitude: loc.latitude, longitude: loc.longitude, address,

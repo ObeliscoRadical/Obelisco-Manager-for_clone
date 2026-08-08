@@ -14,17 +14,18 @@ import os
 import time
 import pytest
 import requests
+from auth_test_helpers import get_admin_credentials, get_tech_credentials, unique_test_password
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://bank-consolidate.preview.emergentagent.com").rstrip("/")
 
-ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
-ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
+REAL_TECH_EMAIL, REAL_TECH_PASSWORD = get_tech_credentials()
 
 TS = int(time.time())
 TEC_EMAIL = f"testtec_{TS}@obelisco.pt"
-TEC_PASSWORD = "test1234"
+TEC_PASSWORD = unique_test_password("tec-portal")
 CONSULTA_EMAIL = f"testconsulta_{TS}@obelisco.pt"
-CONSULTA_PASSWORD = "test1234"
+CONSULTA_PASSWORD = unique_test_password("consulta-portal")
 
 
 # ------------ Fixtures ------------
@@ -163,7 +164,7 @@ class TestRegressions:
     def test_22_real_tech_still_works(self):
         # Real employee tech via /tech/auth/login
         r = requests.post(f"{BASE_URL}/api/tech/auth/login",
-                          json={"email": os.environ.get("TEST_TECH_EMAIL", "d.oliveira1986@gmail.com"), "password": os.environ.get("TEST_TECH_PASSWORD", "A24d22r04")})
+                          json={"email": REAL_TECH_EMAIL, "password": REAL_TECH_PASSWORD})
         assert r.status_code == 200, f"Real tech login broken: {r.text}"
         tok = r.json()["access_token"]
         # can see own guides

@@ -12,16 +12,15 @@ import pytest
 import requests
 import os
 import uuid
+from auth_test_helpers import get_admin_credentials, unique_test_password
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 
-# Test credentials
-ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@obelisco.pt")
-ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "obelisco2024")
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 
 # Tech credentials (will be set during tests)
-TECH_EMAIL = "tecnico@obelisco.pt"
-TECH_PASSWORD = "tech1234"
+TECH_EMAIL = os.environ.get("TEST_TRANSPORT_GUIDES_TECH_EMAIL", "tecnico@obelisco.pt")
+TECH_PASSWORD = os.environ.get("TEST_TRANSPORT_GUIDES_TECH_PASSWORD") or unique_test_password("transport-tech")
 
 
 class TestSetup:
@@ -119,6 +118,7 @@ class TestEmployeePasswordManagement:
     
     def test_set_password_employee_without_email(self, admin_headers):
         """Cannot set password for employee without email"""
+        missing_email_password = unique_test_password("missing-email")
         # Create employee without email
         emp_data = {
             "name": "TEST_NoEmail Worker",
@@ -135,7 +135,7 @@ class TestEmployeePasswordManagement:
         try:
             response = requests.post(
                 f"{BASE_URL}/api/employees/{emp['id']}/set-password",
-                json={"password": "test1234"},
+                json={"password": missing_email_password},
                 headers=admin_headers
             )
             assert response.status_code == 400
@@ -147,9 +147,10 @@ class TestEmployeePasswordManagement:
     
     def test_set_password_nonexistent_employee(self, admin_headers):
         """404 for nonexistent employee"""
+        unknown_employee_password = unique_test_password("unknown-employee")
         response = requests.post(
             f"{BASE_URL}/api/employees/nonexistent-id-12345/set-password",
-            json={"password": "test1234"},
+            json={"password": unknown_employee_password},
             headers=admin_headers
         )
         assert response.status_code == 404
@@ -228,6 +229,7 @@ class TestTechAuth:
     
     def test_tech_login_inactive_employee(self, admin_headers):
         """Tech login fails for inactive employee (403)"""
+        inactive_employee_password = unique_test_password("inactive-employee")
         # Create inactive employee
         emp_data = {
             "name": "TEST_Inactive Tech",
@@ -245,14 +247,14 @@ class TestTechAuth:
             # Set password
             requests.post(
                 f"{BASE_URL}/api/employees/{emp['id']}/set-password",
-                json={"password": "test1234"},
+                json={"password": inactive_employee_password},
                 headers=admin_headers
             )
             
             # Try to login
             response = requests.post(f"{BASE_URL}/api/tech/auth/login", json={
                 "email": emp["email"],
-                "password": "test1234"
+                "password": inactive_employee_password
             })
             assert response.status_code == 403, f"Expected 403, got {response.status_code}: {response.text}"
             assert "inativ" in response.json().get("detail", "").lower()

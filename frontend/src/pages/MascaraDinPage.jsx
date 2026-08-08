@@ -9,6 +9,7 @@ import { Ruler, FileDown, Plus, Trash2, Merge, Split, Download, Rows3 } from 'lu
 import { toast } from 'sonner';
 import api from '../lib/api';
 import { generateMascaraDinPDF } from '../lib/mascaraDinPdf';
+import { devLog, safeSessionGetJson, safeSessionSetJson } from '../lib/browserStorage';
 
 const POSITIONS_OPTIONS = [12, 18, 24, 36];
 const MODULE_MM = 18;
@@ -45,12 +46,11 @@ export default function MascaraDinPage() {
   const CFG_KEY = 'mascara_din_config';
 
   const [config, setConfig] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(CFG_KEY)) || { positionsPerRow: 18, stripHeightMm: 12 }; }
-    catch { return { positionsPerRow: 18, stripHeightMm: 12 }; }
+    return safeSessionGetJson(CFG_KEY, { positionsPerRow: 18, stripHeightMm: 12 }) || { positionsPerRow: 18, stripHeightMm: 12 };
   });
 
   useEffect(() => {
-    try { localStorage.setItem(CFG_KEY, JSON.stringify(config)); } catch { /* ignore */ }
+    safeSessionSetJson(CFG_KEY, config);
   }, [config]);
 
   const [header, setHeader] = useState({
@@ -63,7 +63,7 @@ export default function MascaraDinPage() {
   const [cellEditor, setCellEditor] = useState(null); // { rowIdx, cellIdx }
 
   useEffect(() => {
-    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch(() => {});
+    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[mascara/logo]', err?.message));
   }, []);
 
   // === Configuração ===
@@ -140,14 +140,15 @@ export default function MascaraDinPage() {
   // === Importar da Legenda ===
   const openImport = () => {
     try {
-      const raw = JSON.parse(localStorage.getItem('legenda_quadro_last') || 'null');
+      const raw = safeSessionGetJson('legenda_quadro_last', null);
       if (!raw || !Array.isArray(raw.modules) || raw.modules.length === 0) {
         toast.error('Não há dados na Legenda. Vá primeiro a "Legenda de Quadro".');
         return;
       }
       setImportPreview(raw);
       setImportDialogOpen(true);
-    } catch {
+    } catch (err) {
+      devLog('[mascara/import]', err?.message || err);
       toast.error('Erro a ler dados da Legenda.');
     }
   };
@@ -200,7 +201,7 @@ export default function MascaraDinPage() {
       generateMascaraDinPDF({ header, rows, config, logoBase64 });
       toast.success(`Máscara gerada — ${rows.length} fila(s) a ${totalRealWidthMm} mm cada.`);
     } catch (e) {
-      console.error(e);
+      devLog('[mascara/pdf]', e?.message || e);
       toast.error('Erro ao gerar PDF.');
     }
   };

@@ -9,11 +9,11 @@ import os
 import pytest
 import requests
 from dotenv import load_dotenv
+from auth_test_helpers import get_admin_credentials
 
 load_dotenv("/app/frontend/.env")
 BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 CSV_PATH = "/tmp/extrato_teste.csv"
 
 

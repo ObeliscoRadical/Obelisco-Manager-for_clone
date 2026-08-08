@@ -12,12 +12,10 @@ import asyncio
 import pytest
 import requests
 from datetime import datetime, timezone
+from auth_test_helpers import get_admin_credentials, get_base_url
 
-from dotenv import dotenv_values
-_fe_env = dotenv_values("/app/frontend/.env")
-BASE_URL = (os.environ.get('REACT_APP_BACKEND_URL') or _fe_env.get('REACT_APP_BACKEND_URL')).rstrip('/')
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+BASE_URL = get_base_url()
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 
 
 @pytest.fixture(scope="module")

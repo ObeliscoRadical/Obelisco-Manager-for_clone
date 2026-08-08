@@ -8,6 +8,7 @@ import { Plus, Trash2, FileDown, LayoutGrid, ChevronUp, ChevronDown, Copy, Arrow
 import { toast } from 'sonner';
 import api from '../lib/api';
 import { generateLegendaQuadroPDF } from '../lib/legendaQuadroPdf';
+import { devLog, safeSessionGetJson, safeSessionGetText, safeSessionSetJson, safeSessionSetText } from '../lib/browserStorage';
 
 const COMPONENT_TYPES = [
   'Corte Geral / Interruptor Geral',
@@ -38,12 +39,10 @@ export default function LegendaQuadroPage() {
   const TYPE_KEY = 'legenda_quadro_type_history';
 
   const [descHistory, setDescHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(HIST_KEY) || '[]'); }
-    catch { return []; }
+    return safeSessionGetJson(HIST_KEY, []);
   });
   const [customTypes, setCustomTypes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(TYPE_KEY) || '[]'); }
-    catch { return []; }
+    return safeSessionGetJson(TYPE_KEY, []);
   });
 
   const saveDesc = (val) => {
@@ -51,7 +50,7 @@ export default function LegendaQuadroPage() {
     if (!v || v.length < 2) return;
     setDescHistory(prev => {
       const dedup = [v, ...prev.filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 100);
-      try { localStorage.setItem(HIST_KEY, JSON.stringify(dedup)); } catch { /* ignore */ }
+      safeSessionSetJson(HIST_KEY, dedup);
       return dedup;
     });
   };
@@ -63,7 +62,7 @@ export default function LegendaQuadroPage() {
     if (COMPONENT_TYPES.some(t => t.toLowerCase() === v.toLowerCase())) return;
     setCustomTypes(prev => {
       const dedup = [v, ...prev.filter(x => x.toLowerCase() !== v.toLowerCase())].slice(0, 50);
-      try { localStorage.setItem(TYPE_KEY, JSON.stringify(dedup)); } catch { /* ignore */ }
+      safeSessionSetJson(TYPE_KEY, dedup);
       return dedup;
     });
   };
@@ -76,20 +75,20 @@ export default function LegendaQuadroPage() {
   });
   const [modules, setModules] = useState([newModule(1), newModule(2), newModule(3)]);
   const [logoBase64, setLogoBase64] = useState(null);
-  const [layout, setLayout] = useState(() => localStorage.getItem('legenda_quadro_layout') || 'horizontal');
+  const [layout, setLayout] = useState(() => safeSessionGetText('legenda_quadro_layout', 'horizontal') || 'horizontal');
 
   useEffect(() => {
-    try { localStorage.setItem('legenda_quadro_layout', layout); } catch { /* ignore */ }
+    safeSessionSetText('legenda_quadro_layout', layout);
   }, [layout]);
 
   useEffect(() => {
     // Carrega o logo (mesma técnica das outras páginas)
-    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch(() => {});
+    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[legenda/logo]', err?.message));
   }, []);
 
   // Guarda a sessão actual para poder ser importada pelo módulo Máscara DIN
   useEffect(() => {
-    try { localStorage.setItem('legenda_quadro_last', JSON.stringify({ header, modules })); } catch { /* ignore */ }
+    safeSessionSetJson('legenda_quadro_last', { header, modules });
   }, [header, modules]);
 
   const renumber = (list) => list.map((m, i) => ({ ...m, number: i + 1 }));
@@ -120,7 +119,7 @@ export default function LegendaQuadroPage() {
       generateLegendaQuadroPDF(header, modules, logoBase64, { layout });
       toast.success(`Legenda gerada (${modules.length} módulos · ${totalPages} folha${totalPages === 1 ? '' : 's'} A4 ${layout === 'vertical' ? 'vertical' : 'horizontal'}).`);
     } catch (e) {
-      console.error(e);
+      devLog('[legenda/pdf]', e?.message || e);
       toast.error('Erro ao gerar PDF.');
     }
   };

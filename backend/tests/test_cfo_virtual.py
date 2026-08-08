@@ -14,12 +14,10 @@ import pytest
 import requests
 import os
 import uuid
+from auth_test_helpers import get_admin_credentials, get_base_url
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
-
-# Test credentials
-ADMIN_EMAIL = "admin@obelisco.pt"
-ADMIN_PASSWORD = "obelisco2024"
+BASE_URL = get_base_url()
+ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 
 
 @pytest.fixture(scope="module")

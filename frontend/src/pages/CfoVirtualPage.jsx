@@ -123,7 +123,7 @@ export default function CfoVirtualPage() {
                 <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">Cirurgia de custos</p>
                 <div className="space-y-3">
                   {(aiAnalysis.cost_surgery_actions || []).map((item, idx) => (
-                    <div key={idx} data-testid={`cost-surgery-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+                    <div key={`${item.title}-${item.why_now}-${idx}`} data-testid={`cost-surgery-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-sm font-bold text-white">{item.title}</p>
@@ -144,7 +144,7 @@ export default function CfoVirtualPage() {
                 <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">Plano de tesouraria tático</p>
                 <div className="space-y-3">
                   {(aiAnalysis.tactical_treasury_plan || []).map((item, idx) => (
-                    <div key={idx} data-testid={`treasury-plan-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+                    <div key={`${item.title}-${item.target}-${idx}`} data-testid={`treasury-plan-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
                       <div className="flex items-center justify-between gap-4 flex-wrap">
                         <div>
                           <p className="text-sm font-bold text-white">{item.title}</p>
@@ -165,7 +165,7 @@ export default function CfoVirtualPage() {
                 <p className="mb-3 text-xs uppercase tracking-[0.25em] text-zinc-500">Ordens do dia</p>
                 <div className="grid gap-3 md:grid-cols-3">
                   {(aiAnalysis.orders_of_day || []).map((item, idx) => (
-                    <div key={idx} data-testid={`order-of-day-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-300">{item}</div>
+                    <div key={`${item}-${idx}`} data-testid={`order-of-day-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 text-sm text-zinc-300">{item}</div>
                   ))}
                 </div>
               </div>
@@ -183,7 +183,7 @@ export default function CfoVirtualPage() {
             {(analysis?.cash_allocation || dashboard?.cash_allocation || []).length ? (
               <div className="space-y-3">
                 {(analysis?.cash_allocation || dashboard?.cash_allocation || []).map((item, idx) => (
-                  <div key={idx} data-testid={`cash-allocation-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
+                  <div key={`${item.creditor}-${item.tipo_divida}-${item.amount}-${idx}`} data-testid={`cash-allocation-item-${idx}`} className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <p className="text-sm font-bold text-white">{item.creditor}</p>
