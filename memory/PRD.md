@@ -251,6 +251,31 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - testing agent iteration 61: backend `20/20`, frontend `100%`
   - suites pytest validadas: `test_multitenancy.py` + `test_multitenancy_phase2.py`
 
+## Atualização 2026-08-11 — Registo self-service no Login
+- **Novo fluxo de criação de conta no próprio `/login`**
+  - separadores `Entrar / Criar conta`
+  - o tab **Criar conta** pede:
+    - nome do responsável
+    - nome da empresa
+    - email
+    - password
+- **Backend auth expandido**
+  - novo endpoint `POST /api/auth/register`
+  - cria automaticamente:
+    - nova empresa/tenant (`companies`)
+    - `system_settings` inicial do tenant
+    - primeiro utilizador administrador com acesso total
+  - aplica login automático via `access_token`, `refresh_token` e `active_company_id`
+- **Frontend login redesenhado**
+  - `LoginPage.jsx` agora alterna entre formulário de entrada e formulário de registo
+  - caixa informativa explica claramente que nasce uma nova gestão isolada
+  - redireciona automaticamente para o dashboard após registo
+- **Validação formal**
+  - self-test API: registo cria empresa + admin e `GET /api/auth/me` / `GET /api/companies/current` confirmam o novo tenant
+  - smoke test visual completo do registo com redirecionamento ao dashboard
+  - testing agent iteration 62: backend `13/13`, frontend `100%`
+  - pytest adicional: `/app/backend/tests/test_self_service_registration.py` → `13 passed`
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -298,6 +323,8 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - troca de empresa no seletor global
   - criação de utilizador por tenant
   - login técnico e contexto da empresa no portal técnico
+- Melhorias ao onboarding de nova conta:
+  - wizard pós-registo para completar NIF, telefone, morada e branding da empresa
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes

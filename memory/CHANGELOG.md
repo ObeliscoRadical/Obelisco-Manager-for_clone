@@ -12,6 +12,12 @@
 - `/api/users` agora inclui utilizadores com acesso ao tenant atual mesmo quando a empresa principal é outra
 - Validação: self-test API Fase 2 + smoke visual autenticado + testing agent iteration 61 (backend 20/20, frontend 100%)
 
+## 2026-08-11 — Registo self-service no login
+- Novo separador **Criar conta** dentro de `/login`, com criação de nova empresa + novo admin + login automático
+- Backend com `POST /api/auth/register` para nascer um tenant totalmente isolado com `system_settings` inicial
+- Frontend do login refeito com tabs `Entrar / Criar conta`, formulário de onboarding curto e caixa explicativa do fluxo
+- Validação: self-test API + smoke visual do registo + testing agent iteration 62 (backend 13/13, frontend 100%)
+
 # Obelisco Manager - CHANGELOG
 
 ---

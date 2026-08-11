@@ -183,6 +183,13 @@ class LoginInput(BaseModel):
     password: str
 
 
+class RegisterTenantInput(BaseModel):
+    name: str
+    email: str
+    password: str
+    company_name: str
+
+
 class CompanyCreateInput(BaseModel):
     name: str
     subtitle: str = ""
@@ -302,6 +309,87 @@ async def login(input: LoginInput, request: Request, response: Response):
         "name": user["name"],
         "role": user.get("role", "user"),
         "module_permissions": user.get("module_permissions") or default_modules_for_role(user.get("role", "consulta")),
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        **company_context,
+    }
+
+
+@api_router.post("/auth/register")
+async def register_tenant(input: RegisterTenantInput, request: Request, response: Response):
+    email = input.email.lower().strip()
+    responsible_name = (input.name or "").strip()
+    company_name = (input.company_name or "").strip()
+    password = input.password or ""
+
+    if not responsible_name:
+        raise HTTPException(status_code=400, detail="Nome do responsável é obrigatório")
+    if not company_name:
+        raise HTTPException(status_code=400, detail="Nome da empresa é obrigatório")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="A password deve ter pelo menos 6 caracteres")
+
+    existing_user = await raw_db.users.find_one({"email": email}, {"_id": 0})
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Este email já está registado")
+
+    company_id = str(uuid.uuid4())
+    company_payload = {
+        "id": company_id,
+        "name": company_name,
+        "slug": await _build_unique_company_slug(company_name),
+        "subtitle": "",
+        "phone": "",
+        "email": email,
+        "website": "",
+        "address": "",
+        "nif": "",
+        "status": "active",
+        "is_default": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await raw_db.companies.insert_one(dict(company_payload))
+    await raw_db.system_settings.insert_one({
+        **DEFAULT_SYSTEM_SETTINGS,
+        "company_id": company_id,
+        "company_info": {
+            **DEFAULT_SYSTEM_SETTINGS.get("company_info", {}),
+            "name": company_payload["name"],
+            "subtitle": company_payload["subtitle"],
+            "phone": company_payload["phone"],
+            "email": company_payload["email"],
+            "website": company_payload["website"],
+            "address": company_payload["address"],
+            "nif": company_payload["nif"],
+        },
+    })
+
+    user_doc = {
+        "email": email,
+        "password_hash": hash_password(password),
+        "name": responsible_name,
+        "role": "admin",
+        "module_permissions": default_modules_for_role("admin"),
+        "company_id": company_id,
+        "company_access_ids": [company_id],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    insert_result = await raw_db.users.insert_one(dict(user_doc))
+
+    access_token = create_access_token(str(insert_result.inserted_id), email)
+    refresh_token = create_refresh_token(str(insert_result.inserted_id))
+    company_context = await resolve_company_context(raw_db, user_doc, preferred_company_id=get_requested_company_id(request) or company_id)
+
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
+    set_active_company_cookie(response, company_context.get("company_id"))
+
+    return {
+        "id": str(insert_result.inserted_id),
+        "email": email,
+        "name": responsible_name,
+        "role": "admin",
+        "module_permissions": user_doc["module_permissions"],
         "access_token": access_token,
         "refresh_token": refresh_token,
         **company_context,

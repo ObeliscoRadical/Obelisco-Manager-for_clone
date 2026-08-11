@@ -83,6 +83,23 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  const register = useCallback(async ({ name, email, password, companyName }) => {
+    const { data } = await api.post('/auth/register', {
+      name,
+      email,
+      password,
+      company_name: companyName,
+    });
+    if (data.access_token || data.refresh_token) {
+      tokenStore.set(data.access_token, data.refresh_token);
+    }
+    persistCompanySession(data?.company_id);
+    const nextUser = { ...data, __kind: 'admin' };
+    safeSessionSetText(USER_KIND_KEY, 'admin');
+    setUser(nextUser);
+    return nextUser;
+  }, []);
+
   const logout = useCallback(async () => {
     try {
       // Só chama logout admin se for admin — tech não tem endpoint logout
@@ -110,7 +127,7 @@ export function AuthProvider({ children }) {
     return data;
   }, []);
 
-  const value = useMemo(() => ({ user, loading, token, login, logout, refreshAuth, switchCompany }), [user, loading, token, login, logout, refreshAuth, switchCompany]);
+  const value = useMemo(() => ({ user, loading, token, login, register, logout, refreshAuth, switchCompany }), [user, loading, token, login, register, logout, refreshAuth, switchCompany]);
 
   return (
     <AuthContext.Provider value={value}>

@@ -6,6 +6,7 @@
 - respostas de auth incluem contexto multiempresa (`company_id`, `company_name`, `company_slug`, `available_companies`)
 - seletor de empresa deve manter o isolamento por tenant após login e refresh
 - Fase 2 visual: gestão de tenants, edição de empresa e atribuição de acessos multiempresa por utilizador
+- novo registo self-service no login: cria empresa + primeiro admin + login automático
 
 ## Step 1: MongoDB Verification
 Verificar no MongoDB:
@@ -48,6 +49,7 @@ curl -b cookies.txt -H "X-Company-Id: <tenant_id>" "$BASE_URL/api/users"
 
 Validar:
 1. Login admin devolve utilizador + `company_id` + `available_companies`
+2. `POST /api/auth/register` cria nova empresa/tenant e novo admin com login automático
 2. `/api/auth/me` mantém a mesma empresa activa
 3. `/api/companies/current` devolve a empresa atual e contagens coerentes
 4. `/api/companies` lista empresas acessíveis ao utilizador
@@ -60,6 +62,8 @@ Validar:
 
 ## Step 3: Frontend Smoke
 1. Login admin em `/login`
+2. Separadores `Entrar / Criar conta` aparecem e o tab de registo abre o novo formulário
+3. Registo com nome + email + password + nome da empresa cria nova conta e redireciona para o dashboard
 2. Verificar seletor na sidebar (`company-switcher-trigger`)
 3. Trocar de empresa e confirmar atualização do resumo activo
 4. Entrar em `/empresas`, validar cards, criar/editar tenant e abrir modal de acessos
@@ -69,6 +73,7 @@ Validar:
 
 ## Endpoints relevantes
 - `POST /api/auth/login`
+- `POST /api/auth/register`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `POST /api/auth/refresh`

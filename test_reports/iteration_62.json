@@ -1,0 +1,163 @@
+{
+  "summary": "Iteration 62: Self-Service Registration feature - ALL TESTS PASSED. Backend: 13/13 pytest tests passed covering registration flow, validation, auto-login, tenant isolation, and regression tests for admin/tech login. Frontend: All UI elements verified - tabs Entrar/Criar conta, register form with all fields, auto-login to dashboard with correct company context, admin and tech login regressions passed.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_self_service_registration.py",
+    "/app/test_reports/pytest/iter62_registration.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: POST /api/auth/register properly creates company + admin user with isolated tenant",
+    "server.py: RegisterTenantInput validates name, email, password (min 6 chars), company_name",
+    "server.py: Registration returns access_token, refresh_token, and full company context for auto-login",
+    "server.py: Duplicate email check prevents re-registration with existing email",
+    "AuthContext.js: register() function properly calls /api/auth/register and sets user state",
+    "LoginPage.jsx: Tabs Entrar/Criar conta switch between login and register forms correctly",
+    "LoginPage.jsx: All form fields have proper data-testid attributes for testing",
+    "LoginPage.jsx: Info box explains what happens on registration (new tenant, admin, auto-login)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_self_service_registration.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100% (all UI elements and flows verified)"
+  },
+  "test_credentials": "Read from /app/memory/test_credentials.md - Admin: admin@obelisco.pt/obelisco2024, Tech: d.oliveira1986@gmail.com/A24d22r04",
+  "seed_data_creation": "Test created multiple TEST_ prefixed companies and users during backend testing (TEST_Responsavel_*, TEST_AuthMe_*, TEST_CompCurrent_*, TEST_Isolation_*, TEST_CompList_*, TEST_UI_*)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Self-service registration fully validated. Key verifications: (1) POST /api/auth/register creates new company + admin user with auto-login, (2) Response includes company_id, company_name, company_slug, available_companies, access_token, refresh_token, (3) GET /api/auth/me and GET /api/companies/current return new tenant after registration, (4) Validation rejects missing name, missing company_name, short password (<6 chars), duplicate email, (5) New account has isolated tenant (available_companies contains only their company), (6) Admin login regression passed - still works with company context, (7) Tech login regression passed - still redirects to /tech portal. Frontend: Tabs Entrar/Criar conta work correctly, register form has all required fields (name, company_name, email, password), info box explains registration, auto-login redirects to dashboard with correct company in switcher.",
+  "verification_results": {
+    "backend_api": {
+      "register_creates_company_and_admin": {
+        "endpoint": "POST /api/auth/register",
+        "creates_company": true,
+        "creates_admin_user": true,
+        "returns_tokens": true,
+        "returns_company_context": true,
+        "status": "PASS"
+      },
+      "register_then_auth_me": {
+        "endpoint": "GET /api/auth/me",
+        "returns_new_tenant": true,
+        "status": "PASS"
+      },
+      "register_then_companies_current": {
+        "endpoint": "GET /api/companies/current",
+        "returns_new_tenant": true,
+        "status": "PASS"
+      },
+      "validation_missing_name": {
+        "returns_400": true,
+        "status": "PASS"
+      },
+      "validation_missing_company_name": {
+        "returns_400": true,
+        "status": "PASS"
+      },
+      "validation_short_password": {
+        "returns_400": true,
+        "status": "PASS"
+      },
+      "validation_duplicate_email": {
+        "returns_400": true,
+        "status": "PASS"
+      },
+      "admin_login_regression": {
+        "endpoint": "POST /api/auth/login",
+        "still_works": true,
+        "returns_company_context": true,
+        "status": "PASS"
+      },
+      "tech_login_regression": {
+        "endpoint": "POST /api/tech/auth/login",
+        "still_works": true,
+        "returns_employee_context": true,
+        "status": "PASS"
+      },
+      "new_account_isolation": {
+        "available_companies_count": 1,
+        "companies_list_isolated": true,
+        "status": "PASS"
+      }
+    },
+    "frontend_ui": {
+      "login_page_tabs": {
+        "url": "/login",
+        "data_testid": "auth-mode-tabs",
+        "entrar_tab": true,
+        "criar_conta_tab": true,
+        "tabs_switch_correctly": true,
+        "status": "PASS"
+      },
+      "register_form": {
+        "data_testid": "register-form",
+        "name_input": true,
+        "company_name_input": true,
+        "email_input": true,
+        "password_input": true,
+        "submit_button": true,
+        "info_box": true,
+        "status": "PASS"
+      },
+      "registration_flow": {
+        "form_submission": true,
+        "auto_login": true,
+        "redirect_to_dashboard": true,
+        "company_switcher_shows_new_company": true,
+        "status": "PASS"
+      },
+      "admin_login_regression": {
+        "login_works": true,
+        "redirect_to_dashboard": true,
+        "company_switcher_visible": true,
+        "company_name": "Obelisco Radical",
+        "status": "PASS"
+      },
+      "tech_login_regression": {
+        "login_works": true,
+        "redirect_to_tech_portal": true,
+        "company_name_in_header": "Obelisco Radical",
+        "tech_user_name": "Daniel Oliveira",
+        "status": "PASS"
+      }
+    },
+    "pytest_results": {
+      "test_file": "/app/backend/tests/test_self_service_registration.py",
+      "tests_passed": 13,
+      "tests_failed": 0,
+      "test_classes": [
+        "TestSelfServiceRegistration",
+        "TestAdminLoginRegression",
+        "TestTechLoginRegression",
+        "TestNewAccountIsolation"
+      ]
+    }
+  },
+  "features_tested": [
+    "POST /api/auth/register creates new company + admin user with auto-login",
+    "Registration returns access_token, refresh_token, and full company context",
+    "GET /api/auth/me returns new tenant after registration",
+    "GET /api/companies/current returns new tenant after registration",
+    "Validation rejects missing name",
+    "Validation rejects missing company_name",
+    "Validation rejects password < 6 characters",
+    "Validation rejects duplicate email",
+    "New account has isolated tenant (available_companies = 1)",
+    "GET /api/companies returns only new company for new account",
+    "Admin login still works (no regression)",
+    "Tech login still works (no regression)",
+    "Login page shows tabs Entrar / Criar conta",
+    "Register form has all required fields with proper data-testid",
+    "Registration auto-login redirects to dashboard with correct company in switcher"
+  ]
+}
