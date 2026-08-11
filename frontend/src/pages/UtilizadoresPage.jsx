@@ -7,7 +7,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, Shield, Users, Settings2, Key, Building2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Plus, Trash2, Shield, Users, Settings2, Key, Building2, Layers3, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -70,13 +71,14 @@ const MODULE_GROUPS = [
   },
 ];
 
-const emptyForm = { email: '', password: '', name: '', role: 'consulta', module_permissions: {} };
+const emptyForm = { email: '', password: '', name: '', role: 'consulta', module_permissions: {}, company_access_ids: [], company_id: '' };
 
 export default function UtilizadoresPage() {
-  const { user } = useAuth();
+  const { user, refreshAuth } = useAuth();
   const [users, setUsers] = useState([]);
   const [defaultsPerRole, setDefaultsPerRole] = useState({});
   const [company, setCompany] = useState(null);
+  const [companiesData, setCompaniesData] = useState({ current_company_id: '', companies: [] });
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -84,9 +86,10 @@ export default function UtilizadoresPage() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const [usersRes, rolesRes, companyRes] = await Promise.all([api.get('/users'), api.get('/roles'), api.get('/companies/current')]);
+      const [usersRes, rolesRes, companiesRes, companyRes] = await Promise.all([api.get('/users'), api.get('/roles'), api.get('/companies'), api.get('/companies/current')]);
       setUsers(usersRes.data);
       setDefaultsPerRole(rolesRes.data.default_modules_per_role || {});
+      setCompaniesData(companiesRes.data || { current_company_id: '', companies: [] });
       setCompany(companyRes.data);
     } catch (err) { toast.error('Erro ao carregar utilizadores'); }
     finally { setLoading(false); }
@@ -94,9 +97,22 @@ export default function UtilizadoresPage() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  const availableCompanies = companiesData?.companies || [];
+  const currentCompanyId = companiesData?.current_company_id || user?.company_id || '';
+
+  const normalisePrimaryCompany = (companyIds, preferredCompanyId = '') => {
+    if (!companyIds.length) return '';
+    return companyIds.includes(preferredCompanyId) ? preferredCompanyId : companyIds[0];
+  };
+
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...emptyForm, module_permissions: defaultsPerRole['consulta'] || {} });
+    setForm({
+      ...emptyForm,
+      module_permissions: defaultsPerRole['consulta'] || {},
+      company_access_ids: currentCompanyId ? [currentCompanyId] : [],
+      company_id: currentCompanyId,
+    });
     setDialogOpen(true);
   };
 
@@ -108,6 +124,8 @@ export default function UtilizadoresPage() {
       name: u.name,
       role: u.role,
       module_permissions: u.module_permissions || defaultsPerRole[u.role] || {},
+      company_access_ids: u.company_access_ids || [u.company_id].filter(Boolean),
+      company_id: u.company_id || '',
     });
     setDialogOpen(true);
   };
@@ -124,6 +142,24 @@ export default function UtilizadoresPage() {
     }));
   };
 
+  const toggleCompanyAccess = (companyId) => {
+    setForm(prev => {
+      const exists = prev.company_access_ids.includes(companyId);
+      if (exists && prev.company_access_ids.length === 1) {
+        toast.error('Cada utilizador precisa de pelo menos uma empresa');
+        return prev;
+      }
+      const nextAccess = exists
+        ? prev.company_access_ids.filter(id => id !== companyId)
+        : [...prev.company_access_ids, companyId];
+      return {
+        ...prev,
+        company_access_ids: nextAccess,
+        company_id: normalisePrimaryCompany(nextAccess, prev.company_id),
+      };
+    });
+  };
+
   const setGroupAll = (group, value) => {
     setForm(prev => {
       const next = { ...prev.module_permissions };
@@ -137,7 +173,13 @@ export default function UtilizadoresPage() {
     if (!editingId && !form.password) { toast.error('Password obrigatória'); return; }
     try {
       if (editingId) {
-        const payload = { name: form.name, role: form.role, module_permissions: form.module_permissions };
+        const payload = {
+          name: form.name,
+          role: form.role,
+          module_permissions: form.module_permissions,
+          company_access_ids: form.company_access_ids,
+          company_id: form.company_id,
+        };
         if (form.password) payload.password = form.password;
         await api.put(`/users/${editingId}`, payload);
         toast.success('Utilizador atualizado');
@@ -147,6 +189,7 @@ export default function UtilizadoresPage() {
       }
       setDialogOpen(false);
       setForm(emptyForm);
+      if (editingId === user?.id) await refreshAuth();
       fetchUsers();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro');
@@ -160,6 +203,7 @@ export default function UtilizadoresPage() {
   };
 
   const countActiveModules = (perms) => Object.values(perms || {}).filter(Boolean).length;
+  const primaryCompanyOptions = availableCompanies.filter(companyOption => form.company_access_ids.includes(companyOption.id));
 
   return (
     <div data-testid="utilizadores-page" className="space-y-6">
@@ -228,8 +272,20 @@ export default function UtilizadoresPage() {
                   <p className="text-white font-semibold">{u.name}</p>
                   <p className="text-zinc-500 text-sm">{u.email}</p>
                   <p data-testid={`user-company-${u.id}`} className="mt-1 text-[11px] uppercase tracking-[0.18em] text-zinc-600">
-                    {u.company_name || company?.name || user?.company_name || 'Empresa atual'}
+                    Principal: {u.company_name || company?.name || user?.company_name || 'Empresa atual'}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5" data-testid={`user-company-access-list-${u.id}`}>
+                    {(u.accessible_companies || []).slice(0, 3).map(companyOption => (
+                      <Badge key={`${u.id}-${companyOption.id}`} className="bg-zinc-800 text-zinc-200 border border-zinc-700">
+                        {companyOption.name}
+                      </Badge>
+                    ))}
+                    {(u.accessible_companies || []).length > 3 && (
+                      <Badge className="bg-yellow-400/10 text-yellow-300 border border-yellow-400/20">
+                        +{(u.accessible_companies || []).length - 3} empresa(s)
+                      </Badge>
+                    )}
+                  </div>
                 </div>
                 <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
                   <span className="text-zinc-500 flex items-center gap-1"><Key size={12} /> Módulos activos</span>
@@ -280,6 +336,51 @@ export default function UtilizadoresPage() {
                   className="mt-1 w-full h-10 bg-zinc-900 border border-zinc-800 text-white rounded-xl px-3 text-sm">
                   {ROLES.map(r => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                 </select>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/70 p-4 space-y-4" data-testid="user-company-access-panel">
+              <div className="flex items-center gap-2">
+                <Layers3 className="h-4 w-4 text-yellow-400" />
+                <div>
+                  <p className="text-sm font-semibold text-white">Acesso multiempresa</p>
+                  <p className="text-xs text-zinc-500">Escolhe as empresas disponíveis para este utilizador e define a empresa principal.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {availableCompanies.map(companyOption => {
+                  const checked = form.company_access_ids.includes(companyOption.id);
+                  return (
+                    <label
+                      key={companyOption.id}
+                      className="flex items-center gap-3 rounded-2xl border border-zinc-800 bg-zinc-950/60 px-3 py-3 hover:border-yellow-400/30"
+                      data-testid={`company-access-${companyOption.id}`}
+                    >
+                      <Checkbox checked={checked} onCheckedChange={() => toggleCompanyAccess(companyOption.id)} />
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-white">{companyOption.name}</p>
+                        <p className="truncate text-[11px] uppercase tracking-[0.18em] text-zinc-500">{companyOption.slug}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+
+              <div>
+                <Label className="text-zinc-300 text-sm flex items-center gap-2"><Crown size={14} className="text-yellow-400" /> Empresa principal</Label>
+                <Select value={form.company_id} onValueChange={(value) => setForm(prev => ({ ...prev, company_id: value }))}>
+                  <SelectTrigger data-testid="user-primary-company-select" className="mt-1 bg-zinc-900 border-zinc-800 text-white rounded-xl">
+                    <SelectValue placeholder="Selecionar empresa principal" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-zinc-950 border-zinc-800 text-white">
+                    {primaryCompanyOptions.map(companyOption => (
+                      <SelectItem key={companyOption.id} value={companyOption.id} data-testid={`user-primary-company-option-${companyOption.id}`}>
+                        {companyOption.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

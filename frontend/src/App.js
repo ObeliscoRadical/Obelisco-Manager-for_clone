@@ -17,6 +17,7 @@ import NegociacaoPage from "./pages/NegociacaoPage";
 import LegendaQuadroPage from "./pages/LegendaQuadroPage";
 import MascaraDinPage from "./pages/MascaraDinPage";
 import UtilizadoresPage from "./pages/UtilizadoresPage";
+import EmpresasPage from "./pages/EmpresasPage";
 import BibliotecaPage from "./pages/BibliotecaPage";
 import FuncionariosPage from "./pages/FuncionariosPage";
 import AssiduidadePage from "./pages/AssiduidadePage";
@@ -146,6 +147,7 @@ function App() {
           <Route path="/mao-de-obra" element={<ProtectedRoute module="materiais"><MaoDeObraPage /></ProtectedRoute>} />
           <Route path="/produtividades" element={<ProtectedRoute module="materiais"><ProdutividadesPage /></ProtectedRoute>} />
           <Route path="/utilizadores" element={<ProtectedRoute module="utilizadores"><UtilizadoresPage /></ProtectedRoute>} />
+          <Route path="/empresas" element={<ProtectedRoute module="utilizadores"><EmpresasPage /></ProtectedRoute>} />
           <Route path="/biblioteca" element={<ProtectedRoute module="biblioteca"><BibliotecaPage /></ProtectedRoute>} />
           <Route path="/funcionarios" element={<ProtectedRoute module="funcionarios"><FuncionariosPage /></ProtectedRoute>} />
           <Route path="/assiduidade" element={<ProtectedRoute module="assiduidade"><AssiduidadePage /></ProtectedRoute>} />

@@ -1,0 +1,160 @@
+{
+  "summary": "Iteration 61: Multitenancy Phase 2 - Visual tenant management and multi-company user access. ALL TESTS PASSED. Backend: 20/20 tests passed (11 Phase 1 + 9 Phase 2). Frontend: All UI elements verified - /empresas page with tenant cards, access management modal, /utilizadores page with multi-company checkboxes and primary company selector, CompanySwitcher working, tech portal showing company context.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_multitenancy.py",
+    "/app/backend/tests/test_multitenancy_phase2.py",
+    "/app/test_reports/pytest/iter61_multitenancy_phase2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py: _actor_accessible_company_ids() correctly normalizes company access from user context",
+    "server.py: _manageable_users_query() includes users with company_access_ids containing accessible companies",
+    "server.py: _normalize_user_company_payload() validates and normalizes company_access_ids and company_id updates",
+    "server.py: _serialize_admin_user() returns has_access_to_company and is_primary_for_company flags",
+    "server.py: GET /api/companies returns stats per tenant with is_active and is_primary flags",
+    "server.py: GET /api/companies/{id}/users returns users sorted by access status",
+    "server.py: PUT /api/users/{id} accepts company_access_ids and company_id updates",
+    "EmpresasPage.jsx: Visual tenant management with cards, stats, edit and access management",
+    "UtilizadoresPage.jsx: Multi-company access panel with checkboxes and primary company selector",
+    "multitenancy.py: resolve_company_context() correctly resolves preferred company from available companies"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_multitenancy_phase2.py"
+  ],
+  "success_rate": {
+    "backend": "100% (20/20 tests passed - 11 Phase 1 + 9 Phase 2)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "test_credentials": "Read from /app/memory/test_credentials.md - Admin: admin@obelisco.pt/obelisco2024, Tech: d.oliveira1986@gmail.com/A24d22r04",
+  "seed_data_creation": "Test created multiple TEST_ prefixed companies and users during backend testing (TEST_Phase2_*, TEST_UserUpdate_*, TEST_Multi1_*, TEST_Multi2_*, TEST_val_*, TEST_Other_*)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Multitenancy Phase 2 fully validated. Key verifications: (1) GET /api/companies returns companies with stats (users_count, budgets_count, works_count, invoices_count), is_active, is_primary flags, (2) GET /api/companies/{id}/users returns users with has_access_to_company and is_primary_for_company flags, sorted by access status, (3) PUT /api/users/{id} accepts company_access_ids and company_id updates, (4) Users with multi-company access appear in both companies' user lists, (5) GET /api/users includes users with access to current tenant even if primary is different, (6) Primary company auto-added to access list if not present. Frontend: /empresas page shows 54 tenant cards with stats, edit buttons, and 'Gerir acessos' modal with toggle access checkboxes and 'Tornar principal' buttons. /utilizadores page shows user cards with accessible companies badges and edit dialog with multi-company access panel (54 company checkboxes) and primary company selector. CompanySwitcher shows 54 companies and switching works with toast notification. Tech portal shows company name in header.",
+  "verification_results": {
+    "backend_api": {
+      "companies_list_with_stats": {
+        "endpoint": "GET /api/companies",
+        "returns_stats": true,
+        "fields": ["companies", "current_company_id", "primary_company_id"],
+        "company_fields": ["stats", "is_active", "is_primary"],
+        "stats_fields": ["users_count", "budgets_count", "works_count", "invoices_count"],
+        "status": "PASS"
+      },
+      "company_users_with_flags": {
+        "endpoint": "GET /api/companies/{id}/users",
+        "returns_access_flags": true,
+        "user_fields": ["has_access_to_company", "is_primary_for_company", "company_access_ids", "accessible_companies"],
+        "sorted_by_access": true,
+        "status": "PASS"
+      },
+      "update_user_company_access": {
+        "endpoint": "PUT /api/users/{id}",
+        "accepts_company_access_ids": true,
+        "accepts_company_id": true,
+        "validates_access": true,
+        "status": "PASS"
+      },
+      "multi_access_user_isolation": {
+        "user_appears_in_both_companies": true,
+        "get_users_includes_multi_access": true,
+        "status": "PASS"
+      },
+      "primary_company_validation": {
+        "auto_adds_to_access_list": true,
+        "status": "PASS"
+      }
+    },
+    "frontend_ui": {
+      "empresas_page": {
+        "url": "/empresas",
+        "data_testid": "empresas-page",
+        "company_cards_count": 54,
+        "new_company_btn": true,
+        "active_company_display": "Obelisco Radical",
+        "company_stats_visible": true,
+        "edit_buttons": true,
+        "gerir_acessos_buttons": true,
+        "status": "PASS"
+      },
+      "access_management_modal": {
+        "dialog_title": "ACESSOS MULTIEMPRESA",
+        "company_name_display": true,
+        "users_list": 15,
+        "toggle_access_checkboxes": 15,
+        "set_primary_buttons": 15,
+        "badges": ["Principal aqui", "Tem acesso", "Sem acesso"],
+        "status": "PASS"
+      },
+      "utilizadores_page": {
+        "url": "/utilizadores",
+        "data_testid": "utilizadores-page",
+        "user_cards_count": 7,
+        "new_user_btn": true,
+        "current_company_card": true,
+        "user_company_badges": true,
+        "status": "PASS"
+      },
+      "user_edit_dialog": {
+        "company_access_panel": true,
+        "company_checkboxes_count": 54,
+        "primary_company_select": true,
+        "status": "PASS"
+      },
+      "company_switcher": {
+        "trigger_visible": true,
+        "dropdown_companies_count": 54,
+        "switch_works": true,
+        "toast_notification": "Empresa activa atualizada",
+        "status": "PASS"
+      },
+      "tech_portal": {
+        "url": "/tech",
+        "company_name_in_header": "Obelisco Radical",
+        "tech_user_name": "Daniel Oliveira",
+        "no_regressions": true,
+        "status": "PASS"
+      }
+    },
+    "pytest_results": {
+      "phase1_tests": {
+        "test_file": "/app/backend/tests/test_multitenancy.py",
+        "tests_passed": 11,
+        "tests_failed": 0
+      },
+      "phase2_tests": {
+        "test_file": "/app/backend/tests/test_multitenancy_phase2.py",
+        "tests_passed": 9,
+        "tests_failed": 0,
+        "test_classes": [
+          "TestMultitenancyPhase2CompaniesEndpoint",
+          "TestMultitenancyPhase2CompanyUsers",
+          "TestMultitenancyPhase2UserCompanyUpdates",
+          "TestMultitenancyPhase2UserIsolationWithMultiAccess",
+          "TestMultitenancyPhase2Validation"
+        ]
+      }
+    }
+  },
+  "features_tested": [
+    "Admin can open /empresas and see visual tenant listing with data, stats, and active company",
+    "Admin can create a new company in /empresas and it appears in listing and global company selector",
+    "Admin can edit an existing company in /empresas and updated data persists via API",
+    "Access modal in /empresas (Acessos Multiempresa) lists manageable users with toggle access and set primary buttons",
+    "/utilizadores page shows and edits company_access_ids and company_id (primary company) with multi-company checkboxes and primary selector",
+    "GET /api/users remains isolated by active company but includes users with access to current tenant even when primary is different",
+    "PUT /api/users/{id} accepts company_access_ids and company_id updates without breaking auth or isolation",
+    "GET /api/companies returns detailed list with stats per tenant",
+    "GET /api/companies/{company_id}/users returns has_access_to_company and is_primary_for_company flags",
+    "CompanySwitcher continues to work after Phase 2 changes and new company can be selected globally",
+    "Tech portal continues without visible regressions after Phase 2"
+  ]
+}

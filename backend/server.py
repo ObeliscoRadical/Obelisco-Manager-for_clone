@@ -25,6 +25,7 @@ from multitenancy import (
     ensure_default_company,
     get_default_company_id,
     migrate_existing_company_ids,
+    normalize_company_ids,
     reset_request_company_id,
     resolve_company_context,
     set_default_company_id,
@@ -194,6 +195,16 @@ class CompanyCreateInput(BaseModel):
 
 class CompanySelectInput(BaseModel):
     company_id: str
+
+
+class CompanyUpdateInput(BaseModel):
+    name: Optional[str] = None
+    subtitle: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+    address: Optional[str] = None
+    nif: Optional[str] = None
 
 class BudgetItemModel(BaseModel):
     category: str = ""
@@ -3951,6 +3962,8 @@ class UserCreate(BaseModel):
     name: str
     role: str = "consulta"
     module_permissions: Optional[dict] = None   # {module_key: bool}
+    company_id: Optional[str] = None
+    company_access_ids: Optional[List[str]] = None
 
 class UserUpdate(BaseModel):
     name: Optional[str] = None
@@ -3958,6 +3971,8 @@ class UserUpdate(BaseModel):
     email: Optional[str] = None
     module_permissions: Optional[dict] = None
     password: Optional[str] = None   # opcional — só se admin quiser resetar
+    company_id: Optional[str] = None
+    company_access_ids: Optional[List[str]] = None
 
 VALID_ROLES = ["admin", "orcamentista", "comercial", "tecnico", "consulta"]
 
@@ -3986,21 +4001,110 @@ ROLE_PERMISSIONS = {
     "consulta": {"view_costs": False, "view_margins": False, "view_prices": True, "edit_budgets": False, "edit_settings": False, "manage_users": False},
 }
 
+
+def _actor_accessible_company_ids(actor: dict) -> list[str]:
+    return normalize_company_ids(
+        actor.get("company_id"),
+        [company.get("id") for company in (actor.get("available_companies") or [])],
+    )
+
+
+async def _get_actor_accessible_company_docs(actor: dict) -> list[dict]:
+    company_ids = _actor_accessible_company_ids(actor)
+    if not company_ids:
+        return []
+    docs = await raw_db.companies.find({"id": {"$in": company_ids}}, {"_id": 0}).to_list(len(company_ids))
+    by_id = {doc.get("id"): doc for doc in docs}
+    return [by_id[company_id] for company_id in company_ids if company_id in by_id]
+
+
+def _manageable_users_query(actor: dict, scoped_company_id: str | None = None) -> dict:
+    accessible_ids = _actor_accessible_company_ids(actor)
+    company_clauses = [{"company_id": {"$in": accessible_ids}}]
+    if accessible_ids:
+        company_clauses.append({"company_access_ids": {"$in": accessible_ids}})
+    base_query = {"$or": company_clauses}
+    if scoped_company_id:
+        return {
+            "$and": [
+                base_query,
+                {"$or": [{"company_id": scoped_company_id}, {"company_access_ids": scoped_company_id}]},
+            ]
+        }
+    return base_query
+
+
+def _normalize_user_company_payload(payload: dict, actor: dict, existing_user: dict | None = None) -> tuple[list[str], str]:
+    allowed_company_ids = _actor_accessible_company_ids(actor)
+    requested_access_ids = payload.get("company_access_ids")
+    existing_access_ids = normalize_company_ids(
+        (existing_user or {}).get("company_access_ids") or [],
+        (existing_user or {}).get("company_id"),
+    )
+
+    if requested_access_ids is None:
+        normalized_access_ids = existing_access_ids or normalize_company_ids(actor.get("company_id"))
+    else:
+        normalized_access_ids = normalize_company_ids(requested_access_ids)
+
+    if not normalized_access_ids:
+        normalized_access_ids = normalize_company_ids(payload.get("company_id"), actor.get("company_id"))
+
+    if not normalized_access_ids:
+        raise HTTPException(status_code=400, detail="Selecione pelo menos uma empresa para este utilizador")
+
+    if allowed_company_ids:
+        invalid_ids = [company_id for company_id in normalized_access_ids if company_id not in allowed_company_ids]
+        if invalid_ids:
+            raise HTTPException(status_code=403, detail="Incluiu empresas fora do seu alcance de gestão")
+
+    primary_company_id = (payload.get("company_id") or (existing_user or {}).get("company_id") or normalized_access_ids[0]).strip()
+    if primary_company_id not in normalized_access_ids:
+        normalized_access_ids = normalize_company_ids(primary_company_id, normalized_access_ids)
+
+    if allowed_company_ids and primary_company_id not in allowed_company_ids:
+        raise HTTPException(status_code=403, detail="Empresa principal fora do seu alcance de gestão")
+
+    return normalized_access_ids, primary_company_id
+
+
+def _serialize_admin_user(raw_user: dict, company_lookup: dict[str, dict], current_company_id: str) -> dict:
+    company_access_ids = normalize_company_ids(raw_user.get("company_access_ids") or [], raw_user.get("company_id"))
+    primary_company = company_lookup.get(raw_user.get("company_id"), {})
+    visible_companies = [company_lookup[company_id] for company_id in company_access_ids if company_id in company_lookup]
+    return {
+        "id": str(raw_user["_id"]),
+        "email": raw_user["email"],
+        "name": raw_user["name"],
+        "role": raw_user.get("role", "consulta"),
+        "module_permissions": raw_user.get("module_permissions") or default_modules_for_role(raw_user.get("role", "consulta")),
+        "created_at": raw_user.get("created_at", ""),
+        "company_id": raw_user.get("company_id") or current_company_id,
+        "company_name": primary_company.get("name", ""),
+        "company_access_ids": company_access_ids,
+        "accessible_companies": [
+            {"id": company.get("id", ""), "name": company.get("name", ""), "slug": company.get("slug", "")}
+            for company in visible_companies
+        ],
+    }
+
+
+async def _company_stats_for(company_id: str) -> dict:
+    return {
+        "users_count": await raw_db.users.count_documents({"$or": [{"company_id": company_id}, {"company_access_ids": company_id}]}),
+        "budgets_count": await raw_db.budgets.count_documents({"company_id": company_id}),
+        "works_count": await raw_db.works.count_documents({"company_id": company_id}),
+        "invoices_count": await raw_db.invoices.count_documents({"company_id": company_id}),
+    }
+
 @api_router.get("/users")
 async def get_users(user=Depends(get_current_user)):
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Sem permissao")
-    users = await db.users.find({}, {"password_hash": 0}).to_list(100)
-    return [{
-        "id": str(u["_id"]),
-        "email": u["email"],
-        "name": u["name"],
-        "role": u.get("role", "consulta"),
-        "module_permissions": u.get("module_permissions") or default_modules_for_role(u.get("role", "consulta")),
-        "created_at": u.get("created_at", ""),
-        "company_id": u.get("company_id") or user.get("company_id", ""),
-        "company_name": user.get("company_name", ""),
-    } for u in users]
+    company_docs = await _get_actor_accessible_company_docs(user)
+    company_lookup = {doc.get("id"): doc for doc in company_docs}
+    users = await raw_db.users.find(_manageable_users_query(user, scoped_company_id=user.get("company_id")), {"password_hash": 0}).to_list(250)
+    return [_serialize_admin_user(u, company_lookup, user.get("company_id", "")) for u in users]
 
 @api_router.post("/users")
 async def create_user(input: UserCreate, user=Depends(get_current_user)):
@@ -4015,25 +4119,23 @@ async def create_user(input: UserCreate, user=Depends(get_current_user)):
     modules = input.module_permissions or default_modules_for_role(input.role)
     # Garante que só chaves válidas ficam
     modules = {k: bool(v) for k, v in modules.items() if k in ALL_MODULES}
+    payload = input.model_dump()
+    company_access_ids, primary_company_id = _normalize_user_company_payload(payload, user)
     doc = {
         "email": input.email.lower().strip(),
         "password_hash": hash_password(input.password),
         "name": input.name,
         "role": input.role,
         "module_permissions": modules,
-        "company_id": user.get("company_id", ""),
-        "company_access_ids": [user.get("company_id", "")],
+        "company_id": primary_company_id,
+        "company_access_ids": company_access_ids,
         "created_at": datetime.now(timezone.utc).isoformat()
     }
-    result = await db.users.insert_one(doc)
+    result = await raw_db.users.insert_one(doc)
+    company_docs = await _get_actor_accessible_company_docs(user)
+    company_lookup = {doc.get("id"): doc for doc in company_docs}
     return {
-        "id": str(result.inserted_id),
-        "email": doc["email"],
-        "name": doc["name"],
-        "role": doc["role"],
-        "module_permissions": modules,
-        "company_id": doc.get("company_id", ""),
-        "company_name": user.get("company_name", ""),
+        **_serialize_admin_user({**doc, "_id": result.inserted_id}, company_lookup, primary_company_id),
     }
 
 @api_router.put("/users/{user_id}")
@@ -4049,7 +4151,14 @@ async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_
         data["password_hash"] = hash_password(data.pop("password"))
     else:
         data.pop("password", None)
-    result = await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": data})
+    target_user = await raw_db.users.find_one({"_id": ObjectId(user_id), **_manageable_users_query(user)})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Utilizador não encontrado")
+    if "company_access_ids" in data or "company_id" in data:
+        company_access_ids, primary_company_id = _normalize_user_company_payload(data, user, target_user)
+        data["company_access_ids"] = company_access_ids
+        data["company_id"] = primary_company_id
+    result = await raw_db.users.update_one({"_id": ObjectId(user_id)}, {"$set": data})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Utilizador não encontrado")
     return {"message": "Atualizado"}
@@ -4060,7 +4169,7 @@ async def delete_user(user_id: str, user=Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Sem permissao")
     if user_id == user.get("id"):
         raise HTTPException(status_code=400, detail="Não pode eliminar a si proprio")
-    result = await db.users.delete_one({"_id": ObjectId(user_id)})
+    result = await raw_db.users.delete_one({"_id": ObjectId(user_id), **_manageable_users_query(user)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Nao encontrado")
     return {"message": "Eliminado"}
@@ -4082,21 +4191,24 @@ async def get_current_company(user=Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="Empresa atual não encontrada")
     return {
         **company,
-        "stats": {
-            "users_count": await db.users.count_documents({}),
-            "budgets_count": await db.budgets.count_documents({}),
-            "works_count": await db.works.count_documents({}),
-            "invoices_count": await db.invoices.count_documents({}),
-        },
+        "stats": await _company_stats_for(user.get("company_id", "")),
     }
 
 
 @api_router.get("/companies")
 async def get_available_companies(user=Depends(get_current_user)):
+    companies = []
+    for company_doc in await _get_actor_accessible_company_docs(user):
+        companies.append({
+            **company_doc,
+            "stats": await _company_stats_for(company_doc.get("id", "")),
+            "is_active": company_doc.get("id") == user.get("company_id"),
+            "is_primary": company_doc.get("id") == user.get("primary_company_id"),
+        })
     return {
         "current_company_id": user.get("company_id", ""),
         "primary_company_id": user.get("primary_company_id", ""),
-        "companies": user.get("available_companies") or [],
+        "companies": companies,
     }
 
 
@@ -4154,6 +4266,75 @@ async def create_company(input: CompanyCreateInput, user=Depends(get_current_use
         {"$addToSet": {"company_access_ids": company_id}},
     )
     return {"company": company_payload}
+
+
+@api_router.put("/companies/{company_id}")
+async def update_company(company_id: str, input: CompanyUpdateInput, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    if company_id not in _actor_accessible_company_ids(user):
+        raise HTTPException(status_code=403, detail="Sem acesso para editar esta empresa")
+
+    existing = await raw_db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Empresa não encontrada")
+
+    updates = {key: value for key, value in input.model_dump().items() if value is not None}
+    if not updates:
+        return {"company": existing}
+
+    if "name" in updates:
+        updates["name"] = updates["name"].strip()
+        if not updates["name"]:
+            raise HTTPException(status_code=400, detail="Nome da empresa é obrigatório")
+        if updates["name"] != existing.get("name"):
+            updates["slug"] = await _build_unique_company_slug(updates["name"])
+
+    await raw_db.companies.update_one({"id": company_id}, {"$set": updates})
+    refreshed = await raw_db.companies.find_one({"id": company_id}, {"_id": 0})
+    await raw_db.system_settings.update_one(
+        {"company_id": company_id},
+        {
+            "$set": {
+                "company_id": company_id,
+                "company_info": {
+                    **DEFAULT_SYSTEM_SETTINGS.get("company_info", {}),
+                    "name": refreshed.get("name", ""),
+                    "subtitle": refreshed.get("subtitle", ""),
+                    "phone": refreshed.get("phone", ""),
+                    "email": refreshed.get("email", ""),
+                    "website": refreshed.get("website", ""),
+                    "address": refreshed.get("address", ""),
+                    "nif": refreshed.get("nif", ""),
+                },
+            }
+        },
+        upsert=True,
+    )
+    return {"company": refreshed}
+
+
+@api_router.get("/companies/{company_id}/users")
+async def get_company_users(company_id: str, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+    if company_id not in _actor_accessible_company_ids(user):
+        raise HTTPException(status_code=403, detail="Sem acesso a esta empresa")
+
+    company_docs = await _get_actor_accessible_company_docs(user)
+    company_lookup = {doc.get("id"): doc for doc in company_docs}
+    raw_users = await raw_db.users.find(_manageable_users_query(user), {"password_hash": 0}).to_list(250)
+    serialized_users = []
+    for raw_user in raw_users:
+        serialized = _serialize_admin_user(raw_user, company_lookup, company_id)
+        serialized["has_access_to_company"] = company_id in serialized.get("company_access_ids", [])
+        serialized["is_primary_for_company"] = serialized.get("company_id") == company_id
+        serialized_users.append(serialized)
+    serialized_users.sort(key=lambda row: (not row.get("has_access_to_company"), row.get("name", "").lower()))
+    return {
+        "company": company_lookup.get(company_id) or await raw_db.companies.find_one({"id": company_id}, {"_id": 0}),
+        "users": serialized_users,
+    }
 
 
 @api_router.post("/companies/select")

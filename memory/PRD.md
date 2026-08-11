@@ -229,6 +229,28 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - testing agent iteration 60: backend `11/11`, frontend `100%`
   - pytest adicional: `/app/backend/tests/test_multitenancy.py` → `11 passed`
 
+## Atualização 2026-08-11 — Multiempresa / SaaS Fase 2
+- **Gestão visual de tenants**
+  - nova página protegida `/empresas`
+  - cards por empresa com métricas (`users_count`, `budgets_count`, `works_count`, `invoices_count`)
+  - criação e edição visual de tenants (`POST /api/companies`, `PUT /api/companies/{company_id}`)
+- **Acessos multiempresa por utilizador**
+  - `UtilizadoresPage.jsx` agora permite editar `company_access_ids` e `company_id` (empresa principal)
+  - utilizadores com acesso ao tenant atual aparecem em `/api/users` mesmo quando a empresa principal é outra
+  - `PUT /api/users/{id}` normaliza acessos, garante empresa principal válida e impede empresas fora do alcance do admin
+- **Gestão por tenant também na página Empresas**
+  - modal “Acessos Multiempresa” por tenant
+  - novo endpoint `GET /api/companies/{company_id}/users`
+  - flags de resposta: `has_access_to_company`, `is_primary_for_company`, `company_access_ids`, `accessible_companies`
+- **Contexto e navegação**
+  - `CompanySwitcher` continua funcional e agora reflete tenants criados/editados
+  - portal técnico mantém nome da empresa no cabeçalho sem regressões
+- **Validação formal**
+  - self-test API Fase 2: criar/editar tenant, atribuir múltiplas empresas a utilizador, definir empresa principal, validar `/api/companies/{id}/users`
+  - smoke test visual autenticado em `/empresas` com modal de acessos aberto
+  - testing agent iteration 61: backend `20/20`, frontend `100%`
+  - suites pytest validadas: `test_multitenancy.py` + `test_multitenancy_phase2.py`
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -271,7 +293,11 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - Validar esta fase em produção após deploy (empresa activa, isolamento por tenant, login técnico)
 
 ### P1
-- Multiempresa Fase 2: UI de gestão de tenants e atribuição de acessos multiempresa por utilizador/admin
+- Checklist de validação em produção pós-deploy:
+  - login admin
+  - troca de empresa no seletor global
+  - criação de utilizador por tenant
+  - login técnico e contexto da empresa no portal técnico
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes

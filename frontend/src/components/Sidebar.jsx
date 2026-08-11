@@ -54,6 +54,7 @@ const adminItems = [
   { path: '/materiais', label: 'Materiais', icon: Package, mod: 'materiais' },
   { path: '/mao-de-obra', label: 'Mão de Obra', icon: Users, mod: 'materiais' },
   { path: '/produtividades', label: 'Produtividades', icon: Timer, mod: 'materiais' },
+  { path: '/empresas', label: 'Empresas', icon: Building2, mod: 'utilizadores' },
   { path: '/utilizadores', label: 'Utilizadores', icon: UserCog, mod: 'utilizadores' },
   { path: '/biblioteca', label: 'Biblioteca', icon: BookOpen, mod: 'biblioteca' },
   { path: '/definicoes', label: 'Definições', icon: Settings, mod: 'configuracoes' },

@@ -5,6 +5,13 @@
 - Frontend com seletor de empresa (`CompanySwitcher`) na sidebar admin e no portal técnico
 - Validação: self-test API + smoke visual + testing agent iteration 60 (backend 11/11, frontend 100%) + pytest `test_multitenancy.py` (11 passed)
 
+## 2026-08-11 — Multiempresa / SaaS Fase 2 concluída
+- Nova página `/empresas` com listagem visual de tenants, métricas por empresa e edição de dados do tenant
+- Gestão de acessos multiempresa em **duas frentes**: modal por tenant em `/empresas` e painel completo em `/utilizadores`
+- Backend expandido com `PUT /api/companies/{company_id}`, `GET /api/companies/{company_id}/users` e atualização robusta de `company_access_ids` / `company_id` em `/api/users/{id}`
+- `/api/users` agora inclui utilizadores com acesso ao tenant atual mesmo quando a empresa principal é outra
+- Validação: self-test API Fase 2 + smoke visual autenticado + testing agent iteration 61 (backend 20/20, frontend 100%)
+
 # Obelisco Manager - CHANGELOG
 
 ---
