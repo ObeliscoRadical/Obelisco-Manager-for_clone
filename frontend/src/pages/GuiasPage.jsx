@@ -205,8 +205,8 @@ export default function GuiasPage() {
   const handleDownloadPDF = async (guide) => {
     try {
       const { data: full } = await api.get(`/transport-guides/${guide.id}`);
-      const { data: settings } = await api.get('/proposal-settings').catch(() => ({ data: {} }));
-      await generateGuidePDF(full, settings, settings?.logo_base64 || settings?.logo || null);
+      const { data: settings } = await api.get('/system-settings').catch(() => ({ data: {} }));
+      await generateGuidePDF(full, settings, settings?.branding?.logo_data_url || settings?.logo_base64 || settings?.logo || null);
       toast.success('PDF gerado');
     } catch (err) {
       devLog('[guide/pdf]', err?.message || err);

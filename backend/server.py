@@ -15,10 +15,16 @@ import jwt
 import asyncio
 import re
 import time
+import base64
+import binascii
+import colorsys
 from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
 from collections import defaultdict, deque
+from functools import lru_cache
+from io import BytesIO
+from PIL import Image
 from multitenancy import (
     MultiTenantDatabase,
     ensure_company_indexes,
@@ -2373,15 +2379,293 @@ class ProposalSettingsUpdate(BaseModel):
 
 # --- Logo endpoint (serves logo as base64 to avoid CORS) ---
 
-@api_router.get("/logo")
-async def get_logo():
+DEFAULT_BRANDING_PALETTE = {
+    "primary": "#facc15",
+    "primary_strong": "#eab308",
+    "secondary": "#f59e0b",
+    "accent": "#fde68a",
+    "surface": "#18181b",
+    "surface_alt": "#09090b",
+    "border": "#3f3f46",
+    "text": "#fafafa",
+    "muted_text": "#a1a1aa",
+    "on_primary": "#09090b",
+    "chart_1": "#facc15",
+    "chart_2": "#f59e0b",
+    "chart_3": "#22c55e",
+    "chart_4": "#3b82f6",
+    "chart_5": "#ef4444",
+}
+
+DEFAULT_BRANDING_SETTINGS = {
+    "logo_data_url": None,
+    "source": "default",
+    "updated_at": None,
+    "palette": DEFAULT_BRANDING_PALETTE,
+}
+
+
+@lru_cache(maxsize=1)
+def _get_default_logo_data_url() -> str | None:
     logo_path = Path(__file__).parent / "logo.png"
     if not logo_path.exists():
+        return None
+    return f"data:image/png;base64,{base64.b64encode(logo_path.read_bytes()).decode()}"
+
+
+def _clamp_color(value: float) -> int:
+    return int(max(0, min(255, round(value))))
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int] | list[int]) -> str:
+    r, g, b = [_clamp_color(v) for v in rgb[:3]]
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _hex_to_rgb(value: str | None, fallback: tuple[int, int, int]) -> tuple[int, int, int]:
+    if not value:
+        return fallback
+    cleaned = value.strip().lstrip("#")
+    if len(cleaned) != 6:
+        return fallback
+    try:
+        return tuple(int(cleaned[i:i + 2], 16) for i in (0, 2, 4))
+    except Exception:
+        return fallback
+
+
+def _mix_rgb(color_a: tuple[int, int, int], color_b: tuple[int, int, int], ratio_b: float) -> tuple[int, int, int]:
+    ratio = max(0, min(1, ratio_b))
+    return tuple(
+        _clamp_color((color_a[idx] * (1 - ratio)) + (color_b[idx] * ratio))
+        for idx in range(3)
+    )
+
+
+def _color_distance(color_a: tuple[int, int, int], color_b: tuple[int, int, int]) -> float:
+    return sum((color_a[idx] - color_b[idx]) ** 2 for idx in range(3)) ** 0.5
+
+
+def _relative_luminance(color: tuple[int, int, int]) -> float:
+    def channel(value: int) -> float:
+        comp = value / 255
+        if comp <= 0.03928:
+            return comp / 12.92
+        return ((comp + 0.055) / 1.055) ** 2.4
+
+    r, g, b = color
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _text_for_background(color: tuple[int, int, int]) -> str:
+    return "#09090b" if _relative_luminance(color) > 0.45 else "#fafafa"
+
+
+def _stabilize_brand_color(color: tuple[int, int, int], saturation_floor: float = 0.46, min_light: float = 0.34, max_light: float = 0.62) -> tuple[int, int, int]:
+    h, l, s = colorsys.rgb_to_hls(color[0] / 255, color[1] / 255, color[2] / 255)
+    s = max(s, saturation_floor)
+    l = min(max(l, min_light), max_light)
+    return tuple(_clamp_color(channel * 255) for channel in colorsys.hls_to_rgb(h, l, s))
+
+
+def _build_brand_palette(primary_rgb: tuple[int, int, int], secondary_rgb: tuple[int, int, int] | None = None) -> dict:
+    primary = _stabilize_brand_color(primary_rgb)
+    secondary_seed = secondary_rgb or _mix_rgb(primary, (255, 255, 255), 0.2)
+    secondary = _stabilize_brand_color(secondary_seed, saturation_floor=0.34, min_light=0.28, max_light=0.56)
+    accent = _mix_rgb(primary, (255, 255, 255), 0.45)
+    surface = _mix_rgb(primary, (24, 24, 27), 0.9)
+    surface_alt = _mix_rgb(secondary, (9, 9, 11), 0.94)
+    border = _mix_rgb(primary, (63, 63, 70), 0.72)
+    chart_3 = _mix_rgb(primary, (34, 197, 94), 0.62)
+    chart_4 = _mix_rgb(primary, (59, 130, 246), 0.66)
+    chart_5 = _mix_rgb(primary, (239, 68, 68), 0.6)
+    return {
+        "primary": _rgb_to_hex(primary),
+        "primary_strong": _rgb_to_hex(_mix_rgb(primary, (0, 0, 0), 0.14)),
+        "secondary": _rgb_to_hex(secondary),
+        "accent": _rgb_to_hex(accent),
+        "surface": _rgb_to_hex(surface),
+        "surface_alt": _rgb_to_hex(surface_alt),
+        "border": _rgb_to_hex(border),
+        "text": "#fafafa",
+        "muted_text": "#a1a1aa",
+        "on_primary": _text_for_background(primary),
+        "chart_1": _rgb_to_hex(primary),
+        "chart_2": _rgb_to_hex(secondary),
+        "chart_3": _rgb_to_hex(chart_3),
+        "chart_4": _rgb_to_hex(chart_4),
+        "chart_5": _rgb_to_hex(chart_5),
+    }
+
+
+def _extract_palette_from_logo_bytes(image_bytes: bytes) -> dict:
+    try:
+        image = Image.open(BytesIO(image_bytes)).convert("RGBA")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Não foi possível ler o ficheiro do logo") from exc
+
+    image.thumbnail((96, 96))
+    composed = Image.new("RGBA", image.size, (255, 255, 255, 255))
+    composed.alpha_composite(image)
+    quantized = composed.convert("RGB").quantize(colors=8).convert("RGB")
+    colors = quantized.getcolors(maxcolors=96 * 96) or []
+    ranked: list[dict] = []
+
+    for count, rgb in colors:
+        r, g, b = rgb
+        brightness = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+        _, _, saturation = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+        if brightness > 0.97 and saturation < 0.12:
+            continue
+        if brightness < 0.05 and saturation < 0.2:
+            continue
+        score = count * (1 + saturation * 2.4) * (0.75 + (1 - abs(brightness - 0.52)))
+        ranked.append({"rgb": (r, g, b), "score": score})
+
+    if not ranked:
+        return dict(DEFAULT_BRANDING_PALETTE)
+
+    ranked.sort(key=lambda item: item["score"], reverse=True)
+    primary = ranked[0]["rgb"]
+    secondary = None
+    for candidate in ranked[1:]:
+        if _color_distance(candidate["rgb"], primary) >= 52:
+            secondary = candidate["rgb"]
+            break
+    return _build_brand_palette(primary, secondary)
+
+
+def _validate_and_prepare_logo_data_url(data_url: str) -> dict:
+    if not data_url or not isinstance(data_url, str) or not data_url.startswith("data:image/"):
+        raise HTTPException(status_code=400, detail="Envie um logo válido em formato imagem")
+    try:
+        header, encoded = data_url.split(",", 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Formato do logo inválido") from exc
+
+    mime_type = header[5:].split(";", 1)[0].strip().lower()
+    if mime_type not in {"image/png", "image/jpeg", "image/jpg", "image/webp"}:
+        raise HTTPException(status_code=400, detail="Use PNG, JPG ou WEBP para o logo")
+
+    try:
+        raw_bytes = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Não foi possível descodificar o logo") from exc
+
+    if len(raw_bytes) > 2_500_000:
+        raise HTTPException(status_code=400, detail="O logo excede o tamanho máximo de 2.5MB")
+
+    try:
+        image = Image.open(BytesIO(raw_bytes)).convert("RGBA")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail="Ficheiro do logo inválido") from exc
+
+    image.thumbnail((640, 240))
+    output = BytesIO()
+    image.save(output, format="PNG", optimize=True)
+    clean_bytes = output.getvalue()
+    return {
+        "logo_data_url": f"data:image/png;base64,{base64.b64encode(clean_bytes).decode()}",
+        "palette": _extract_palette_from_logo_bytes(clean_bytes),
+        "source": "logo",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _merge_branding_settings(branding_doc: Optional[dict]) -> dict:
+    base = {
+        **DEFAULT_BRANDING_SETTINGS,
+        "palette": {**DEFAULT_BRANDING_PALETTE},
+    }
+    if not branding_doc:
+        base["logo_data_url"] = _get_default_logo_data_url()
+        return base
+    merged = {**base, **branding_doc}
+    merged["palette"] = {**base["palette"], **(branding_doc.get("palette") or {})}
+    if not merged.get("logo_data_url"):
+        merged["logo_data_url"] = _get_default_logo_data_url()
+        merged["source"] = "default"
+    return merged
+
+
+def _prepare_branding_update(branding_input: dict, existing_branding: Optional[dict]) -> dict:
+    merged = {
+        **DEFAULT_BRANDING_SETTINGS,
+        **(existing_branding or {}),
+    }
+    merged["palette"] = {
+        **DEFAULT_BRANDING_PALETTE,
+        **((existing_branding or {}).get("palette") or {}),
+        **(branding_input.get("palette") or {}),
+    }
+
+    if branding_input.get("clear_logo"):
+        merged["logo_data_url"] = None
+        merged["palette"] = {**DEFAULT_BRANDING_PALETTE}
+        merged["source"] = "default"
+        merged["updated_at"] = datetime.now(timezone.utc).isoformat()
+    elif branding_input.get("logo_data_url"):
+        merged.update(_validate_and_prepare_logo_data_url(branding_input.get("logo_data_url")))
+    else:
+        merged.update({k: v for k, v in branding_input.items() if k not in {"palette", "clear_logo", "logo_data_url"}})
+
+    merged.pop("clear_logo", None)
+    return merged
+
+
+async def _resolve_public_branding(company_id: str | None = None, company_slug: str | None = None) -> dict:
+    company_doc = None
+    if company_slug:
+        company_doc = await raw_db.companies.find_one({"slug": company_slug}, {"_id": 0})
+    elif company_id:
+        company_doc = await raw_db.companies.find_one({"id": company_id}, {"_id": 0})
+
+    settings_doc = None
+    if company_doc:
+        settings_doc = await raw_db.system_settings.find_one({"company_id": company_doc["id"]}, {"_id": 0})
+
+    merged = _merge_system_settings(settings_doc)
+    company_info = {**(merged.get("company_info") or {})}
+    if company_doc:
+        company_info = {
+            **company_info,
+            "name": company_doc.get("name") or company_info.get("name"),
+            "subtitle": company_doc.get("subtitle") or company_info.get("subtitle"),
+            "phone": company_doc.get("phone") or company_info.get("phone"),
+            "email": company_doc.get("email") or company_info.get("email"),
+            "website": company_doc.get("website") or company_info.get("website"),
+            "address": company_doc.get("address") or company_info.get("address"),
+            "nif": company_doc.get("nif") or company_info.get("nif"),
+        }
+
+    return {
+        "company_id": company_doc.get("id") if company_doc else None,
+        "company_slug": company_doc.get("slug") if company_doc else None,
+        "company_name": company_info.get("name") or DEFAULT_SYSTEM_SETTINGS.get("company_info", {}).get("name"),
+        "company_info": company_info,
+        "branding": merged.get("branding") or _merge_branding_settings(None),
+    }
+
+@api_router.get("/logo")
+async def get_logo(request: Request, company_id: Optional[str] = None, company_slug: Optional[str] = None):
+    resolved = await _resolve_public_branding(
+        company_id=company_id or get_requested_company_id(request),
+        company_slug=company_slug,
+    )
+    logo_data_url = (resolved.get("branding") or {}).get("logo_data_url")
+    if not logo_data_url:
         raise HTTPException(status_code=404, detail="Logo não encontrado")
-    import base64
-    with open(logo_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
-    return {"logo": f"data:image/png;base64,{b64}"}
+    return {"logo": logo_data_url, "branding": resolved.get("branding"), "company_name": resolved.get("company_name")}
+
+
+@api_router.get("/settings/logo")
+async def get_settings_logo(request: Request, company_id: Optional[str] = None, company_slug: Optional[str] = None):
+    return await get_logo(request=request, company_id=company_id, company_slug=company_slug)
+
+
+@api_router.get("/public/branding")
+async def get_public_branding(request: Request, company_id: Optional[str] = None, company_slug: Optional[str] = None):
+    return await _resolve_public_branding(company_id=company_id or get_requested_company_id(request), company_slug=company_slug)
 
 
 # --- Proposal Settings ---
@@ -2646,6 +2930,7 @@ DEFAULT_SYSTEM_SETTINGS = {
         "phone": "+351 911 132 401", "email": "obeliscoradical@gmail.com",
         "website": "www.obeliscoradical.pt", "address": "Grande Lisboa", "nif": "",
     },
+    "branding": DEFAULT_BRANDING_SETTINGS,
 }
 
 
@@ -2703,6 +2988,7 @@ class SystemSettingsInput(BaseModel):
     risk_levels: Optional[dict] = None
     proposal_modes: Optional[dict] = None
     company_info: Optional[dict] = None
+    branding: Optional[dict] = None
 
 class ProBudgetItem(BaseModel):
     category: str = ""
@@ -2732,6 +3018,7 @@ class ProBudgetCreate(BaseModel):
 def _merge_system_settings(doc: Optional[dict]) -> dict:
     base = {**DEFAULT_SYSTEM_SETTINGS}
     if not doc:
+        base["branding"] = _merge_branding_settings(base.get("branding"))
         return base
     merged = {**base, **doc}
     merged["treasury_settings"] = {**base.get("treasury_settings", {}), **(doc.get("treasury_settings") or {})}
@@ -2739,6 +3026,7 @@ def _merge_system_settings(doc: Optional[dict]) -> dict:
     merged["risk_levels"] = {**base.get("risk_levels", {}), **(doc.get("risk_levels") or {})}
     merged["proposal_modes"] = {**base.get("proposal_modes", {}), **(doc.get("proposal_modes") or {})}
     merged["company_info"] = {**base.get("company_info", {}), **(doc.get("company_info") or {})}
+    merged["branding"] = _merge_branding_settings(doc.get("branding"))
     return merged
 
 @api_router.get("/system-settings")
@@ -2750,6 +3038,8 @@ async def get_system_settings(user=Depends(get_current_user)):
 async def update_system_settings(input: SystemSettingsInput, user=Depends(get_current_user)):
     data = {k: v for k, v in input.model_dump().items() if v is not None}
     existing = await db.system_settings.find_one({})
+    if "branding" in data:
+        data["branding"] = _prepare_branding_update(data.get("branding") or {}, (existing or {}).get("branding"))
     if existing:
         await db.system_settings.update_one({"_id": existing["_id"]}, {"$set": data})
     else:

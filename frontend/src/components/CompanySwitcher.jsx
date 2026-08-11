@@ -34,13 +34,17 @@ export function CompanySwitcher({ compact = false, className = '' }) {
     <div
       data-testid={compact ? 'company-switcher-compact' : 'company-switcher'}
       className={cn(
-        'rounded-2xl border border-yellow-400/15 bg-zinc-950/60',
+        'rounded-2xl bg-zinc-950/60',
         compact ? 'px-3 py-2' : 'px-4 py-3',
         className,
       )}
+      style={{ border: '1px solid rgba(var(--brand-primary-rgb), 0.16)' }}
     >
       <div className={cn('flex items-center gap-2', compact ? 'mb-2' : 'mb-3')}>
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-yellow-400/10 text-yellow-300">
+        <div
+          className="flex h-8 w-8 items-center justify-center rounded-full"
+          style={{ background: 'rgba(var(--brand-primary-rgb), 0.12)', color: 'var(--brand-primary)' }}
+        >
           <Building2 className="h-4 w-4" />
         </div>
         <div className="min-w-0">
@@ -57,7 +61,7 @@ export function CompanySwitcher({ compact = false, className = '' }) {
         <SelectTrigger
           data-testid="company-switcher-trigger"
           className={cn(
-            'border-zinc-800 bg-zinc-900 text-left text-white focus:ring-yellow-400/40',
+            'border-zinc-800 bg-zinc-900 text-left text-white',
             compact ? 'h-9 rounded-xl text-xs' : 'h-10 rounded-xl text-sm',
           )}
         >

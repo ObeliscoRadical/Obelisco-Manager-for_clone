@@ -63,7 +63,7 @@ export default function MascaraDinPage() {
   const [cellEditor, setCellEditor] = useState(null); // { rowIdx, cellIdx }
 
   useEffect(() => {
-    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[mascara/logo]', err?.message));
+    api.get('/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[mascara/logo]', err?.message));
   }, []);
 
   // === Configuração ===

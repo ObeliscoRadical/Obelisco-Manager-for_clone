@@ -296,7 +296,7 @@ class TestCORSConfiguration:
 
     def test_cors_allows_frontend_origin(self, auth_headers):
         """CORS allows the frontend origin"""
-        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://obelisco-mgmt.preview.emergentagent.com')
+        frontend_url = os.environ.get('REACT_APP_BACKEND_URL', 'https://dynamic-colors-2.preview.emergentagent.com')
         response = requests.options(
             f"{BASE_URL}/api/dashboard/overview",
             headers={

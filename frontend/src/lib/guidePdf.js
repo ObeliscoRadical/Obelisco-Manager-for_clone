@@ -4,12 +4,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-
-const YELLOW = [250, 204, 21];
-const BLACK = [10, 10, 12];
-const WHITE = [255, 255, 255];
-const GREY_LIGHT = [235, 235, 235];
-const GREY_DARK = [70, 70, 70];
+import { getPdfBranding } from './pdfBranding';
 
 const fmtDate = (iso) => {
   if (!iso) return '—';
@@ -17,6 +12,17 @@ const fmtDate = (iso) => {
 };
 
 export async function generateGuidePDF(guide, settings = {}, logoBase64 = null) {
+  const theme = getPdfBranding(settings, logoBase64);
+  const {
+    primary: YELLOW,
+    dark: BLACK,
+    light: WHITE,
+    mutedLight: GREY_LIGHT,
+    mutedDark: GREY_DARK,
+    logoBase64: resolvedLogo,
+    companyLabel,
+    footerLabel,
+  } = theme;
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   const pageW = 210;
   const pageH = 297;
@@ -27,8 +33,8 @@ export async function generateGuidePDF(guide, settings = {}, logoBase64 = null) 
   doc.setFillColor(...YELLOW);
   for (let x = 8; x < pageW - 8; x += 12) doc.rect(x, 36.4, 6, 1.6, 'F');
 
-  if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 10, 5, 26, 26); } catch { /* ignore */ }
+  if (resolvedLogo) {
+    try { doc.addImage(resolvedLogo, 'PNG', 10, 5, 26, 26); } catch { /* ignore */ }
   }
   doc.setTextColor(...WHITE);
   doc.setFont('helvetica', 'bold');
@@ -36,7 +42,7 @@ export async function generateGuidePDF(guide, settings = {}, logoBase64 = null) 
   doc.text('GUIA DE TRANSPORTE', pageW / 2, 16, { align: 'center' });
   doc.setTextColor(...YELLOW);
   doc.setFontSize(10);
-  doc.text('OBELISCO RADICAL · MATERIAL DE OBRA', pageW / 2, 22, { align: 'center' });
+  doc.text(`${companyLabel} · MATERIAL DE OBRA`, pageW / 2, 22, { align: 'center' });
   doc.setTextColor(...WHITE);
   doc.setFontSize(11);
   doc.text(guide.number || '—', pageW - 12, 30, { align: 'right' });
@@ -157,7 +163,7 @@ export async function generateGuidePDF(guide, settings = {}, logoBase64 = null) 
   doc.rect(0, pageH - 10, pageW, 10, 'F');
   doc.setTextColor(...YELLOW);
   doc.setFontSize(7);
-  doc.text('OBELISCO RADICAL · Documento interno · Confidencial', 10, pageH - 4);
+  doc.text(footerLabel, 10, pageH - 4);
   doc.setTextColor(...WHITE);
   doc.text(guide.number || '', pageW - 10, pageH - 4, { align: 'right' });
 

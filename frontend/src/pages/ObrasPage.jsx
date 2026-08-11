@@ -352,8 +352,8 @@ function WorkAnalysisDialog({ open, workId, onOpenChange }) {
   const exportPDF = async () => {
     if (!data) return;
     try {
-      const { data: settings } = await api.get('/proposal-settings').catch(() => ({ data: {} }));
-      const logo = settings?.logo_base64 || settings?.logo || null;
+      const { data: settings } = await api.get('/system-settings').catch(() => ({ data: {} }));
+      const logo = settings?.branding?.logo_data_url || settings?.logo_base64 || settings?.logo || null;
       await generateWorkReportPDF(data, settings, logo);
       toast.success('PDF gerado');
     } catch (e) {

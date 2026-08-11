@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { BrandingProvider } from "./contexts/BrandingContext";
 import { Toaster } from "sonner";
 import Sidebar from "./components/Sidebar";
 import NotificationsBell from "./components/NotificationsBell";
@@ -57,9 +58,22 @@ import CfoVirtualPage from "./pages/CfoVirtualPage";
 import TechLayout from "./components/TechLayout";
 
 const LoadingScreen = () => (
-  <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+  <div
+    className="min-h-screen flex items-center justify-center"
+    style={{
+      background: 'radial-gradient(circle at top, rgba(var(--brand-primary-rgb), 0.12), transparent 28%), linear-gradient(180deg, var(--brand-surface-alt) 0%, #09090b 100%)',
+    }}
+  >
     <div className="flex flex-col items-center gap-4">
-      <div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+      <div
+        className="h-8 w-8 rounded-full animate-spin"
+        style={{
+          borderWidth: '2px',
+          borderStyle: 'solid',
+          borderColor: 'var(--brand-primary)',
+          borderTopColor: 'transparent',
+        }}
+      />
       <p className="text-zinc-400 text-sm font-medium">A carregar...</p>
     </div>
   </div>
@@ -67,7 +81,12 @@ const LoadingScreen = () => (
 
 function Layout({ children }) {
   return (
-    <div className="flex min-h-screen bg-zinc-950">
+    <div
+      className="flex min-h-screen"
+      style={{
+        background: 'radial-gradient(circle at top right, rgba(var(--brand-primary-rgb), 0.08), transparent 24%), linear-gradient(180deg, var(--brand-surface-alt) 0%, #09090b 100%)',
+      }}
+    >
       <Sidebar />
       <main className="flex-1 ml-72 p-6 md:p-8 lg:p-10 relative">
         <div className="absolute top-4 right-6 md:right-8 lg:right-10 z-40">
@@ -130,65 +149,66 @@ function CatchAllRoute() {
 function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Toaster position="top-right" theme="dark" richColors />
-        <Routes>
-          <Route path="/login" element={<LoginRoute />} />
-          <Route path="/p/:token" element={<PublicSignPage />} />
-          <Route path="/" element={<ProtectedRoute module="dashboard"><DashboardPage /></ProtectedRoute>} />
-          <Route path="/orcamentos" element={<ProtectedRoute module="orcamentos"><OrcamentosPage /></ProtectedRoute>} />
-          <Route path="/propostas" element={<ProtectedRoute module="propostas"><PropostasPage /></ProtectedRoute>} />
-          <Route path="/negociacao" element={<ProtectedRoute module="propostas"><NegociacaoPage /></ProtectedRoute>} />
-          <Route path="/legenda-quadro" element={<ProtectedRoute module="propostas"><LegendaQuadroPage /></ProtectedRoute>} />
-          <Route path="/mascara-din" element={<ProtectedRoute module="propostas"><MascaraDinPage /></ProtectedRoute>} />
-          <Route path="/obras" element={<ProtectedRoute module="obras"><ObrasPage /></ProtectedRoute>} />
-          <Route path="/agenda" element={<ProtectedRoute module="agenda"><AgendaPage /></ProtectedRoute>} />
-          <Route path="/materiais" element={<ProtectedRoute module="materiais"><MateriaisPage /></ProtectedRoute>} />
-          <Route path="/mao-de-obra" element={<ProtectedRoute module="materiais"><MaoDeObraPage /></ProtectedRoute>} />
-          <Route path="/produtividades" element={<ProtectedRoute module="materiais"><ProdutividadesPage /></ProtectedRoute>} />
-          <Route path="/utilizadores" element={<ProtectedRoute module="utilizadores"><UtilizadoresPage /></ProtectedRoute>} />
-          <Route path="/empresas" element={<ProtectedRoute module="utilizadores"><EmpresasPage /></ProtectedRoute>} />
-          <Route path="/biblioteca" element={<ProtectedRoute module="biblioteca"><BibliotecaPage /></ProtectedRoute>} />
-          <Route path="/funcionarios" element={<ProtectedRoute module="funcionarios"><FuncionariosPage /></ProtectedRoute>} />
-          <Route path="/assiduidade" element={<ProtectedRoute module="assiduidade"><AssiduidadePage /></ProtectedRoute>} />
-          <Route path="/processamento-salarial" element={<ProtectedRoute module="salarios"><ProcessamentoSalarialPage /></ProtectedRoute>} />
-          <Route path="/creditos" element={<ProtectedRoute module="salarios"><CreditosPage /></ProtectedRoute>} />
-          <Route path="/custos-fixos" element={<ProtectedRoute module="custos_fixos"><CustosFixosPage /></ProtectedRoute>} />
-          <Route path="/config-salariais" element={<ProtectedRoute module="salarios"><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
-          <Route path="/despesas" element={<ProtectedRoute module="despesas"><DespesasPage /></ProtectedRoute>} />
-          <Route path="/faturas" element={<ProtectedRoute module="faturas"><FaturasPage /></ProtectedRoute>} />
-          <Route path="/financeiro" element={<ProtectedRoute module="financeiro"><DashboardFinanceiroPage /></ProtectedRoute>} />
-          <Route path="/relatorios" element={<ProtectedRoute module="relatorios"><RelatoriosPage /></ProtectedRoute>} />
-          <Route path="/guias" element={<ProtectedRoute module="transporte_guias"><GuiasPage /></ProtectedRoute>} />
-          <Route path="/pipeline" element={<ProtectedRoute module="obras"><PipelinePage /></ProtectedRoute>} />
-          <Route path="/ponto-equilibrio" element={<ProtectedRoute module="ponto_equilibrio"><PontoEquilibrioPage /></ProtectedRoute>} />
-          <Route path="/contabilista" element={<ProtectedRoute module="contabilista"><ContabilistaPage /></ProtectedRoute>} />
-          <Route path="/definicoes" element={<ProtectedRoute module="configuracoes"><DefinicoesPage /></ProtectedRoute>} />
-          <Route path="/mensagens-tecnicos" element={<ProtectedRoute module="funcionarios"><AdminMensagensTecnicosPage /></ProtectedRoute>} />
-          <Route path="/caixa-obra" element={<ProtectedRoute module="obras"><CaixaObraPage /></ProtectedRoute>} />
-          <Route path="/pedidos-servico" element={<ProtectedRoute module="obras"><PedidosServicoPage /></ProtectedRoute>} />
-          <Route path="/ponto-gps" element={<ProtectedRoute module="assiduidade"><PontoGPSPage /></ProtectedRoute>} />
-          <Route path="/relatorios-ponto" element={<ProtectedRoute module="assiduidade"><RelatoriosPontoPage /></ProtectedRoute>} />
-          <Route path="/pedido-servico" element={<WidgetPedidoPage />} />
-          <Route path="/perfil-cliente" element={<ProtectedRoute module="obras"><PerfilClientePage /></ProtectedRoute>} />
-          <Route path="/analise-bancaria" element={<ProtectedRoute module="financeiro"><AnaliseBancariaPage /></ProtectedRoute>} />
-          <Route path="/contas-previstas" element={<ProtectedRoute module="financeiro"><ContasPrevistasPage /></ProtectedRoute>} />
-          <Route path="/custos-recorrentes" element={<ProtectedRoute module="financeiro"><CustosRecorrentesPage /></ProtectedRoute>} />
-          <Route path="/cfo-virtual" element={<ProtectedRoute module="financeiro"><CfoVirtualPage /></ProtectedRoute>} />
-          {/* ===== Portal Técnico (isolado do admin) ===== */}
-          <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
-          <Route path="/tech/pedidos" element={<TechProtectedRoute><TechPedidosPage /></TechProtectedRoute>} />
-          <Route path="/tech/execucao" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
-          <Route path="/tech/execucao/:workId" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
-          <Route path="/tech/obra/:workId" element={<TechProtectedRoute><TechObraDetailPage /></TechProtectedRoute>} />
-          <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
-          <Route path="/tech/agenda" element={<TechProtectedRoute><TechAgendaPage /></TechProtectedRoute>} />
-          <Route path="/tech/ponto" element={<TechProtectedRoute><TechPontoPage /></TechProtectedRoute>} />
-          <Route path="/tech/chat" element={<TechProtectedRoute><TechChatPage /></TechProtectedRoute>} />
-          <Route path="/tech/perfil" element={<TechProtectedRoute><TechPerfilPage /></TechProtectedRoute>} />
-          <Route path="*" element={<CatchAllRoute />} />
-        </Routes>
-      </BrowserRouter>
+      <BrandingProvider>
+        <BrowserRouter>
+          <Toaster position="top-right" theme="dark" richColors />
+          <Routes>
+            <Route path="/login" element={<LoginRoute />} />
+            <Route path="/p/:token" element={<PublicSignPage />} />
+            <Route path="/" element={<ProtectedRoute module="dashboard"><DashboardPage /></ProtectedRoute>} />
+            <Route path="/orcamentos" element={<ProtectedRoute module="orcamentos"><OrcamentosPage /></ProtectedRoute>} />
+            <Route path="/propostas" element={<ProtectedRoute module="propostas"><PropostasPage /></ProtectedRoute>} />
+            <Route path="/negociacao" element={<ProtectedRoute module="propostas"><NegociacaoPage /></ProtectedRoute>} />
+            <Route path="/legenda-quadro" element={<ProtectedRoute module="propostas"><LegendaQuadroPage /></ProtectedRoute>} />
+            <Route path="/mascara-din" element={<ProtectedRoute module="propostas"><MascaraDinPage /></ProtectedRoute>} />
+            <Route path="/obras" element={<ProtectedRoute module="obras"><ObrasPage /></ProtectedRoute>} />
+            <Route path="/agenda" element={<ProtectedRoute module="agenda"><AgendaPage /></ProtectedRoute>} />
+            <Route path="/materiais" element={<ProtectedRoute module="materiais"><MateriaisPage /></ProtectedRoute>} />
+            <Route path="/mao-de-obra" element={<ProtectedRoute module="materiais"><MaoDeObraPage /></ProtectedRoute>} />
+            <Route path="/produtividades" element={<ProtectedRoute module="materiais"><ProdutividadesPage /></ProtectedRoute>} />
+            <Route path="/utilizadores" element={<ProtectedRoute module="utilizadores"><UtilizadoresPage /></ProtectedRoute>} />
+            <Route path="/empresas" element={<ProtectedRoute module="utilizadores"><EmpresasPage /></ProtectedRoute>} />
+            <Route path="/biblioteca" element={<ProtectedRoute module="biblioteca"><BibliotecaPage /></ProtectedRoute>} />
+            <Route path="/funcionarios" element={<ProtectedRoute module="funcionarios"><FuncionariosPage /></ProtectedRoute>} />
+            <Route path="/assiduidade" element={<ProtectedRoute module="assiduidade"><AssiduidadePage /></ProtectedRoute>} />
+            <Route path="/processamento-salarial" element={<ProtectedRoute module="salarios"><ProcessamentoSalarialPage /></ProtectedRoute>} />
+            <Route path="/creditos" element={<ProtectedRoute module="salarios"><CreditosPage /></ProtectedRoute>} />
+            <Route path="/custos-fixos" element={<ProtectedRoute module="custos_fixos"><CustosFixosPage /></ProtectedRoute>} />
+            <Route path="/config-salariais" element={<ProtectedRoute module="salarios"><ConfiguracoesSalariaisPage /></ProtectedRoute>} />
+            <Route path="/despesas" element={<ProtectedRoute module="despesas"><DespesasPage /></ProtectedRoute>} />
+            <Route path="/faturas" element={<ProtectedRoute module="faturas"><FaturasPage /></ProtectedRoute>} />
+            <Route path="/financeiro" element={<ProtectedRoute module="financeiro"><DashboardFinanceiroPage /></ProtectedRoute>} />
+            <Route path="/relatorios" element={<ProtectedRoute module="relatorios"><RelatoriosPage /></ProtectedRoute>} />
+            <Route path="/guias" element={<ProtectedRoute module="transporte_guias"><GuiasPage /></ProtectedRoute>} />
+            <Route path="/pipeline" element={<ProtectedRoute module="obras"><PipelinePage /></ProtectedRoute>} />
+            <Route path="/ponto-equilibrio" element={<ProtectedRoute module="ponto_equilibrio"><PontoEquilibrioPage /></ProtectedRoute>} />
+            <Route path="/contabilista" element={<ProtectedRoute module="contabilista"><ContabilistaPage /></ProtectedRoute>} />
+            <Route path="/definicoes" element={<ProtectedRoute module="configuracoes"><DefinicoesPage /></ProtectedRoute>} />
+            <Route path="/mensagens-tecnicos" element={<ProtectedRoute module="funcionarios"><AdminMensagensTecnicosPage /></ProtectedRoute>} />
+            <Route path="/caixa-obra" element={<ProtectedRoute module="obras"><CaixaObraPage /></ProtectedRoute>} />
+            <Route path="/pedidos-servico" element={<ProtectedRoute module="obras"><PedidosServicoPage /></ProtectedRoute>} />
+            <Route path="/ponto-gps" element={<ProtectedRoute module="assiduidade"><PontoGPSPage /></ProtectedRoute>} />
+            <Route path="/relatorios-ponto" element={<ProtectedRoute module="assiduidade"><RelatoriosPontoPage /></ProtectedRoute>} />
+            <Route path="/pedido-servico" element={<WidgetPedidoPage />} />
+            <Route path="/perfil-cliente" element={<ProtectedRoute module="obras"><PerfilClientePage /></ProtectedRoute>} />
+            <Route path="/analise-bancaria" element={<ProtectedRoute module="financeiro"><AnaliseBancariaPage /></ProtectedRoute>} />
+            <Route path="/contas-previstas" element={<ProtectedRoute module="financeiro"><ContasPrevistasPage /></ProtectedRoute>} />
+            <Route path="/custos-recorrentes" element={<ProtectedRoute module="financeiro"><CustosRecorrentesPage /></ProtectedRoute>} />
+            <Route path="/cfo-virtual" element={<ProtectedRoute module="financeiro"><CfoVirtualPage /></ProtectedRoute>} />
+            <Route path="/tech" element={<TechProtectedRoute><TechDashboardPage /></TechProtectedRoute>} />
+            <Route path="/tech/pedidos" element={<TechProtectedRoute><TechPedidosPage /></TechProtectedRoute>} />
+            <Route path="/tech/execucao" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
+            <Route path="/tech/execucao/:workId" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
+            <Route path="/tech/obra/:workId" element={<TechProtectedRoute><TechObraDetailPage /></TechProtectedRoute>} />
+            <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
+            <Route path="/tech/agenda" element={<TechProtectedRoute><TechAgendaPage /></TechProtectedRoute>} />
+            <Route path="/tech/ponto" element={<TechProtectedRoute><TechPontoPage /></TechProtectedRoute>} />
+            <Route path="/tech/chat" element={<TechProtectedRoute><TechChatPage /></TechProtectedRoute>} />
+            <Route path="/tech/perfil" element={<TechProtectedRoute><TechPerfilPage /></TechProtectedRoute>} />
+            <Route path="*" element={<CatchAllRoute />} />
+          </Routes>
+        </BrowserRouter>
+      </BrandingProvider>
     </AuthProvider>
   );
 }

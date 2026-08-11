@@ -78,8 +78,8 @@ export default function RelatoriosPage() {
     // Cede o ciclo ao React para renderizar o estado "A gerar…" antes de bloquear com jsPDF
     await new Promise((r) => setTimeout(r, 50));
     try {
-      const { data: settings } = await api.get('/proposal-settings').catch(() => ({ data: {} }));
-      const logo = settings?.logo_base64 || settings?.logo || null;
+      const { data: settings } = await api.get('/system-settings').catch(() => ({ data: {} }));
+      const logo = settings?.branding?.logo_data_url || settings?.logo_base64 || settings?.logo || null;
       await generateAnnualReportPDF(data, settings, logo);
       toast.success('PDF gerado com sucesso');
     } catch (e) {

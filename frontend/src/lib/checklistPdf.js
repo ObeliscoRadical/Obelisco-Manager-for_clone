@@ -4,12 +4,7 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import QRCode from 'qrcode';
-
-const YELLOW = [250, 204, 21];      // amarelo eléctrico Obelisco
-const BLACK = [10, 10, 12];
-const WHITE = [255, 255, 255];
-const GREY_LIGHT = [230, 230, 230];
-const GREY_DARK = [60, 60, 60];
+import { getPdfBranding } from './pdfBranding';
 
 /**
  * Gera o PDF da checklist de material.
@@ -19,6 +14,16 @@ const GREY_DARK = [60, 60, 60];
  * @param {Object} opts — { autoPrint: bool }
  */
 export async function generateChecklistPDF(budget, settings, logoBase64, opts = {}) {
+  const theme = getPdfBranding(settings, logoBase64);
+  const {
+    primary: YELLOW,
+    dark: BLACK,
+    light: WHITE,
+    mutedLight: GREY_LIGHT,
+    mutedDark: GREY_DARK,
+    logoBase64: resolvedLogo,
+    companyLabel,
+  } = theme;
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   const pageW = 210;
   const pageH = 297;
@@ -34,9 +39,9 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
   }
 
   // Logo à esquerda (se disponível)
-  if (logoBase64) {
+  if (resolvedLogo) {
     try {
-      doc.addImage(logoBase64, 'PNG', 10, 6, 26, 26);
+      doc.addImage(resolvedLogo, 'PNG', 10, 6, 26, 26);
     } catch { /* ignore */ }
   }
 
@@ -47,7 +52,7 @@ export async function generateChecklistPDF(budget, settings, logoBase64, opts = 
   doc.text('CHECKLIST DE SEPARAÇÃO', pageW / 2, 16, { align: 'center' });
   doc.setTextColor(...YELLOW);
   doc.setFontSize(11);
-  doc.text('OBELISCO RADICAL · MATERIAL DE OBRA', pageW / 2, 24, { align: 'center' });
+  doc.text(`${companyLabel} · MATERIAL DE OBRA`, pageW / 2, 24, { align: 'center' });
 
   // Mini badge canto superior direito (código curto)
   const code = (budget.code || budget.id || '').toString().slice(-6).toUpperCase();

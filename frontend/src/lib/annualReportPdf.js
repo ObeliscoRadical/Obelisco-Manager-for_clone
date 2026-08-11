@@ -3,16 +3,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-
-const YELLOW = [250, 204, 21];
-const BLACK = [10, 10, 12];
-const WHITE = [255, 255, 255];
-const GREY_LIGHT = [235, 235, 235];
-const GREY_MED = [180, 180, 180];
-const GREY_DARK = [80, 80, 80];
-const RED = [220, 38, 38];
-const GREEN = [22, 163, 74];
-const BLUE = [37, 99, 235];
+import { getPdfBranding } from './pdfBranding';
 
 const PAGE_W = 210;
 const PAGE_H = 297;
@@ -41,6 +32,8 @@ const fmtDate = (iso) => {
   try { return new Date(iso).toLocaleDateString('pt-PT'); } catch { return iso; }
 };
 
+const getThemeFromDoc = (doc, meta = null) => meta?.theme || doc?.__reportMeta?.theme || getPdfBranding();
+
 /* =============================================================
    HELPERS
    ============================================================= */
@@ -54,6 +47,11 @@ function ensurePage(doc, y, needed = 30) {
 }
 
 function drawCoverHeader(doc, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
+  const WHITE = theme.light;
+  const GREY_MED = theme.mutedMid;
   const { year, scope_label, generated_at, logoBase64, companyName } = meta;
   // Full black background top
   doc.setFillColor(...BLACK);
@@ -79,7 +77,7 @@ function drawCoverHeader(doc, meta) {
   doc.setTextColor(...YELLOW);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('OBELISCO RADICAL', PAGE_W / 2, 80, { align: 'center' });
+  doc.text((companyName || 'Obelisco Radical').toUpperCase(), PAGE_W / 2, 80, { align: 'center' });
 
   doc.setTextColor(...WHITE);
   doc.setFontSize(38);
@@ -101,6 +99,10 @@ function drawCoverHeader(doc, meta) {
 }
 
 function drawPageHeader(doc, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
+  const WHITE = theme.light;
   // top black strip
   doc.setFillColor(...BLACK);
   doc.rect(0, 0, PAGE_W, 16, 'F');
@@ -121,6 +123,10 @@ function drawPageHeader(doc, meta) {
 }
 
 function drawFooter(doc, totalPages, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
+  const WHITE = theme.light;
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
     if (p === 1) continue; // cover skips classic footer
@@ -129,7 +135,7 @@ function drawFooter(doc, totalPages, meta) {
     doc.setTextColor(...YELLOW);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.text('OBELISCO RADICAL · Relatório Financeiro Anual · Confidencial', MARGIN, PAGE_H - 4);
+    doc.text(`${String(meta?.companyName || 'OBELISCO RADICAL').toUpperCase()} · Relatório Financeiro Anual · Confidencial`, MARGIN, PAGE_H - 4);
     doc.setTextColor(...WHITE);
     doc.text(`${p}/${totalPages}`, PAGE_W - MARGIN, PAGE_H - 4, { align: 'right' });
   }
@@ -140,6 +146,12 @@ function drawFooter(doc, totalPages, meta) {
    ============================================================= */
 
 function drawBarChartMonthly(doc, x, y, w, h, monthly) {
+  const theme = getThemeFromDoc(doc);
+  const GREEN = theme.green;
+  const RED = theme.red;
+  const YELLOW = theme.primary;
+  const BLACK = theme.dark;
+  const GREY_DARK = theme.mutedDark;
   // 3 séries por mês: entries, total_out, net (net pode ser negativo)
   const labels = monthly.map((m) => m.month_label);
   const series = [
@@ -225,6 +237,10 @@ function drawBarChartMonthly(doc, x, y, w, h, monthly) {
 }
 
 function drawLineCashflow(doc, x, y, w, h, monthly) {
+  const theme = getThemeFromDoc(doc);
+  const YELLOW = theme.primary;
+  const BLACK = theme.dark;
+  const GREY_DARK = theme.mutedDark;
   const labels = monthly.map((m) => m.month_label);
   const vals = monthly.map((m) => m.accumulated);
   const maxV = Math.max(0, ...vals, 1);
@@ -314,11 +330,12 @@ function drawLineCashflow(doc, x, y, w, h, monthly) {
  * Returns nothing (draws into doc).
  */
 async function drawDonutViaCanvas(doc, x, y, size, slices, title) {
+  const theme = getThemeFromDoc(doc);
   // slices: [{label, value, color: [r,g,b]}]
   const total = slices.reduce((s, sl) => s + sl.value, 0);
   if (total <= 0) {
     doc.setFontSize(8);
-    doc.setTextColor(...GREY_DARK);
+    doc.setTextColor(...theme.mutedDark);
     doc.text('Sem dados', x + size / 2, y + size / 2, { align: 'center' });
     return;
   }
@@ -347,19 +364,19 @@ async function drawDonutViaCanvas(doc, x, y, size, slices, title) {
   });
 
   // Inner cap
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = `rgb(${theme.light[0]}, ${theme.light[1]}, ${theme.light[2]})`;
   ctx.beginPath();
   ctx.arc(cx, cy, inner - 1, 0, Math.PI * 2);
   ctx.fill();
 
   // Center total
-  ctx.fillStyle = '#0a0a0c';
+  ctx.fillStyle = `rgb(${theme.dark[0]}, ${theme.dark[1]}, ${theme.dark[2]})`;
   ctx.font = `bold ${Math.floor(px * 0.07)}px Helvetica, Arial, sans-serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const tot = new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(total);
   ctx.fillText(tot, cx, cy - 6);
-  ctx.fillStyle = '#666';
+  ctx.fillStyle = `rgb(${theme.mutedDark[0]}, ${theme.mutedDark[1]}, ${theme.mutedDark[2]})`;
   ctx.font = `${Math.floor(px * 0.04)}px Helvetica, Arial, sans-serif`;
   ctx.fillText(title || '', cx, cy + Math.floor(px * 0.06));
 
@@ -368,17 +385,18 @@ async function drawDonutViaCanvas(doc, x, y, size, slices, title) {
 }
 
 function drawDonutLegend(doc, x, y, w, slices) {
+  const theme = getThemeFromDoc(doc);
   doc.setFontSize(7.5);
   let cy = y;
   slices.forEach((s) => {
     doc.setFillColor(...s.color);
     doc.rect(x, cy - 2, 3, 3, 'F');
-    doc.setTextColor(...BLACK);
+    doc.setTextColor(...theme.dark);
     doc.setFont('helvetica', 'bold');
     const label = s.label.length > 28 ? s.label.slice(0, 27) + '…' : s.label;
     doc.text(label, x + 5, cy + 0.6);
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...GREY_DARK);
+    doc.setTextColor(...theme.mutedDark);
     doc.text(`${fmtEuro(s.value)}  (${fmtPct(s.pct)})`, x + w, cy + 0.6, { align: 'right' });
     cy += 5;
   });
@@ -389,6 +407,17 @@ function drawDonutLegend(doc, x, y, w, slices) {
    ============================================================= */
 
 function buildKPIsPage(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const GREY_MED = theme.mutedMid;
+  const GREY_DARK = theme.mutedDark;
+  const GREY_LIGHT = theme.mutedLight;
+  const WHITE = theme.light;
+  const GREEN = theme.green;
+  const RED = theme.red;
+  const YELLOW = theme.primary;
+  const BLUE = theme.blue;
+  const palette = meta?.chartPalette || theme.chartPalette || PALETTE;
   let y = drawPageHeader(doc, meta);
   doc.setTextColor(...BLACK);
   doc.setFont('helvetica', 'bold');
@@ -434,10 +463,10 @@ function buildKPIsPage(doc, data, meta) {
   doc.text('DECOMPOSIÇÃO DAS SAÍDAS', MARGIN + 4, y + 7);
 
   const breakdownCols = [
-    { label: 'Variáveis', value: k.total_out_variable, color: PALETTE[1] },
-    { label: 'Fixas', value: k.total_out_fixed, color: PALETTE[2] },
-    { label: 'Obra', value: k.total_out_obra, color: PALETTE[3] },
-    { label: 'Salários', value: k.total_payroll, color: PALETTE[4] },
+    { label: 'Variáveis', value: k.total_out_variable, color: palette[1] },
+    { label: 'Fixas', value: k.total_out_fixed, color: palette[2] },
+    { label: 'Obra', value: k.total_out_obra, color: palette[3] },
+    { label: 'Salários', value: k.total_payroll, color: palette[4] },
   ];
   const bcw = (PAGE_W - MARGIN * 2 - 16) / 4;
   breakdownCols.forEach((b, i) => {
@@ -531,6 +560,9 @@ function buildKPIsPage(doc, data, meta) {
 }
 
 async function buildChartsPage(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const palette = meta?.chartPalette || theme.chartPalette || PALETTE;
   doc.addPage();
   let y = drawPageHeader(doc, meta);
   doc.setTextColor(...BLACK);
@@ -568,7 +600,7 @@ async function buildChartsPage(doc, data, meta) {
   // Donut despesa
   const catTop = data.categories_expense.slice(0, 8);
   const catSlices = catTop.map((c, i) => ({
-    label: c.category, value: c.total, pct: c.pct, color: PALETTE[i % PALETTE.length],
+    label: c.category, value: c.total, pct: c.pct, color: palette[i % palette.length],
   }));
   doc.setFontSize(10);
   doc.text('Despesas por Categoria', MARGIN, y);
@@ -579,7 +611,7 @@ async function buildChartsPage(doc, data, meta) {
   // Donut clientes
   const cliTop = data.clients_revenue.slice(0, 8);
   const cliSlices = cliTop.map((c, i) => ({
-    label: c.client, value: c.total, pct: c.pct, color: PALETTE[i % PALETTE.length],
+    label: c.client, value: c.total, pct: c.pct, color: palette[i % palette.length],
   }));
   doc.setFontSize(10);
   doc.text('Receita por Cliente', MARGIN, y);
@@ -588,6 +620,11 @@ async function buildChartsPage(doc, data, meta) {
 }
 
 function buildInvoicesPages(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
+  const RED = theme.red;
+  const GREEN = theme.green;
   doc.addPage();
   let y = drawPageHeader(doc, meta);
   doc.setTextColor(...BLACK);
@@ -637,6 +674,9 @@ function buildInvoicesPages(doc, data, meta) {
 }
 
 function buildExpensesPages(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
   doc.addPage();
   let y = drawPageHeader(doc, meta);
   doc.setTextColor(...BLACK);
@@ -677,6 +717,9 @@ function buildExpensesPages(doc, data, meta) {
 }
 
 function buildPayrollPage(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
   if (!data.payroll_runs.length) return;
   doc.addPage();
   let y = drawPageHeader(doc, meta);
@@ -712,6 +755,12 @@ function buildPayrollPage(doc, data, meta) {
 }
 
 function buildWorksPage(doc, data, meta) {
+  const theme = getThemeFromDoc(doc, meta);
+  const BLACK = theme.dark;
+  const YELLOW = theme.primary;
+  const GREEN = theme.green;
+  const RED = theme.red;
+  const GREY_DARK = theme.mutedDark;
   if (!data.works.length) return;
   doc.addPage();
   let y = drawPageHeader(doc, meta);
@@ -766,12 +815,15 @@ function buildWorksPage(doc, data, meta) {
    ============================================================= */
 
 export async function generateAnnualReportPDF(data, settings = {}, logoBase64 = null) {
+  const theme = getPdfBranding(settings, logoBase64);
   const meta = {
     year: data.year,
     scope_label: data.scope_label,
     generated_at: data.generated_at,
-    logoBase64,
-    companyName: settings?.company_name || 'OBELISCO RADICAL',
+    logoBase64: theme.logoBase64,
+    companyName: theme.companyName,
+    theme,
+    chartPalette: theme.chartPalette,
   };
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   doc.__reportMeta = meta;

@@ -10,7 +10,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **PDF**: jsPDF + jspdf-autotable
 - **AI**: Emergent LLM Key → GPT-4o-mini (bank categorization), **GPT-5.4 (CFO Virtual)**, Gemini 3.1 Pro (OCR, invoice extraction, PDF bank statement extraction)
 - **Integrations**: Telegram Bot (Ponto + Manager), Google Calendar, Emergent Email, Web Push (VAPID)
-- **Design**: Dark theme (zinc-950 bg, yellow-400 accent)
+- **Design**: Tema escuro adaptativo com branding dinâmico por tenant (logo + paleta extraída automaticamente)
 
 ## All Implemented Features
 - JWT login + granular module permissions
@@ -54,6 +54,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 - **Mini gráfico mensal receitas vs despesas** (dashboard principal com leitura dos últimos 6 meses baseada em pagamentos recebidos vs despesas+salários)
 - **Mapa GPS da Equipa** (`/relatorios-ponto` com última posição por técnico, KPIs do mapa e trilho diário do técnico selecionado)
 - **Hardening Segurança Fase 1** (CORS allow-list baseado em env + regex emergent, rate limiting de rotas públicas, headers de segurança no backend e CSP no frontend)
+- **White Label / Branding por tenant** (upload de logo em Definições, extração automática de paleta, tema dinâmico no login/dashboard/sidebar e branding nos PDFs)
 
 ## Atualização 2026-08-08 — CFO Virtual / Recuperação de Crédito
 - Entregue o novo módulo **Gabinete do CFO** com rota protegida `GET /cfo-virtual` e entrada própria na sidebar
@@ -276,6 +277,33 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - testing agent iteration 62: backend `13/13`, frontend `100%`
   - pytest adicional: `/app/backend/tests/test_self_service_registration.py` → `13 passed`
 
+## Atualização 2026-08-11 — White Label / Branding por empresa
+- **Backend branding multiempresa concluído**
+  - `system_settings.branding` passa a guardar logo, origem e paleta por tenant
+  - extração automática de cores a partir do logótipo com geração de paleta completa (`primary`, `secondary`, `accent`, `surface`, `border`, charts)
+  - novo branding público por tenant com:
+    - `GET /api/public/branding`
+    - `GET /api/logo`
+    - `GET /api/settings/logo` (compatibilidade)
+  - `PUT /api/system-settings` aceita agora `branding.logo_data_url` e `branding.clear_logo`
+- **Frontend white label aplicado**
+  - novo `BrandingContext.jsx` para carregar/cachar/aplicar branding do tenant ativo
+  - `branding.js` injeta CSS variables dinâmicas em toda a app
+  - `BrandLogo.jsx` reutilizado no login, sidebar, dashboard e preview de branding
+  - novo separador **Branding** em `/definicoes` com preview, swatches, upload e reset
+  - `LoginPage.jsx`, `Sidebar.jsx` e `DashboardPage.jsx` passam a refletir o branding da empresa ativa
+- **PDFs alinhados ao branding**
+  - novo helper `pdfBranding.js`
+  - branding aplicado em `workReportPdf.js`, `guidePdf.js`, `checklistPdf.js` e `annualReportPdf.js`
+  - páginas que geram relatórios passaram a ler `system-settings` do tenant atual
+- **Validação formal**
+  - pytest novo: `/app/backend/tests/test_white_label_branding.py` → `3 passed`
+  - self-test API: upload, persistência, reset e isolamento por tenant validados
+  - smoke test visual: `/login` + `/definicoes > Branding`
+  - testing agent iteration 63: backend `100%` + frontend `100%`
+  - auto_frontend_testing_agent: aprovado
+  - deep_testing_backend_v2: `6/6` cenários aprovados
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -315,16 +343,17 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Backlog
 ### P0
-- Validar esta fase em produção após deploy (empresa activa, isolamento por tenant, login técnico)
+- Validar em produção após deploy: branding por tenant, empresa activa, isolamento por tenant e login técnico
 
 ### P1
 - Checklist de validação em produção pós-deploy:
   - login admin
+  - branding/logo correcto no login e dashboard
   - troca de empresa no seletor global
   - criação de utilizador por tenant
   - login técnico e contexto da empresa no portal técnico
 - Melhorias ao onboarding de nova conta:
-  - wizard pós-registo para completar NIF, telefone, morada e branding da empresa
+  - wizard pós-registo para completar NIF, telefone e morada da empresa
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes

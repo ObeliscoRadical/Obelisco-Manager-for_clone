@@ -1,3 +1,10 @@
+## 2026-08-11 — White Label / Branding por empresa concluído
+- `system_settings.branding` passa a suportar logo custom, reset e paleta automática por tenant
+- Novas APIs públicas/tenant-aware: `GET /api/public/branding`, `GET /api/logo`, `GET /api/settings/logo`
+- Frontend com `BrandingContext`, novo tab **Branding** em `/definicoes`, `BrandLogo` reutilizável e tema aplicado em `/login`, sidebar e dashboard
+- PDFs alinhados ao branding via `pdfBranding.js` (`workReportPdf`, `guidePdf`, `checklistPdf`, `annualReportPdf`)
+- Validação: pytest `test_white_label_branding.py` (3 passed) + self-test API + smoke visual + testing agent iteration 63 (backend 100%, frontend 100%) + auto_frontend_testing_agent aprovado + deep_testing_backend_v2 6/6
+
 ## 2026-08-11 — Multiempresa / SaaS Fase 1 concluída
 - Backend multiempresa concluído com coleção `companies`, migração idempotente de `company_id`, `company_access_ids` e índices por tenant
 - Auth admin/técnico passa a devolver contexto multiempresa; novo `active_company_id` + suporte `X-Company-Id`

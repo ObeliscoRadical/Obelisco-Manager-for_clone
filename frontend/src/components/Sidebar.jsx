@@ -1,10 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, CalendarCheck, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle, Building2 } from 'lucide-react';
+import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, CalendarCheck, Calculator, Coins, Receipt, FileCheck, LineChart, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../contexts/BrandingContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
 import { CompanySwitcher } from './CompanySwitcher';
-
-const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
+import { BrandLogo } from './branding/BrandLogo';
 
 // module_key mapeia para a chave em user.module_permissions
 const navItems = [
@@ -71,30 +71,30 @@ function canSee(user, mod) {
 export default function Sidebar() {
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { branding } = useBranding();
   const unreadAdmin = useUnreadAdminMessages();
 
   return (
-    <aside data-testid="sidebar" className="fixed left-0 top-0 h-screen w-72 bg-zinc-900 border-r border-zinc-800 flex flex-col z-50">
-      <div className="p-6 border-b border-zinc-800">
-        <div className="flex items-center gap-3">
-          <div className="relative h-12 w-16 flex items-center justify-center overflow-hidden rounded-md">
-            {/* Soft radial fade behind logo to hide edge seam against dark background */}
-            <div className="absolute inset-0 bg-gradient-radial from-zinc-900/0 via-zinc-900/60 to-zinc-900 pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(24,24,27,0) 40%, rgba(24,24,27,1) 100%)' }} />
-            <img
-              src={LOGO_URL}
-              alt="Obelisco Radical"
-              className="h-12 w-auto object-contain relative"
-              style={{
-                mixBlendMode: 'screen',
-                filter: 'drop-shadow(0 0 8px rgba(250,204,21,0.35)) drop-shadow(0 0 3px rgba(0,0,0,0.9))',
-              }}
-            />
-          </div>
-          <div>
-            <p className="text-lg font-black uppercase tracking-tight text-white">Obelisco</p>
-            <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">Manager</p>
-          </div>
-        </div>
+    <aside
+      data-testid="sidebar"
+      className="fixed left-0 top-0 h-screen w-72 flex flex-col z-50"
+      style={{
+        background: 'linear-gradient(180deg, var(--brand-surface) 0%, var(--brand-surface-alt) 100%)',
+        borderRight: '1px solid rgba(var(--brand-primary-rgb), 0.12)',
+      }}
+    >
+      <div className="p-6" style={{ borderBottom: '1px solid rgba(var(--brand-primary-rgb), 0.12)' }}>
+        <BrandLogo
+          branding={branding}
+          size="md"
+          showText
+          className="items-center"
+          logoTestId="sidebar-brand-logo"
+          titleTestId="sidebar-brand-title"
+          subtitleTestId="sidebar-brand-subtitle"
+          title={branding?.company_info?.name || 'Obelisco Radical'}
+          subtitle="Manager"
+        />
         <CompanySwitcher className="mt-4" />
       </div>
 
@@ -108,7 +108,7 @@ export default function Sidebar() {
               data-testid={`nav-${item.path.replace('/', '') || 'dashboard'}`}
               className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
                 isActive
-                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                  ? 'brand-active-nav font-semibold'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
               }`}
             >
@@ -147,7 +147,7 @@ export default function Sidebar() {
               data-testid={`nav-${item.path.replace('/', '')}`}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
                 isActive
-                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                ? 'brand-active-nav font-semibold'
                   : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
               }`}
             >
@@ -172,7 +172,7 @@ export default function Sidebar() {
               data-testid={`nav-${item.path.replace('/', '')}`}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
                 isActive
-                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                ? 'brand-active-nav font-semibold'
                   : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
               }`}
             >
@@ -201,7 +201,7 @@ export default function Sidebar() {
               data-testid={`nav-${item.path.replace('/', '')}`}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 ${
                 isActive
-                  ? 'bg-yellow-400 text-zinc-950 font-semibold'
+                ? 'brand-active-nav font-semibold'
                   : 'text-zinc-500 hover:text-white hover:bg-zinc-800'
               }`}
             >
@@ -212,7 +212,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-zinc-800">
+      <div className="p-4" style={{ borderTop: '1px solid rgba(var(--brand-primary-rgb), 0.12)' }}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
@@ -226,7 +226,8 @@ export default function Sidebar() {
           <button
             onClick={logout}
             data-testid="logout-button"
-            className="text-zinc-500 hover:text-red-400 transition-colors duration-300 p-2 rounded-lg hover:bg-zinc-800"
+            className="text-zinc-500 hover:text-white transition-colors duration-300 p-2 rounded-lg hover:bg-zinc-800"
+            style={{ border: '1px solid rgba(var(--brand-primary-rgb), 0.08)' }}
           >
             <LogOut size={18} />
           </button>

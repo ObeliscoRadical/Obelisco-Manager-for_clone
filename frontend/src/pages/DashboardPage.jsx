@@ -3,6 +3,8 @@ import api from '../lib/api';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { BrandLogo } from '@/components/branding/BrandLogo';
+import { useBranding } from '../contexts/BrandingContext';
 import {
   Wallet, ArrowDownCircle, ArrowUpCircle, AlertTriangle, TrendingUp, TrendingDown,
   FileText, ClipboardList, HardHat, Package, Truck, HandCoins, PiggyBank,
@@ -22,6 +24,7 @@ const fmtDate = (iso) => {
 const monthName = (m) => ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'][m - 1];
 
 export default function DashboardPage() {
+  const { branding } = useBranding();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [userName, setUserName] = useState('');
@@ -54,7 +57,7 @@ export default function DashboardPage() {
   if (loading || !data) {
     return (
       <div className="flex justify-center py-24">
-        <div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" />
+        <div className="h-8 w-8 rounded-full animate-spin" style={{ border: '2px solid var(--brand-primary)', borderTopColor: 'transparent' }} />
       </div>
     );
   }
@@ -67,22 +70,61 @@ export default function DashboardPage() {
     Receitas: item.revenue,
     Despesas: item.expenses,
   }));
+  const brandSwatches = [
+    branding?.branding?.palette?.primary,
+    branding?.branding?.palette?.secondary,
+    branding?.branding?.palette?.accent,
+  ].filter(Boolean);
 
   return (
     <div data-testid="dashboard-page" className="space-y-8">
-      {/* Header amigável */}
-      <div className="flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-2">
-            {greeting} <Sparkles size={24} className="text-yellow-400" />
-          </h1>
-          <p className="text-zinc-400 mt-1 text-sm">
-            Aqui tens um resumo do teu negócio em {monthName(period.month)} {period.year}.
-          </p>
+      <div className="grid gap-4 xl:grid-cols-[1.15fr,0.85fr] items-start">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-2">
+              {greeting} <Sparkles size={24} style={{ color: 'var(--brand-primary)' }} />
+            </h1>
+            <p className="text-zinc-400 mt-1 text-sm">
+              Aqui tens um resumo do teu negócio em {monthName(period.month)} {period.year}.
+            </p>
+          </div>
+          <Button data-testid="refresh-dashboard" onClick={fetch} variant="outline" className="rounded-full brand-outline-button">
+            <RefreshCw size={14} className="mr-2" /> Atualizar
+          </Button>
         </div>
-        <Button data-testid="refresh-dashboard" onClick={fetch} variant="outline" className="rounded-full border-zinc-700 text-zinc-300 hover:bg-zinc-800">
-          <RefreshCw size={14} className="mr-2" /> Atualizar
-        </Button>
+
+        <div data-testid="dashboard-brand-card" className="rounded-[2rem] p-5 brand-soft-panel">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
+            <BrandLogo
+              branding={branding}
+              size="md"
+              showText
+              logoTestId="dashboard-brand-logo"
+              titleTestId="dashboard-brand-title"
+              subtitleTestId="dashboard-brand-subtitle"
+              title={branding?.company_info?.name || userName || 'Empresa ativa'}
+              subtitle={branding?.company_info?.subtitle || 'White Label ativo'}
+            />
+
+            <div className="text-left xl:text-right">
+              <p className="text-[11px] uppercase tracking-[0.24em]" style={{ color: 'var(--brand-primary)' }}>
+                Identidade aplicada
+              </p>
+              <p className="mt-2 text-sm text-zinc-200 max-w-xs">
+                Login, dashboard e PDFs seguem esta paleta automaticamente para a empresa ativa.
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3" data-testid="dashboard-brand-swatches">
+            {brandSwatches.map((color, index) => (
+              <div key={`${color}-${index}`} className="flex items-center gap-2 rounded-full border border-white/10 bg-zinc-950/45 px-3 py-2 text-xs text-zinc-300">
+                <span className="h-3.5 w-3.5 rounded-full border border-white/15" style={{ background: color }} />
+                {color}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
       {/* KPIs principais — 4 em destaque */}

@@ -3,14 +3,7 @@
 
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-
-const YELLOW = [250, 204, 21];
-const BLACK = [10, 10, 12];
-const WHITE = [255, 255, 255];
-const GREY_LIGHT = [235, 235, 235];
-const GREY_DARK = [70, 70, 70];
-const RED = [220, 38, 38];
-const GREEN = [34, 197, 94];
+import { getPdfBranding } from './pdfBranding';
 
 const fmtEuro = (v) =>
   new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v || 0);
@@ -33,6 +26,19 @@ const fmtDate = (iso) => {
  */
 export async function generateWorkReportPDF(payload, settings = {}, logoBase64 = null) {
   const { work, items = [], expenses = [], kpis = {} } = payload || {};
+  const theme = getPdfBranding(settings, logoBase64);
+  const {
+    primary: YELLOW,
+    dark: BLACK,
+    light: WHITE,
+    mutedLight: GREY_LIGHT,
+    mutedDark: GREY_DARK,
+    red: RED,
+    green: GREEN,
+    logoBase64: resolvedLogo,
+    companyLabel,
+    footerLabel,
+  } = theme;
   const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
   const pageW = 210;
   const pageH = 297;
@@ -45,8 +51,8 @@ export async function generateWorkReportPDF(payload, settings = {}, logoBase64 =
     doc.rect(x, 34.4, 6, 1.6, 'F');
   }
 
-  if (logoBase64) {
-    try { doc.addImage(logoBase64, 'PNG', 10, 5, 26, 26); } catch { /* ignore */ }
+  if (resolvedLogo) {
+    try { doc.addImage(resolvedLogo, 'PNG', 10, 5, 26, 26); } catch { /* ignore */ }
   }
 
   doc.setTextColor(...WHITE);
@@ -55,7 +61,7 @@ export async function generateWorkReportPDF(payload, settings = {}, logoBase64 =
   doc.text('RELATÓRIO DE OBRA', pageW / 2, 15, { align: 'center' });
   doc.setTextColor(...YELLOW);
   doc.setFontSize(10);
-  doc.text('PREVISTO vs REAL · OBELISCO RADICAL', pageW / 2, 22, { align: 'center' });
+  doc.text(`PREVISTO vs REAL · ${companyLabel}`, pageW / 2, 22, { align: 'center' });
   doc.setTextColor(...WHITE);
   doc.setFontSize(8);
   doc.text(`Emitido em ${new Date().toLocaleDateString('pt-PT')}`, pageW - 12, 30, { align: 'right' });
@@ -263,7 +269,7 @@ export async function generateWorkReportPDF(payload, settings = {}, logoBase64 =
     doc.setTextColor(...YELLOW);
     doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
-    doc.text('OBELISCO RADICAL · Relatório interno · Confidencial', 12, pageH - 4);
+    doc.text(footerLabel, 12, pageH - 4);
     doc.text(`Página ${p}/${totalPages}`, pageW - 12, pageH - 4, { align: 'right' });
   }
 

@@ -83,7 +83,7 @@ export default function LegendaQuadroPage() {
 
   useEffect(() => {
     // Carrega o logo (mesma técnica das outras páginas)
-    api.get('/settings/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[legenda/logo]', err?.message));
+    api.get('/logo').then(res => res.data?.logo && setLogoBase64(res.data.logo)).catch((err) => devLog('[legenda/logo]', err?.message));
   }, []);
 
   // Guarda a sessão actual para poder ser importada pelo módulo Máscara DIN

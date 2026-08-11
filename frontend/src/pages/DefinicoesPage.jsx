@@ -1,20 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
+import { useBranding } from '../contexts/BrandingContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { BrandLogo } from '@/components/branding/BrandLogo';
+import { buildBrandingFromSettings } from '../lib/branding';
 import { toast } from 'sonner';
-import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash2, Loader2, Wallet } from 'lucide-react';
+import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash2, Loader2, Wallet, Palette, Upload, RotateCcw } from 'lucide-react';
 
 const formatPct = (v) => `${v}%`;
 
 export default function DefinicoesPage() {
   const { user } = useAuth();
+  const { applyBrandingFromSettings } = useBranding();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -27,17 +32,30 @@ export default function DefinicoesPage() {
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
 
   const save = async () => {
+    setSaving(true);
     try {
       const { data } = await api.put('/system-settings', settings);
       setSettings(data);
+      applyBrandingFromSettings(data);
       toast.success('Definições guardadas');
-    } catch { toast.error('Erro ao guardar'); }
+    } catch {
+      toast.error('Erro ao guardar');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const updateField = (key, val) => setSettings({ ...settings, [key]: val });
   const updateIndirect = (key, val) => setSettings({ ...settings, indirect_costs: { ...settings.indirect_costs, [key]: parseFloat(val) || 0 } });
   const updateRisk = (key, val) => setSettings({ ...settings, risk_levels: { ...settings.risk_levels, [key]: parseFloat(val) || 0 } });
   const updateCompany = (key, val) => setSettings({ ...settings, company_info: { ...settings.company_info, [key]: val } });
+  const updateBranding = (patch) => setSettings((prev) => ({
+    ...prev,
+    branding: {
+      ...(prev?.branding || {}),
+      ...patch,
+    },
+  }));
   const updateTreasury = (key, val) => setSettings({
     ...settings,
     treasury_settings: {
@@ -46,31 +64,64 @@ export default function DefinicoesPage() {
     },
   });
 
+  const brandingPreview = useMemo(() => buildBrandingFromSettings(settings || {}, user || {}), [settings, user]);
+
+  const handleBrandLogoChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2_500_000) {
+      toast.error('O logo deve ter no máximo 2.5MB');
+      return;
+    }
+
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    }).catch(() => null);
+
+    if (!dataUrl || typeof dataUrl !== 'string') {
+      toast.error('Não foi possível ler o ficheiro');
+      return;
+    }
+
+    updateBranding({ logo_data_url: dataUrl, clear_logo: false });
+    toast.success('Logo pronto — guarde para aplicar o novo tema');
+    event.target.value = '';
+  };
+
+  const handleResetBranding = () => {
+    updateBranding({ clear_logo: true, logo_data_url: null });
+    toast.success('Branding base reposto — guarde para confirmar');
+  };
+
   if (loading || !settings) return <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>;
 
   const indirects = settings.indirect_costs || {};
   const totalIndirect = Object.values(indirects).reduce((s, v) => s + v, 0);
 
   return (
-    <div data-testid="definições-page" className="space-y-6">
+    <div data-testid="definicoes-page" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Definições</h1>
           <p className="text-zinc-400 mt-1 font-medium">Configurações do motor de orcamentacao</p>
         </div>
-        <Button data-testid="save-settings" onClick={save} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
-          <Save size={16} className="mr-2" /> Guardar
+        <Button data-testid="save-settings" onClick={save} disabled={saving} className="rounded-full font-semibold brand-primary-button">
+          {saving ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />} Guardar
         </Button>
       </div>
 
       <Tabs defaultValue="geral">
         <TabsList className="bg-zinc-900 border border-zinc-800 rounded-full p-1">
-          <TabsTrigger value="geral" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Settings size={14} className="mr-1" /> Geral</TabsTrigger>
-          <TabsTrigger value="indiretos" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Percent size={14} className="mr-1" /> Indiretos</TabsTrigger>
-          <TabsTrigger value="risco" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Shield size={14} className="mr-1" /> Risco</TabsTrigger>
-          <TabsTrigger value="tesouraria" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Wallet size={14} className="mr-1" /> Tesouraria</TabsTrigger>
-          <TabsTrigger value="empresa" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Building2 size={14} className="mr-1" /> Empresa</TabsTrigger>
-          <TabsTrigger value="ia" className="rounded-full data-[state=active]:bg-yellow-400 data-[state=active]:text-zinc-950 text-zinc-400 text-sm"><Brain size={14} className="mr-1" /> Regras IA</TabsTrigger>
+          <TabsTrigger value="geral" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Settings size={14} className="mr-1" /> Geral</TabsTrigger>
+          <TabsTrigger value="indiretos" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Percent size={14} className="mr-1" /> Indiretos</TabsTrigger>
+          <TabsTrigger value="risco" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Shield size={14} className="mr-1" /> Risco</TabsTrigger>
+          <TabsTrigger value="tesouraria" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Wallet size={14} className="mr-1" /> Tesouraria</TabsTrigger>
+          <TabsTrigger value="empresa" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Building2 size={14} className="mr-1" /> Empresa</TabsTrigger>
+          <TabsTrigger value="branding" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Palette size={14} className="mr-1" /> Branding</TabsTrigger>
+          <TabsTrigger value="ia" className="rounded-full data-[state=active]:bg-[var(--brand-primary)] data-[state=active]:text-[var(--brand-on-primary)] text-zinc-400 text-sm"><Brain size={14} className="mr-1" /> Regras IA</TabsTrigger>
         </TabsList>
 
         <TabsContent value="geral" className="mt-6">
@@ -210,6 +261,103 @@ export default function DefinicoesPage() {
                     <Input value={settings.company_info?.[field] || ''} onChange={e => updateCompany(field, e.target.value)} className="mt-1 bg-zinc-800 border-zinc-700 text-white rounded-xl" />
                   </div>
                 ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="branding" className="mt-6">
+          <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
+            <CardContent className="p-6 space-y-6">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <Palette size={18} style={{ color: 'var(--brand-primary)' }} /> White Label por empresa
+                  </h3>
+                  <p className="text-sm text-zinc-400 mt-1 max-w-2xl">
+                    Carregue o logótipo desta empresa. O sistema extrai automaticamente as cores principais e aplica-as no login, dashboard, navegação e relatórios PDF.
+                  </p>
+                </div>
+                <Button data-testid="save-branding-settings" onClick={save} disabled={saving} className="rounded-full font-semibold brand-primary-button">
+                  {saving ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />} Guardar branding
+                </Button>
+              </div>
+
+              <div className="grid gap-6 xl:grid-cols-[1.05fr,0.95fr]">
+                <div className="space-y-5">
+                  <div className="rounded-[2rem] p-5 brand-soft-panel" data-testid="branding-preview-card">
+                    <BrandLogo
+                      branding={brandingPreview}
+                      size="lg"
+                      showText
+                      logoTestId="branding-preview-logo"
+                      titleTestId="branding-preview-title"
+                      subtitleTestId="branding-preview-subtitle"
+                      title={brandingPreview?.company_info?.name || user?.company_name || 'Empresa atual'}
+                      subtitle={brandingPreview?.company_info?.subtitle || 'Identidade ativa'}
+                    />
+
+                    <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 gap-3" data-testid="branding-color-swatches">
+                      {[
+                        ['Primária', brandingPreview?.branding?.palette?.primary],
+                        ['Secundária', brandingPreview?.branding?.palette?.secondary],
+                        ['Accent', brandingPreview?.branding?.palette?.accent],
+                        ['Superfície', brandingPreview?.branding?.palette?.surface],
+                        ['Borda', brandingPreview?.branding?.palette?.border],
+                        ['Texto', brandingPreview?.branding?.palette?.text],
+                      ].map(([label, color]) => (
+                        <div key={label} className="rounded-2xl border border-white/10 bg-zinc-950/45 p-3">
+                          <div className="h-8 rounded-xl border border-white/10" style={{ background: color || '#18181b' }} />
+                          <p className="mt-2 text-[11px] uppercase tracking-[0.22em] text-zinc-500">{label}</p>
+                          <p className="mt-1 text-sm font-semibold text-white">{color || '—'}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/50 p-4">
+                    <p className="text-sm font-semibold text-white">Onde este branding é aplicado</p>
+                    <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+                      <li>• ecrã de login e onboarding desta empresa</li>
+                      <li>• dashboard, sidebar e identidade visual principal</li>
+                      <li>• relatórios PDF e documentos emitidos com logo</li>
+                    </ul>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-5 space-y-4">
+                    <div>
+                      <Label htmlFor="branding-logo-input" className="text-zinc-300 text-sm font-medium">Logo da empresa</Label>
+                      <p className="mt-1 text-xs text-zinc-500">Recomendado: PNG transparente ou WEBP até 2.5MB.</p>
+                    </div>
+                    <Input
+                      id="branding-logo-input"
+                      data-testid="branding-logo-input"
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      onChange={handleBrandLogoChange}
+                      className="bg-zinc-900 border-zinc-800 text-white rounded-xl brand-field"
+                    />
+                    <div className="flex flex-wrap gap-3">
+                      <Button data-testid="branding-upload-button" type="button" className="rounded-full font-semibold brand-primary-button" onClick={() => document.getElementById('branding-logo-input')?.click()}>
+                        <Upload size={16} className="mr-2" /> Escolher logo
+                      </Button>
+                      <Button data-testid="branding-reset-button" type="button" variant="outline" className="rounded-full brand-outline-button" onClick={handleResetBranding}>
+                        <RotateCcw size={16} className="mr-2" /> Repor branding base
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-zinc-800 bg-zinc-950/55 p-5">
+                    <p className="text-sm font-semibold text-white">Notas rápidas</p>
+                    <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+                      <li>• o branding é isolado por tenant / empresa ativa</li>
+                      <li>• ao trocar de empresa, o tema muda automaticamente</li>
+                      <li>• ao remover o logo, a app volta ao branding base</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

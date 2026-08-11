@@ -102,7 +102,7 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "Testar o backend do Obelisco Manager com foco nos novos itens P2 implementados. Validar Dashboard overview API com monthly_revenue_vs_expenses, Team Map API, endpoints de ponto, security headers e rate limiting."
+user_problem_statement: "Validar a feature White Label / Branding já implementada em Obelisco Manager, em Português. Confirmar no frontend que: (1) /login mostra logo e identidade da marca atual, (2) após login admin, a sidebar mostra o logo/título da empresa, (3) o dashboard mostra o card de branding com swatches, (4) em /definicoes o tab Branding existe e mostra preview card, swatches, upload input, botão 'Escolher logo', botão 'Repor branding base' e botão 'Guardar branding', (5) não há quebras visuais relevantes no layout."
 
 backend:
   - task: "Dashboard Overview API - monthly_revenue_vs_expenses"
@@ -177,8 +177,92 @@ backend:
           agent: "testing"
           comment: "✅ TESTED AND WORKING. CORS headers are properly configured and compatible with frontend: (1) Access-Control-Allow-Origin: * (allows all origins) (2) Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH (3) Access-Control-Allow-Credentials: true (present in actual requests). OPTIONS preflight requests return correct CORS headers. No issues with authenticated API calls from frontend domain."
 
+  - task: "White Label / Branding - Public Branding Endpoint"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. GET /api/public/branding works without authentication and returns complete branding data. Response includes company_name ('Obelisco Radical'), branding object with palette (15 colors), logo_data_url, and source. Endpoint is publicly accessible as required for white label functionality."
+
+  - task: "White Label / Branding - Logo Endpoint by Tenant"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. GET /api/logo returns logo + branding data by tenant (company_id). Response includes logo (data URL), branding object with palette and source, and company_name. Tenant-specific branding is correctly retrieved and returned."
+
+  - task: "White Label / Branding - Upload Custom Logo"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. PUT /api/system-settings accepts branding.logo_data_url and persists custom logo by company. Uploaded logo is saved as PNG data URL, palette is automatically extracted from logo colors (primary color changed from default #facc15 to #e11d48 based on uploaded red logo), source is set to 'logo'. Logo persists correctly across GET requests."
+
+  - task: "White Label / Branding - Clear Logo and Reset"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. PUT /api/system-settings with branding.clear_logo=true successfully resets branding to base/default. After reset, source is 'default', palette primary color returns to #facc15 (default yellow), and logo_data_url is cleared. Reset functionality works as expected."
+
+  - task: "White Label / Branding - Tenant Isolation"
+    implemented: true
+    working: true
+    file: "/app/backend/server.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. Tenant isolation is correctly maintained for branding. Created new test tenant, uploaded different logo (green color) for new tenant, verified original tenant's branding remained unchanged (default). Each tenant has completely separate branding settings stored and retrieved correctly by company_id. No cross-tenant data leakage detected."
+
 frontend:
-  - task: "Dashboard - Mini Revenue vs Expenses Card"
+  - task: "White Label - Login Page Branding"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/pages/LoginPage.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. Login page displays brand identity correctly with all required elements: (1) Brand logo present (data-testid='login-brand-logo') showing company logo or fallback icon, (2) Brand title present (data-testid='login-brand-title') displaying 'OBELISCO RADICAL', (3) Brand subtitle present (data-testid='login-brand-subtitle') displaying 'MANAGER'. The BrandLogo component is properly integrated and renders the company identity on the login screen. Visual layout is clean with no breaks."
+
+  - task: "White Label - Sidebar Branding"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/components/Sidebar.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. After admin login, sidebar displays brand identity correctly: (1) Sidebar brand logo present (data-testid='sidebar-brand-logo'), (2) Sidebar brand title present (data-testid='sidebar-brand-title') displaying 'OBELISCO RADICAL', (3) Sidebar brand subtitle present (data-testid='sidebar-brand-subtitle') displaying 'MANAGER'. The BrandLogo component is properly integrated in the sidebar header. Branding persists correctly across navigation."
+
+  - task: "White Label - Dashboard Branding Card"
     implemented: true
     working: true
     file: "/app/frontend/src/pages/DashboardPage.jsx"
@@ -188,60 +272,64 @@ frontend:
     status_history:
         - working: true
           agent: "testing"
-          comment: "✅ TESTED AND WORKING. Mini revenue vs expenses card (data-testid='dashboard-mini-revenue-expenses') and chart (data-testid='dashboard-mini-revenue-expenses-chart') are both present and rendering correctly on the dashboard. No visual regressions observed. The card displays the last 6 months of revenue vs expenses data with a bar chart using Recharts library."
+          comment: "✅ TESTED AND WORKING. Dashboard displays branding card with all required elements: (1) Branding card present (data-testid='dashboard-brand-card'), (2) Brand logo displayed (data-testid='dashboard-brand-logo'), (3) Brand title showing 'OBELISCO RADICAL' (data-testid='dashboard-brand-title'), (4) Color swatches present (data-testid='dashboard-brand-swatches') showing 3 color swatches with hex values. The card provides clear visual feedback about the active brand identity and color palette."
 
-  - task: "Contas Previstas - Filters Panel"
+  - task: "White Label - Definições Branding Tab"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/ContasPrevistasPage.jsx"
+    file: "/app/frontend/src/pages/DefinicoesPage.jsx"
     stuck_count: 0
     priority: "high"
     needs_retesting: false
     status_history:
         - working: true
           agent: "testing"
-          comment: "✅ TESTED AND WORKING. Filters panel (data-testid='bill-filters-panel') is present with all required controls: category filter (bill-filter-category), start date (bill-filter-start-date), end date (bill-filter-end-date), and clear button (bill-filters-clear). All filters are functional - tested category selection to 'fixo', date range 2025-01-01 to 2025-12-31, and clear filters. Table (bills-table) responds correctly to filters and shows 19 bills. Empty filtered state (bills-empty-filtered) is also implemented."
+          comment: "✅ TESTED AND WORKING. Definições page has fully functional Branding tab with all required elements: (1) Branding tab exists and is clickable, (2) Preview card present (data-testid='branding-preview-card') showing logo and company name 'OBELISCO RADICAL', (3) Color swatches present (data-testid='branding-color-swatches') displaying 6 color swatches (Primária #facc15, Secundária #f59e0b, Accent #fde68a, Superfície #18181b, Borda #3f3f46, Texto #fafafa), (4) Logo input present (data-testid='branding-logo-input') as file input type, (5) Upload button present (data-testid='branding-upload-button') with text 'Escolher logo', (6) Reset button present (data-testid='branding-reset-button') with text 'Repor branding base', (7) Save button present (data-testid='save-branding-settings') with text 'Guardar branding'. All elements are visible and properly positioned. No horizontal overflow detected. Layout is clean and functional."
 
-  - task: "Relatórios de Ponto - Team Map & KPIs"
+  - task: "White Label - BrandLogo Component"
     implemented: true
     working: true
-    file: "/app/frontend/src/pages/RelatoriosPontoPage.jsx"
-    stuck_count: 0
-    priority: "high"
-    needs_retesting: false
-    status_history:
-        - working: true
-          agent: "testing"
-          comment: "✅ TESTED AND WORKING. All new P2 features are functional: (1) Four KPI blocks present and displaying data - team-map-kpi-techs (1 técnico), team-map-kpi-active (0 em serviço), team-map-kpi-stale (1 posição antiga), team-map-kpi-history (0 pontos do dia). (2) Team geo map (team-geo-map) rendering correctly with 1 position marker. (3) Latest positions list (team-map-latest-list) showing 1 position card. (4) Focus button (focus-team-position-*) working - clicked and selected technician successfully. (5) Trail panel (team-map-trail-panel) present with history date input (team-map-history-date) functional - tested changing date to 07/01/2025. (6) All legacy filters working: ponto-filter-today/week/month/custom, ponto-table-technician-filter, export-csv-btn. Dataset has only 1 technician which is acceptable per requirements."
-
-  - task: "TeamGeoMap Component"
-    implemented: true
-    working: true
-    file: "/app/frontend/src/components/timeclock/TeamGeoMap.jsx"
+    file: "/app/frontend/src/components/branding/BrandLogo.jsx"
     stuck_count: 0
     priority: "medium"
     needs_retesting: false
     status_history:
         - working: true
           agent: "testing"
-          comment: "✅ TESTED AND WORKING. TeamGeoMap component renders correctly with relative positioning of team members. Shows map with gradient background, grid overlay, and position markers. Handles both populated state (team-geo-map) and empty state (team-geo-map-empty). Markers are clickable and show technician names on hover. Selected technician is highlighted with yellow styling."
+          comment: "✅ TESTED AND WORKING. BrandLogo component is properly implemented and used across the application (LoginPage, Sidebar, DashboardPage, DefinicoesPage). Component correctly handles: (1) Logo display from branding data or fallback to Building2 icon, (2) Title and subtitle display with proper data-testid attributes, (3) Size variants (sm, md, lg), (4) Conditional text display via showText prop. Component integrates seamlessly with BrandingContext and displays brand identity consistently."
+
+  - task: "White Label - Branding Context & Logic"
+    implemented: true
+    working: true
+    file: "/app/frontend/src/contexts/BrandingContext.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED AND WORKING. BrandingContext provides centralized branding state management: (1) Fetches branding from /api/system-settings for admin users, (2) Caches branding in sessionStorage, (3) Applies branding to document via CSS custom properties, (4) Provides refreshBranding and applyBrandingFromSettings methods. The branding system correctly applies colors to the entire application and persists across navigation. Integration with /app/frontend/src/lib/branding.js provides utility functions for color manipulation and branding normalization."
 
 metadata:
   created_by: "testing_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.3"
+  test_sequence: 4
   run_ui: false
-  last_tested: "2026-08-08"
+  last_tested: "2026-08-11"
 
 test_plan:
   current_focus:
-    - "All P2 backend items tested and verified"
+    - "White Label / Branding backend APIs validated successfully"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     - agent: "testing"
+      message: "Completed comprehensive testing of White Label / Branding feature in Obelisco Manager. ALL TESTS PASSED (6 frontend tasks, all working correctly). Test results: (1) Login page displays brand logo, title 'OBELISCO RADICAL', and subtitle 'MANAGER' correctly. (2) Sidebar shows brand logo and title after admin login, branding persists across navigation. (3) Dashboard displays branding card with logo, title, and 3 color swatches. (4) Definições page has fully functional Branding tab with preview card showing 6 color swatches (Primária #facc15, Secundária #f59e0b, Accent #fde68a, Superfície #18181b, Borda #3f3f46, Texto #fafafa), file input for logo upload, 'Escolher logo' button, 'Repor branding base' button, and 'Guardar branding' button. (5) BrandLogo component properly implemented and used across all pages. (6) BrandingContext provides centralized state management with caching and CSS custom properties. No visual layout breaks detected, no horizontal overflow, all data-testid attributes properly implemented. The White Label / Branding feature is production-ready and working as specified."
+    - agent: "testing"
       message: "Completed comprehensive testing of all P2 frontend features. All tests passed successfully. Dashboard mini revenue/expenses card is rendering correctly with chart. Contas Previstas filters panel is fully functional with all filter controls working. Relatórios de Ponto has all new KPI blocks, team geo map, latest positions list, trail panel, and history date input working correctly. Legacy filters remain functional. Dataset contains 1 technician which is acceptable. Minor console warnings observed (CSP frame-ancestors, Cloudflare beacon blocked) but these are not app-related issues and don't affect functionality. No visual regressions, no horizontal overflow, all data-testid attributes properly implemented. Ready for production."
     - agent: "testing"
       message: "Completed comprehensive backend API testing for all P2 items. ALL TESTS PASSED (26 passed, 0 failed, 1 minor warning). Test results: (1) Dashboard Overview API: monthly_revenue_vs_expenses field present with correct structure (6 months, all required fields). (2) Timeclock Team Map API: All required fields present (generated_at, history_date, latest_positions, focused_technician, history_entries, summary, bounds), no BSON serialization issues. (3) Regression tests: timeclock/all and timeclock/export endpoints working correctly with date filters. (4) Security headers: All required headers present (CSP, X-Content-Type-Options, Referrer-Policy). (5) Rate limiting: Working correctly on public endpoints (~30 req/60s), authenticated endpoints not affected. (6) CORS: Properly configured, compatible with frontend. Minor warning: CORS Allow-Credentials header not in OPTIONS preflight (but present in actual requests). All P2 backend features are production-ready."
+    - agent: "testing"
+      message: "Completed comprehensive backend API testing for White Label / Branding feature. ALL 6 TESTS PASSED (100% success rate). Test results: (1) GET /api/public/branding works without authentication, returns complete branding data (company_name, branding object with 15 palette colors, logo_data_url, source). (2) GET /api/logo returns logo + branding by tenant (company_id), correctly retrieves tenant-specific data. (3) PUT /api/system-settings accepts branding.logo_data_url, persists custom logo, automatically extracts palette from logo colors (verified color change from #facc15 to #e11d48 for red logo), sets source to 'logo'. (4) PUT /api/system-settings with branding.clear_logo=true successfully resets to base branding (source='default', primary=#facc15). (5) Tenant isolation verified: created new test tenant, uploaded different logo, confirmed original tenant's branding unchanged - no cross-tenant data leakage. All branding APIs are production-ready and working correctly at https://dynamic-colors-2.preview.emergentagent.com/api."
