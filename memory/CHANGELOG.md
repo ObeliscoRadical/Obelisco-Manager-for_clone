@@ -1,3 +1,10 @@
+## 2026-08-11 — Multiempresa / SaaS Fase 1 concluída
+- Backend multiempresa concluído com coleção `companies`, migração idempotente de `company_id`, `company_access_ids` e índices por tenant
+- Auth admin/técnico passa a devolver contexto multiempresa; novo `active_company_id` + suporte `X-Company-Id`
+- Novas APIs: `GET /api/companies`, `GET /api/companies/current`, `POST /api/companies`, `POST /api/companies/select`
+- Frontend com seletor de empresa (`CompanySwitcher`) na sidebar admin e no portal técnico
+- Validação: self-test API + smoke visual + testing agent iteration 60 (backend 11/11, frontend 100%) + pytest `test_multitenancy.py` (11 passed)
+
 # Obelisco Manager - CHANGELOG
 
 ---

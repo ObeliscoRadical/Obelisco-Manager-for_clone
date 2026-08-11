@@ -16,7 +16,7 @@ import pytest
 import requests
 from auth_test_helpers import get_admin_credentials, get_tech_credentials, unique_test_password
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://bank-consolidate.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://obelisco-mgmt.preview.emergentagent.com").rstrip("/")
 
 ADMIN_EMAIL, ADMIN_PASSWORD = get_admin_credentials()
 REAL_TECH_EMAIL, REAL_TECH_PASSWORD = get_tech_credentials()

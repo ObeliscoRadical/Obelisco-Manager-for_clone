@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 # Configuration
-BASE_URL = "https://bank-consolidate.preview.emergentagent.com/api"
+BASE_URL = "https://obelisco-mgmt.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@obelisco.pt"
 ADMIN_PASSWORD = "obelisco2024"
 
@@ -419,7 +419,7 @@ def test_cors():
         response = requests.options(
             f"{BASE_URL}/dashboard/overview",
             headers={
-                "Origin": "https://bank-consolidate.preview.emergentagent.com",
+                "Origin": "https://obelisco-mgmt.preview.emergentagent.com",
                 "Access-Control-Request-Method": "GET",
                 "Access-Control-Request-Headers": "Authorization"
             },

@@ -7,8 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Plus, Trash2, Shield, Users, Settings2, Key } from 'lucide-react';
+import { Plus, Trash2, Shield, Users, Settings2, Key, Building2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuth } from '../contexts/AuthContext';
 
 const ROLE_LABELS = { admin: 'Administrador', orcamentista: 'Orçamentista', comercial: 'Comercial', tecnico: 'Técnico', consulta: 'Consulta' };
 const ROLE_COLORS = { admin: 'bg-red-500/20 text-red-400', orcamentista: 'bg-yellow-400/20 text-yellow-400', comercial: 'bg-blue-400/20 text-blue-400', tecnico: 'bg-green-500/20 text-green-400', consulta: 'bg-zinc-700 text-zinc-300' };
@@ -72,8 +73,10 @@ const MODULE_GROUPS = [
 const emptyForm = { email: '', password: '', name: '', role: 'consulta', module_permissions: {} };
 
 export default function UtilizadoresPage() {
+  const { user } = useAuth();
   const [users, setUsers] = useState([]);
   const [defaultsPerRole, setDefaultsPerRole] = useState({});
+  const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -81,9 +84,10 @@ export default function UtilizadoresPage() {
 
   const fetchUsers = useCallback(async () => {
     try {
-      const [usersRes, rolesRes] = await Promise.all([api.get('/users'), api.get('/roles')]);
+      const [usersRes, rolesRes, companyRes] = await Promise.all([api.get('/users'), api.get('/roles'), api.get('/companies/current')]);
       setUsers(usersRes.data);
       setDefaultsPerRole(rolesRes.data.default_modules_per_role || {});
+      setCompany(companyRes.data);
     } catch (err) { toast.error('Erro ao carregar utilizadores'); }
     finally { setLoading(false); }
   }, []);
@@ -162,12 +166,47 @@ export default function UtilizadoresPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-4xl font-black uppercase tracking-tight text-white sm:text-5xl">Utilizadores</h1>
-          <p className="text-zinc-400 mt-1 font-medium">Gestão de acessos e permissões granulares por módulo</p>
+          <p className="text-zinc-400 mt-1 font-medium">Gestão de acessos e permissões granulares por módulo, isolada por empresa</p>
         </div>
         <Button data-testid="new-user-btn" onClick={openCreate} className="bg-yellow-400 text-zinc-950 hover:bg-yellow-500 rounded-full font-semibold">
           <Plus size={16} className="mr-2" /> Novo Utilizador
         </Button>
       </div>
+
+      <Card className="bg-zinc-900 border-zinc-800 rounded-3xl" data-testid="current-company-card">
+        <CardContent className="p-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-yellow-400/25 bg-yellow-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-yellow-300">
+              <Building2 size={14} /> Tenant actual
+            </div>
+            <div>
+              <p data-testid="current-company-name" className="text-xl font-black text-white">{company?.name || user?.company_name || 'Empresa atual'}</p>
+              <p data-testid="current-company-slug-text" className="text-xs uppercase tracking-[0.18em] text-zinc-500">
+                {(company?.slug || user?.company_slug || 'tenant-principal')}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3" data-testid="company-users-count">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Utilizadores</p>
+              <p className="mt-1 text-lg font-black text-white">{company?.stats?.users_count ?? users.length}</p>
+            </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3" data-testid="company-budgets-count">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Orçamentos</p>
+              <p className="mt-1 text-lg font-black text-white">{company?.stats?.budgets_count ?? 0}</p>
+            </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3" data-testid="company-works-count">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Obras</p>
+              <p className="mt-1 text-lg font-black text-white">{company?.stats?.works_count ?? 0}</p>
+            </div>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-950/70 px-4 py-3" data-testid="company-invoices-count">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">Faturas</p>
+              <p className="mt-1 text-lg font-black text-white">{company?.stats?.invoices_count ?? 0}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {loading ? (
         <div className="flex justify-center py-16"><div className="h-8 w-8 border-2 border-yellow-400 border-t-transparent rounded-full animate-spin" /></div>
@@ -188,6 +227,9 @@ export default function UtilizadoresPage() {
                 <div>
                   <p className="text-white font-semibold">{u.name}</p>
                   <p className="text-zinc-500 text-sm">{u.email}</p>
+                  <p data-testid={`user-company-${u.id}`} className="mt-1 text-[11px] uppercase tracking-[0.18em] text-zinc-600">
+                    {u.company_name || company?.name || user?.company_name || 'Empresa atual'}
+                  </p>
                 </div>
                 <div className="pt-2 border-t border-zinc-800 flex items-center justify-between text-xs">
                   <span className="text-zinc-500 flex items-center gap-1"><Key size={12} /> Módulos activos</span>

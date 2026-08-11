@@ -16,7 +16,7 @@ Auth:
   - Admin/gestor: usa JWT normal (get_current_user passado pelo server.py)
   - Técnico: JWT específico com type="tech", validado contra db.employees.password_hash
 """
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel
 from typing import List, Optional, Callable
 from datetime import datetime, timezone, timedelta
@@ -26,11 +26,13 @@ import logging
 import bcrypt
 import jwt
 import re
+from multitenancy import resolve_company_context
 
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM = "HS256"
 TECH_TOKEN_TTL_HOURS = 12
+ACTIVE_COMPANY_COOKIE = "active_company_id"
 
 
 def _get_jwt_secret() -> str:
@@ -56,6 +58,28 @@ def _create_tech_token(employee_id: str, email: str) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(hours=TECH_TOKEN_TTL_HOURS),
     }
     return jwt.encode(payload, _get_jwt_secret(), algorithm=JWT_ALGORITHM)
+
+
+def _get_requested_company_id(request: Request) -> str | None:
+    header_value = (request.headers.get("x-company-id") or "").strip()
+    if header_value:
+        return header_value
+    cookie_value = (request.cookies.get(ACTIVE_COMPANY_COOKIE) or "").strip()
+    return cookie_value or None
+
+
+def _set_active_company_cookie(response: Response, company_id: str | None):
+    if not company_id:
+        return
+    response.set_cookie(
+        key=ACTIVE_COMPANY_COOKIE,
+        value=company_id,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=604800,
+        path="/",
+    )
 
 
 # ----- Models -----
@@ -143,12 +167,14 @@ def create_transport_guides_router(db, get_current_user: Callable):
         try:
             payload = jwt.decode(token, _get_jwt_secret(), algorithms=[JWT_ALGORITHM])
             ttype = payload.get("type")
+            preferred_company_id = _get_requested_company_id(request)
             if ttype == "tech":
                 emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0})
                 if not emp or not emp.get("active", True):
                     raise HTTPException(status_code=401, detail="Funcionário inativo ou inexistente")
                 emp.pop("password_hash", None)
                 emp["_is_admin"] = False
+                emp.update(await resolve_company_context(db.raw, emp, preferred_company_id=preferred_company_id))
                 return emp
             elif ttype == "access":
                 # Utilizador da collection `users` — admin OU qualquer user com tech_portal=True
@@ -160,7 +186,15 @@ def create_transport_guides_router(db, get_current_user: Callable):
                 perms = u.get("module_permissions") or {}
                 if not is_admin and not perms.get("tech_portal"):
                     raise HTTPException(status_code=403, detail="Sem permissão para o portal técnico")
-                return {"id": str(u["_id"]), "name": u.get("name"), "email": u.get("email"), "role": u.get("role"), "_is_admin": True, "active": True}
+                return {
+                    "id": str(u["_id"]),
+                    "name": u.get("name"),
+                    "email": u.get("email"),
+                    "role": u.get("role"),
+                    "_is_admin": True,
+                    "active": True,
+                    **(await resolve_company_context(db.raw, u, preferred_company_id=preferred_company_id)),
+                }
             raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:
             raise HTTPException(status_code=401, detail="Token inválido ou expirado")
@@ -184,7 +218,7 @@ def create_transport_guides_router(db, get_current_user: Callable):
         return {"ok": True, "email": emp["email"]}
 
     @router.post("/tech/auth/login")
-    async def tech_login(input: TechLogin):
+    async def tech_login(input: TechLogin, request: Request, response: Response):
         email = (input.email or "").lower().strip()
         if not email or not input.password:
             raise HTTPException(status_code=400, detail="Email e password obrigatórios")
@@ -196,10 +230,18 @@ def create_transport_guides_router(db, get_current_user: Callable):
         if not _verify_password(input.password, emp["password_hash"]):
             raise HTTPException(status_code=401, detail="Credenciais inválidas")
         token = _create_tech_token(emp["id"], emp["email"])
+        company_context = await resolve_company_context(db.raw, emp, preferred_company_id=_get_requested_company_id(request))
+        _set_active_company_cookie(response, company_context.get("company_id"))
         return {
             "access_token": token,
             "token_type": "bearer",
-            "employee": {"id": emp["id"], "name": emp.get("name", ""), "email": emp.get("email", ""), "role": emp.get("role", "")},
+            "employee": {
+                "id": emp["id"],
+                "name": emp.get("name", ""),
+                "email": emp.get("email", ""),
+                "role": emp.get("role", ""),
+                **company_context,
+            },
         }
 
     @router.get("/tech/auth/me")

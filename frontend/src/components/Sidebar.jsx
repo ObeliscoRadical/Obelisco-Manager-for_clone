@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, FileText, ClipboardList, HardHat, CalendarDays, LogOut, Package, Users, Timer, Settings, LayoutGrid, UserCog, BookOpen, Wallet, CalendarCheck2, CalendarCheck, Calculator, Coins, Receipt, FileCheck, LineChart, Inbox, ExternalLink, PiggyBank, Repeat, FileBarChart, Truck, GitBranch, Target, BrainCircuit, Wrench, MessageSquare, Ruler, Zap, Clock, BarChart3, UserCircle, Building2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useUnreadAdminMessages } from '../hooks/useUnreadAdminMessages';
+import { CompanySwitcher } from './CompanySwitcher';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
@@ -93,6 +94,7 @@ export default function Sidebar() {
             <p className="text-xs uppercase tracking-[0.25em] text-zinc-500">Manager</p>
           </div>
         </div>
+        <CompanySwitcher className="mt-4" />
       </div>
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
@@ -210,10 +212,15 @@ export default function Sidebar() {
       </nav>
 
       <div className="p-4 border-t border-zinc-800">
-        <div className="flex items-center justify-between">
-          <div className="min-w-0">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-white truncate">{user?.name}</p>
             <p className="text-xs text-zinc-500 truncate">{user?.email}</p>
+            {user?.company_slug && (
+              <p data-testid="current-company-slug" className="mt-1 text-[10px] uppercase tracking-[0.16em] text-zinc-600 truncate">
+                {user.company_slug}
+              </p>
+            )}
           </div>
           <button
             onClick={logout}

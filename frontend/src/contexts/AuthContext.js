@@ -1,9 +1,14 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import api, { tokenStore } from '../lib/api';
+import api, { companySessionStore, tokenStore } from '../lib/api';
 import { devLog, safeSessionGetText, safeSessionRemove, safeSessionSetText } from '../lib/browserStorage';
 
 const AuthContext = createContext(null);
 const USER_KIND_KEY = 'obelisco_user_kind_session';
+
+const persistCompanySession = (companyId) => {
+  if (companyId) companySessionStore.set(companyId);
+  else companySessionStore.clear();
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -15,11 +20,13 @@ export function AuthProvider({ children }) {
 
     const tryTech = async () => {
       const { data } = await api.get('/tech/auth/me');
+      persistCompanySession(data?.company_id);
       setUser({ ...data, __kind: 'tech' });
       safeSessionSetText(USER_KIND_KEY, 'tech');
     };
     const tryAdmin = async () => {
       const { data } = await api.get('/auth/me');
+      persistCompanySession(data?.company_id);
       setUser({ ...data, __kind: 'admin' });
       safeSessionSetText(USER_KIND_KEY, 'admin');
     };
@@ -32,6 +39,7 @@ export function AuthProvider({ children }) {
       }
     } catch (err) {
       devLog('Auth check failed:', err?.response?.status || err.message);
+      companySessionStore.clear();
       setUser(false);
     } finally {
       setLoading(false);
@@ -49,6 +57,7 @@ export function AuthProvider({ children }) {
       if (data.access_token || data.refresh_token) {
         tokenStore.set(data.access_token, data.refresh_token);
       }
+      persistCompanySession(data?.company_id);
       const u = { ...data, __kind: 'admin' };
       safeSessionSetText(USER_KIND_KEY, 'admin');
       setUser(u);
@@ -60,6 +69,7 @@ export function AuthProvider({ children }) {
         try {
           const { data } = await api.post('/tech/auth/login', { email, password });
           if (data.access_token) tokenStore.set(data.access_token, null);
+          persistCompanySession(data?.employee?.company_id);
           const u = { ...(data.employee || {}), __kind: 'tech' };
           safeSessionSetText(USER_KIND_KEY, 'tech');
           setUser(u);
@@ -83,11 +93,24 @@ export function AuthProvider({ children }) {
       devLog('Logout error:', err?.message || err);
     }
     tokenStore.clear();
+    companySessionStore.clear();
     safeSessionRemove(USER_KIND_KEY);
     setUser(false);
   }, [user]);
 
-  const value = useMemo(() => ({ user, loading, token, login, logout }), [user, loading, token, login, logout]);
+  const refreshAuth = useCallback(async () => {
+    setLoading(true);
+    await checkAuth();
+  }, [checkAuth]);
+
+  const switchCompany = useCallback(async (companyId) => {
+    const { data } = await api.post('/companies/select', { company_id: companyId });
+    persistCompanySession(data?.company_id);
+    setUser((prev) => prev ? ({ ...prev, ...data }) : prev);
+    return data;
+  }, []);
+
+  const value = useMemo(() => ({ user, loading, token, login, logout, refreshAuth, switchCompany }), [user, loading, token, login, logout, refreshAuth, switchCompany]);
 
   return (
     <AuthContext.Provider value={value}>

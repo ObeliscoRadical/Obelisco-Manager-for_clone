@@ -3,6 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks, Zap } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 import NotificationsBell from './NotificationsBell';
+import { CompanySwitcher } from './CompanySwitcher';
 
 const LOGO_URL = "https://customer-assets.emergentagent.com/job_5fce1f4d-80cf-4626-b6e9-65e04d47c472/artifacts/h167wiyk_Captura%20de%20Tela%202026-03-12%20a%CC%80s%2021.48.12.png";
 
@@ -47,7 +48,7 @@ export default function TechLayout({ children }) {
             <img src={LOGO_URL} alt="Obelisco" className="h-8 object-contain" />
             <div>
               <p className="text-[10px] uppercase tracking-widest text-yellow-400 font-bold leading-none">Portal Técnico</p>
-              <p className="text-xs text-zinc-400 leading-none mt-0.5">Obelisco Radical</p>
+              <p data-testid="tech-current-company-name" className="text-xs text-zinc-400 leading-none mt-0.5">{user?.company_name || 'Empresa activa'}</p>
             </div>
           </Link>
           <div className="flex items-center gap-2">
@@ -79,6 +80,9 @@ export default function TechLayout({ children }) {
               <LogOut className="h-4 w-4" />
             </button>
           </div>
+        </div>
+        <div className="mt-3 max-w-3xl mx-auto">
+          <CompanySwitcher compact />
         </div>
       </header>
 

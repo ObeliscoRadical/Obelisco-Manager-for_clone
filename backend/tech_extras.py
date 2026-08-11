@@ -16,12 +16,14 @@ import uuid
 import shutil
 import logging
 import jwt
+from multitenancy import resolve_company_context
 
 # Ponto action labels/emojis (module-level constants)
 PONTO_ACTION_LABELS = {"in": "ENTRADA", "out": "SAÍDA", "break_start": "INÍCIO PAUSA", "break_end": "FIM PAUSA"}
 PONTO_ACTION_EMOJIS = {"in": "🟢", "out": "🔴", "break_start": "☕", "break_end": "🔵"}
 
 logger = logging.getLogger(__name__)
+ACTIVE_COMPANY_COOKIE = "active_company_id"
 
 # Directório para fotos de obras
 UPLOAD_DIR = Path("/app/backend/uploads/tech_photos")
@@ -59,6 +61,13 @@ def _get_tech_user_dep(db):
     JWT_SECRET = os.environ["JWT_SECRET"]
     JWT_ALGO = "HS256"
 
+    def _get_requested_company_id(request: Request) -> str | None:
+        header_value = (request.headers.get("x-company-id") or "").strip()
+        if header_value:
+            return header_value
+        cookie_value = (request.cookies.get(ACTIVE_COMPANY_COOKIE) or "").strip()
+        return cookie_value or None
+
     async def get_tech_user(request: Request):
         auth = request.headers.get("Authorization", "")
         if not auth.startswith("Bearer "):
@@ -66,11 +75,13 @@ def _get_tech_user_dep(db):
         try:
             payload = jwt.decode(auth[7:], JWT_SECRET, algorithms=[JWT_ALGO])
             ttype = payload.get("type")
+            preferred_company_id = _get_requested_company_id(request)
             if ttype == "tech":
                 emp = await db.employees.find_one({"id": payload["sub"]}, {"_id": 0, "password_hash": 0})
                 if not emp or not emp.get("active", True):
                     raise HTTPException(status_code=401, detail="Funcionário inactivo")
-                return {**emp, "_is_admin": False}
+                company_context = await resolve_company_context(db.raw, emp, preferred_company_id=preferred_company_id)
+                return {**emp, "_is_admin": False, **company_context}
             elif ttype == "access":
                 from bson import ObjectId as _OID
                 u = await db.users.find_one({"_id": _OID(payload["sub"])})
@@ -80,12 +91,14 @@ def _get_tech_user_dep(db):
                 perms = u.get("module_permissions") or {}
                 if not is_admin and not perms.get("tech_portal"):
                     raise HTTPException(status_code=403, detail="Sem permissão para o portal técnico")
+                company_context = await resolve_company_context(db.raw, u, preferred_company_id=preferred_company_id)
                 return {
                     "id": str(u["_id"]),
                     "name": u.get("name"),
                     "email": u.get("email"),
                     "role": u.get("role"),
                     "_is_admin": True,
+                    **company_context,
                 }
             raise HTTPException(status_code=401, detail="Token inválido")
         except jwt.PyJWTError:

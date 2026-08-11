@@ -199,6 +199,36 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - frontend: admin vê pagamentos futuros em `/tech/agenda`; técnico vê estado vazio/compromissos operacionais sem pagamentos
 - Nota operacional: o utilizador reportou o problema em produção; a correção foi aplicada e validada em preview, exigindo redeploy para chegar à produção
 
+## Atualização 2026-08-11 — Multiempresa / SaaS Fase 1
+- **Infraestrutura multitenant concluída no backend**
+  - `companies` como nova coleção base
+  - `company_id` aplicado às coleções core via wrapper `MultiTenantDatabase`
+  - `company_access_ids` adicionado/migrado para utilizadores com acesso cruzado a tenants
+  - `merge_company_filter` endurecido para impedir bypass por query manual com `company_id`
+- **Auth e contexto de tenant**
+  - `GET /api/auth/me`, `POST /api/auth/login` e `POST /api/auth/refresh` devolvem agora contexto multiempresa completo
+  - novo cookie `active_company_id` + suporte a `X-Company-Id`
+  - login técnico e dependências do portal técnico/ordens de serviço mantêm o tenant correcto
+- **APIs novas / multiempresa**
+  - `GET /api/companies`
+  - `GET /api/companies/current`
+  - `POST /api/companies`
+  - `POST /api/companies/select`
+- **Migração idempotente**
+  - dados históricos migrados para o tenant inicial Obelisco Radical
+  - índices por `company_id` garantidos nas coleções críticas
+  - `system_settings` passa a existir por tenant
+- **Frontend**
+  - novo `CompanySwitcher.jsx` com `data-testid` completo
+  - seletor visível na sidebar admin e no cabeçalho do portal técnico
+  - `api.js` envia `X-Company-Id` automaticamente
+  - `AuthContext.js` mantém tenant activo em sessão e suporta troca sem reload manual
+- **Validação formal**
+  - self-test backend: criação de tenant, troca de tenant, criação de utilizador no tenant novo, isolamento entre `/api/users`, login técnico
+  - smoke test visual frontend: login admin + seletor visível
+  - testing agent iteration 60: backend `11/11`, frontend `100%`
+  - pytest adicional: `/app/backend/tests/test_multitenancy.py` → `11 passed`
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -238,9 +268,10 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Backlog
 ### P0
-- Migração Multiempresa / SaaS Fase 1 (`company_id` em coleções core + isolamento por tenant)
+- Validar esta fase em produção após deploy (empresa activa, isolamento por tenant, login técnico)
 
 ### P1
+- Multiempresa Fase 2: UI de gestão de tenants e atribuição de acessos multiempresa por utilizador/admin
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
 - Exportar Custos Recorrentes

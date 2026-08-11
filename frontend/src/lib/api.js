@@ -3,7 +3,9 @@ import { devLog, safeSessionGetText, safeSessionRemove, safeSessionSetText } fro
 
 const ACCESS_KEY = 'obelisco_access_token_session';
 const REFRESH_KEY = 'obelisco_refresh_token_session';
+const ACTIVE_COMPANY_KEY = 'obelisco_active_company_id_session';
 const inMemoryTokens = { access: null, refresh: null };
+let inMemoryCompanyId = null;
 
 export const tokenStore = {
   getAccess: () => {
@@ -36,6 +38,24 @@ export const tokenStore = {
   },
 };
 
+export const companySessionStore = {
+  get: () => {
+    if (inMemoryCompanyId) return inMemoryCompanyId;
+    const companyId = safeSessionGetText(ACTIVE_COMPANY_KEY, null);
+    inMemoryCompanyId = companyId;
+    return companyId;
+  },
+  set: (companyId) => {
+    if (!companyId) return;
+    inMemoryCompanyId = companyId;
+    safeSessionSetText(ACTIVE_COMPANY_KEY, companyId);
+  },
+  clear: () => {
+    inMemoryCompanyId = null;
+    safeSessionRemove(ACTIVE_COMPANY_KEY);
+  },
+};
+
 const api = axios.create({
   baseURL: `${process.env.REACT_APP_BACKEND_URL}/api`,
   withCredentials: true,
@@ -45,9 +65,14 @@ const api = axios.create({
 // Attach Bearer token from session-scoped fallback storage (works in iframes where cookies are blocked)
 api.interceptors.request.use((config) => {
   const token = tokenStore.getAccess();
+  const activeCompanyId = companySessionStore.get();
   if (token) {
     config.headers = config.headers || {};
     config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (activeCompanyId) {
+    config.headers = config.headers || {};
+    config.headers['X-Company-Id'] = activeCompanyId;
   }
   return config;
 });
@@ -94,6 +119,7 @@ api.interceptors.response.use(
         return api(original);
       } catch (refreshErr) {
         tokenStore.clear();
+        companySessionStore.clear();
         processQueue(refreshErr);
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/p/')) {
           window.location.href = '/login';

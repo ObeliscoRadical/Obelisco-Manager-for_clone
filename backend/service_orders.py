@@ -13,8 +13,10 @@ import os
 import asyncio
 import httpx
 import jwt
+from multitenancy import resolve_company_context
 
 logger = logging.getLogger(__name__)
+ACTIVE_COMPANY_COOKIE = "active_company_id"
 
 # Telegram config — TWO independent bots
 # PONTO BOT: only attendance (entrada/saída)
@@ -333,6 +335,13 @@ def create_service_orders_router(db, get_current_user):
     def _now():
         return datetime.now(timezone.utc).isoformat()
 
+    def _get_requested_company_id(request: Request) -> str | None:
+        header_value = (request.headers.get("x-company-id") or "").strip()
+        if header_value:
+            return header_value
+        cookie_value = (request.cookies.get(ACTIVE_COMPANY_COOKIE) or "").strip()
+        return cookie_value or None
+
     async def _get_current_service_user(request: Request):
         try:
             user = await get_current_user(request)
@@ -358,11 +367,13 @@ def create_service_orders_router(db, get_current_user):
             raise HTTPException(status_code=401, detail="Funcionário inativo ou inexistente")
 
         employee.pop("password_hash", None)
+        company_context = await resolve_company_context(db.raw, employee, preferred_company_id=_get_requested_company_id(request))
         return {
             **employee,
             "sub": employee.get("id"),
             "_is_admin": False,
             "is_tech": True,
+            **company_context,
         }
 
     def _is_order_visible_to_user(order: dict, user: dict) -> bool:

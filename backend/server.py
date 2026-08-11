@@ -19,15 +19,38 @@ from datetime import datetime, timezone, timedelta
 from pydantic import BaseModel
 from typing import List, Optional
 from collections import defaultdict, deque
+from multitenancy import (
+    MultiTenantDatabase,
+    ensure_company_indexes,
+    ensure_default_company,
+    get_default_company_id,
+    migrate_existing_company_ids,
+    reset_request_company_id,
+    resolve_company_context,
+    set_default_company_id,
+    set_request_company_id,
+    slugify_company_name,
+    sync_company_profile,
+)
 
 # MongoDB
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+raw_db = client[os.environ['DB_NAME']]
+db = MultiTenantDatabase(raw_db)
 
 # App
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+
+
+@app.middleware("http")
+async def reset_tenant_context(request: Request, call_next):
+    token = set_request_company_id(None)
+    try:
+        return await call_next(request)
+    finally:
+        reset_request_company_id(token)
 
 # Logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -71,6 +94,29 @@ def _build_cors_allow_list() -> List[str]:
 
 # JWT Config
 JWT_ALGORITHM = "HS256"
+ACTIVE_COMPANY_COOKIE = "active_company_id"
+
+
+def get_requested_company_id(request: Request) -> str | None:
+    header_value = (request.headers.get("x-company-id") or "").strip()
+    if header_value:
+        return header_value
+    cookie_value = (request.cookies.get(ACTIVE_COMPANY_COOKIE) or "").strip()
+    return cookie_value or None
+
+
+def set_active_company_cookie(response: Response, company_id: str | None):
+    if not company_id:
+        return
+    response.set_cookie(
+        key=ACTIVE_COMPANY_COOKIE,
+        value=company_id,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=604800,
+        path="/",
+    )
 
 def get_jwt_secret():
     return os.environ["JWT_SECRET"]
@@ -109,15 +155,17 @@ async def get_current_user(request: Request):
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "access":
             raise HTTPException(status_code=401, detail="Token inválido")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        user = await raw_db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="Utilizador não encontrado")
+        company_context = await resolve_company_context(raw_db, user, preferred_company_id=get_requested_company_id(request))
         return {
             "id": str(user["_id"]),
             "email": user["email"],
             "name": user["name"],
             "role": user.get("role", "user"),
             "module_permissions": user.get("module_permissions") or default_modules_for_role(user.get("role", "consulta")),
+            **company_context,
         }
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
@@ -132,6 +180,20 @@ async def get_current_user(request: Request):
 class LoginInput(BaseModel):
     email: str
     password: str
+
+
+class CompanyCreateInput(BaseModel):
+    name: str
+    subtitle: str = ""
+    phone: str = ""
+    email: str = ""
+    website: str = ""
+    address: str = ""
+    nif: str = ""
+
+
+class CompanySelectInput(BaseModel):
+    company_id: str
 
 class BudgetItemModel(BaseModel):
     category: str = ""
@@ -208,18 +270,20 @@ class AppointmentCreate(BaseModel):
 # --- Auth Endpoints ---
 
 @api_router.post("/auth/login")
-async def login(input: LoginInput, response: Response):
+async def login(input: LoginInput, request: Request, response: Response):
     email = input.email.lower().strip()
-    user = await db.users.find_one({"email": email})
+    user = await raw_db.users.find_one({"email": email})
     if not user or not verify_password(input.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Email ou password incorretos")
 
     user_id = str(user["_id"])
     access_token = create_access_token(user_id, email)
     refresh_token = create_refresh_token(user_id)
+    company_context = await resolve_company_context(raw_db, user, preferred_company_id=get_requested_company_id(request))
 
     response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
     response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
+    set_active_company_cookie(response, company_context.get("company_id"))
 
     return {
         "id": user_id,
@@ -229,6 +293,7 @@ async def login(input: LoginInput, response: Response):
         "module_permissions": user.get("module_permissions") or default_modules_for_role(user.get("role", "consulta")),
         "access_token": access_token,
         "refresh_token": refresh_token,
+        **company_context,
     }
 
 @api_router.get("/auth/me")
@@ -239,6 +304,7 @@ async def get_me(user=Depends(get_current_user)):
 async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
+    response.delete_cookie(ACTIVE_COMPANY_COOKIE, path="/")
     return {"message": "Logout com sucesso"}
 
 @api_router.post("/auth/refresh")
@@ -257,18 +323,21 @@ async def refresh(request: Request, response: Response):
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Token inválido")
-        user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+        user = await raw_db.users.find_one({"_id": ObjectId(payload["sub"])})
         if not user:
             raise HTTPException(status_code=401, detail="Utilizador não encontrado")
         user_id = str(user["_id"])
         access_token = create_access_token(user_id, user["email"])
+        company_context = await resolve_company_context(raw_db, user, preferred_company_id=get_requested_company_id(request))
         response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=3600, path="/")
+        set_active_company_cookie(response, company_context.get("company_id"))
         return {
             "id": user_id,
             "email": user["email"],
             "name": user["name"],
             "role": user.get("role", "user"),
             "access_token": access_token,
+            **company_context,
         }
     except Exception:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
@@ -2587,7 +2656,9 @@ async def update_system_settings(input: SystemSettingsInput, user=Depends(get_cu
     else:
         await db.system_settings.insert_one({**DEFAULT_SYSTEM_SETTINGS, **data})
     updated = await db.system_settings.find_one({}, {"_id": 0})
-    return _merge_system_settings(updated)
+    merged = _merge_system_settings(updated)
+    await sync_company_profile(raw_db, user.get("company_id", ""), merged.get("company_info"))
+    return merged
 
 @api_router.get("/specialties")
 async def get_specialties(user=Depends(get_current_user)):
@@ -3926,7 +3997,9 @@ async def get_users(user=Depends(get_current_user)):
         "name": u["name"],
         "role": u.get("role", "consulta"),
         "module_permissions": u.get("module_permissions") or default_modules_for_role(u.get("role", "consulta")),
-        "created_at": u.get("created_at", "")
+        "created_at": u.get("created_at", ""),
+        "company_id": u.get("company_id") or user.get("company_id", ""),
+        "company_name": user.get("company_name", ""),
     } for u in users]
 
 @api_router.post("/users")
@@ -3948,10 +4021,20 @@ async def create_user(input: UserCreate, user=Depends(get_current_user)):
         "name": input.name,
         "role": input.role,
         "module_permissions": modules,
+        "company_id": user.get("company_id", ""),
+        "company_access_ids": [user.get("company_id", "")],
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     result = await db.users.insert_one(doc)
-    return {"id": str(result.inserted_id), "email": doc["email"], "name": doc["name"], "role": doc["role"], "module_permissions": modules}
+    return {
+        "id": str(result.inserted_id),
+        "email": doc["email"],
+        "name": doc["name"],
+        "role": doc["role"],
+        "module_permissions": modules,
+        "company_id": doc.get("company_id", ""),
+        "company_name": user.get("company_name", ""),
+    }
 
 @api_router.put("/users/{user_id}")
 async def update_user(user_id: str, input: UserUpdate, user=Depends(get_current_user)):
@@ -3990,6 +4073,99 @@ async def get_roles(user=Depends(get_current_user)):
         "all_modules": ALL_MODULES,
         "default_modules_per_role": {r: default_modules_for_role(r) for r in VALID_ROLES},
     }
+
+
+@api_router.get("/companies/current")
+async def get_current_company(user=Depends(get_current_user)):
+    company = await raw_db.companies.find_one({"id": user.get("company_id", "")}, {"_id": 0})
+    if not company:
+        raise HTTPException(status_code=404, detail="Empresa atual não encontrada")
+    return {
+        **company,
+        "stats": {
+            "users_count": await db.users.count_documents({}),
+            "budgets_count": await db.budgets.count_documents({}),
+            "works_count": await db.works.count_documents({}),
+            "invoices_count": await db.invoices.count_documents({}),
+        },
+    }
+
+
+@api_router.get("/companies")
+async def get_available_companies(user=Depends(get_current_user)):
+    return {
+        "current_company_id": user.get("company_id", ""),
+        "primary_company_id": user.get("primary_company_id", ""),
+        "companies": user.get("available_companies") or [],
+    }
+
+
+async def _build_unique_company_slug(name: str) -> str:
+    base_slug = slugify_company_name(name)
+    candidate = base_slug
+    index = 2
+    while await raw_db.companies.find_one({"slug": candidate}, {"_id": 0}):
+        candidate = f"{base_slug}-{index}"
+        index += 1
+    return candidate
+
+
+@api_router.post("/companies")
+async def create_company(input: CompanyCreateInput, user=Depends(get_current_user)):
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Sem permissao")
+
+    name = (input.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nome da empresa é obrigatório")
+
+    company_id = str(uuid.uuid4())
+    company_payload = {
+        "id": company_id,
+        "name": name,
+        "slug": await _build_unique_company_slug(name),
+        "subtitle": input.subtitle or "",
+        "phone": input.phone or "",
+        "email": input.email or "",
+        "website": input.website or "",
+        "address": input.address or "",
+        "nif": input.nif or "",
+        "status": "active",
+        "is_default": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await raw_db.companies.insert_one(dict(company_payload))
+    await raw_db.system_settings.insert_one({
+        **DEFAULT_SYSTEM_SETTINGS,
+        "company_id": company_id,
+        "company_info": {
+            **DEFAULT_SYSTEM_SETTINGS.get("company_info", {}),
+            "name": company_payload["name"],
+            "subtitle": company_payload["subtitle"],
+            "phone": company_payload["phone"],
+            "email": company_payload["email"],
+            "website": company_payload["website"],
+            "address": company_payload["address"],
+            "nif": company_payload["nif"],
+        },
+    })
+    await raw_db.users.update_one(
+        {"_id": ObjectId(user.get("id"))},
+        {"$addToSet": {"company_access_ids": company_id}},
+    )
+    return {"company": company_payload}
+
+
+@api_router.post("/companies/select")
+async def select_company(input: CompanySelectInput, response: Response, user=Depends(get_current_user)):
+    raw_user = await raw_db.users.find_one({"_id": ObjectId(user.get("id"))})
+    if not raw_user:
+        raise HTTPException(status_code=401, detail="Utilizador não encontrado")
+    company_context = await resolve_company_context(raw_db, raw_user, preferred_company_id=input.company_id)
+    if company_context.get("company_id") != input.company_id:
+        raise HTTPException(status_code=403, detail="Sem acesso a esta empresa")
+    set_active_company_cookie(response, company_context.get("company_id"))
+    return company_context
 
 
 # ============================================================
@@ -4475,13 +4651,15 @@ async def remove_favorite(fav_id: str, user=Depends(get_current_user)):
 async def seed_admin():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@obelisco.pt")
     admin_password = os.environ.get("ADMIN_PASSWORD", "obelisco2024")
-    existing = await db.users.find_one({"email": admin_email})
+    existing = await raw_db.users.find_one({"email": admin_email})
     if not existing:
         await db.users.insert_one({
             "email": admin_email,
             "password_hash": hash_password(admin_password),
             "name": "Admin",
             "role": "admin",
+            "company_id": get_default_company_id() or "",
+            "company_access_ids": [get_default_company_id()] if get_default_company_id() else [],
             "created_at": datetime.now(timezone.utc).isoformat()
         })
         logger.info(f"Admin criado: {admin_email}")
@@ -4495,17 +4673,21 @@ async def seed_admin():
 
 @app.on_event("startup")
 async def startup():
+    default_company = await ensure_default_company(raw_db, DEFAULT_SYSTEM_SETTINGS.get("company_info") or {})
+    set_default_company_id(default_company.get("id"))
     await seed_admin()
     await seed_professional_data()
-    await db.expenses.create_index(
-        "hard_dedupe_key",
-        unique=True,
-        partialFilterExpression={"hard_dedupe_key": {"$exists": True}, "dedupe_exempt": False},
-        name="uniq_expenses_hard_dedupe_key",
-    )
-    await db.active_debts.create_index([("status", 1), ("data_vencimento", 1)])
-    await db.cfo_virtual_reports.create_index("created_at")
-    await db.cfo_virtual_simulations.create_index("created_at")
+    settings = await raw_db.system_settings.find_one({}, {"_id": 0}) or DEFAULT_SYSTEM_SETTINGS
+    company_doc = await sync_company_profile(raw_db, default_company.get("id"), (settings or {}).get("company_info") or DEFAULT_SYSTEM_SETTINGS.get("company_info"))
+    set_default_company_id((company_doc or default_company).get("id"))
+    migration_stats = await migrate_existing_company_ids(raw_db, get_default_company_id())
+    await raw_db.users.create_index("email", unique=True)
+    await ensure_company_indexes(raw_db)
+    await raw_db.active_debts.create_index([("company_id", 1), ("status", 1), ("data_vencimento", 1)])
+    await raw_db.cfo_virtual_reports.create_index([("company_id", 1), ("created_at", 1)])
+    await raw_db.cfo_virtual_simulations.create_index([("company_id", 1), ("created_at", 1)])
+    if migration_stats:
+        logger.info(f"Migração multiempresa fase 1 aplicada: {migration_stats}")
     # Start Telegram bot scheduler (commands + payment reminders)
     from telegram_scheduler import run_telegram_scheduler
     asyncio.create_task(run_telegram_scheduler(db))

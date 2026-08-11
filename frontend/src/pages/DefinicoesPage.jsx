@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,6 +12,7 @@ import { Settings, Save, Building2, Percent, Shield, AlertTriangle, Brain, Trash
 const formatPct = (v) => `${v}%`;
 
 export default function DefinicoesPage() {
+  const { user } = useAuth();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -197,6 +199,10 @@ export default function DefinicoesPage() {
           <Card className="bg-zinc-900 border-zinc-800 rounded-3xl">
             <CardContent className="p-6 space-y-4">
               <h3 className="text-lg font-bold text-white">Dados da Empresa</h3>
+              <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/5 px-4 py-3" data-testid="tenant-scope-note">
+                <p className="text-xs uppercase tracking-[0.2em] text-yellow-300">Escopo multiempresa</p>
+                <p className="mt-1 text-sm text-zinc-300">Estas definições aplicam-se apenas à empresa actual: <span className="font-semibold text-white">{user?.company_name || 'Empresa actual'}</span>.</p>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {['name', 'subtitle', 'phone', 'email', 'website', 'address', 'nif'].map(field => (
                   <div key={field}>
