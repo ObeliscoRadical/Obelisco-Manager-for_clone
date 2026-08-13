@@ -1,3 +1,9 @@
+## 2026-08-13 — Branding de ícones global
+- Novo ícone oficial da app aplicado a favicon, apple-touch-icon, PWA icons e atalhos mobile/tablet/desktop
+- Assets públicos regenerados a partir da imagem fornecida pelo utilizador e guardados em `frontend/public/`
+- `index.html` atualizado com `shortcut icon` e `application-name` = `Obelisco Manager`
+- Validação: testing agent iteration 66 (frontend 100%, assets e referências OK)
+
 ## 2026-08-13 — Bugfix auth: admin em /tech/visitas
 - Corrigido `frontend/src/lib/api.js`: endpoints `/tech/*` deixam de bloquear refresh para admins com `refresh_token` válido
 - Mantido comportamento correto para técnicos reais: sem refresh token, sem auto-refresh em rotas técnicas

@@ -355,6 +355,31 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
     - acesso admin via botão na obra
     - técnico real continua funcional sem refresh
 
+## Atualização 2026-08-13 — Novo ícone global da aplicação
+- **Branding de ícones atualizado**
+  - a imagem fornecida pelo utilizador passa a ser a base oficial dos ícones da app
+  - aplicada a:
+    - favicon do navegador
+    - ícones para telemóvel / tablet
+    - ícones PWA / atalho no ecrã inicial
+    - apple touch icon
+- **Assets regenerados no frontend público**
+  - `favicon.ico`
+  - `favicon-16x16.png`
+  - `favicon-32x32.png`
+  - `apple-touch-icon.png`
+  - `icon-192.png`
+  - `icon-512.png`
+  - `icon-maskable-512.png`
+  - tamanhos auxiliares `icon-*`
+  - fonte guardada em `frontend/public/brand-app-icon-source.png`
+- **Referências públicas alinhadas**
+  - `frontend/public/index.html` com `shortcut icon`, favicon e app name atualizados
+  - `frontend/public/manifest.json` mantém a exposição correta dos ícones PWA
+- **Validação formal**
+  - testing agent iteration 66: frontend `100%`
+  - todos os assets servidos com HTTP 200 e consistência visual aprovada
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -399,6 +424,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - email nativo Emergent
   - push notifications em dispositivos físicos
 - **Redeploy necessário em produção** para incluir o bugfix de auth do módulo Relação de Visita
+- **Redeploy necessário em produção** para publicar o novo ícone global
 
 ### P1
 - Melhorias ao onboarding de nova conta:
