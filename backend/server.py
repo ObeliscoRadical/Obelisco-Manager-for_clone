@@ -5308,6 +5308,10 @@ app.include_router(create_contabilista_router(db, get_current_user))
 from tech_extras import create_tech_extras_router
 app.include_router(create_tech_extras_router(db, get_current_user))
 
+# Relação de Visita em Obra — portal técnico mobile-first
+from tech_visit_reports import create_tech_visit_reports_router
+app.include_router(create_tech_visit_reports_router(db))
+
 # Pedidos de Serviço (migrado de Obelisco-Tecnicos-main)
 from service_orders import create_service_orders_router
 app.include_router(create_service_orders_router(db, get_current_user))

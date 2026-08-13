@@ -50,6 +50,7 @@ import WidgetPedidoPage from "./pages/WidgetPedidoPage";
 import RelatoriosPontoPage from "./pages/RelatoriosPontoPage";
 import PontoGPSPage from "./pages/PontoGPSPage";
 import TechPedidosPage from "./pages/TechPedidosPage";
+import TechVisitReportsPage from "./pages/TechVisitReportsPage";
 import PerfilClientePage from "./pages/PerfilClientePage";
 import AnaliseBancariaPage from "./pages/AnaliseBancariaPage";
 import ContasPrevistasPage from "./pages/ContasPrevistasPage";
@@ -199,6 +200,7 @@ function App() {
             <Route path="/tech/pedidos" element={<TechProtectedRoute><TechPedidosPage /></TechProtectedRoute>} />
             <Route path="/tech/execucao" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
             <Route path="/tech/execucao/:workId" element={<TechProtectedRoute><TechExecucaoPage /></TechProtectedRoute>} />
+            <Route path="/tech/visitas" element={<TechProtectedRoute><TechVisitReportsPage /></TechProtectedRoute>} />
             <Route path="/tech/obra/:workId" element={<TechProtectedRoute><TechObraDetailPage /></TechProtectedRoute>} />
             <Route path="/tech/guias/:id" element={<TechProtectedRoute><TechGuideDetailPage /></TechProtectedRoute>} />
             <Route path="/tech/agenda" element={<TechProtectedRoute><TechAgendaPage /></TechProtectedRoute>} />

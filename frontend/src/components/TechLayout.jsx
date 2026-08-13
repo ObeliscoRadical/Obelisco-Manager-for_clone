@@ -1,6 +1,6 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks, Zap } from 'lucide-react';
+import { LogOut, Package, User, Calendar, Clock, MessageSquare, ArrowLeft, Shield, ListChecks, Zap, FileText } from 'lucide-react';
 import { useUnreadTechMessages } from '../hooks/useUnreadTechMessages';
 import NotificationsBell from './NotificationsBell';
 import { CompanySwitcher } from './CompanySwitcher';
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { path: '/tech',          label: 'Guias',    icon: Package,       testid: 'tech-nav-guias' },
   { path: '/tech/pedidos',  label: 'Pedidos',  icon: Zap,           testid: 'tech-nav-pedidos' },
   { path: '/tech/execucao', label: 'Execução', icon: ListChecks,    testid: 'tech-nav-execucao' },
+  { path: '/tech/visitas',  label: 'Visitas',  icon: FileText,      testid: 'tech-nav-visitas' },
   { path: '/tech/agenda',   label: 'Agenda',   icon: Calendar,      testid: 'tech-nav-agenda' },
   { path: '/tech/ponto',    label: 'Ponto',    icon: Clock,         testid: 'tech-nav-ponto' },
   { path: '/tech/chat',     label: 'Chat',     icon: MessageSquare, testid: 'tech-nav-chat' },
@@ -123,7 +124,7 @@ export default function TechLayout({ children }) {
 
       {/* Bottom nav (mobile only) */}
       <nav className="fixed bottom-0 left-0 right-0 bg-zinc-900 border-t border-zinc-800 md:hidden" data-testid="tech-bottom-nav">
-        <div className="grid grid-cols-6 max-w-3xl mx-auto py-1">
+        <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-2 py-1">
           {NAV_ITEMS.map(it => {
             const Icon = it.icon;
             const active = isActive(it.path);
@@ -133,7 +134,7 @@ export default function TechLayout({ children }) {
                 key={it.path}
                 to={it.path}
                 data-testid={`${it.testid}-mobile`}
-                className={`flex flex-col items-center gap-0.5 py-2 rounded-lg transition-colors relative ${
+                className={`relative flex min-w-[76px] flex-col items-center gap-0.5 rounded-xl px-2 py-2 transition-colors ${
                   active ? 'text-yellow-400' : 'text-zinc-500'
                 }`}
               >

@@ -1,3 +1,10 @@
+## 2026-08-13 — Relação de Visita em Obra no Portal do Técnico
+- Novo módulo técnico em `/tech/visitas` com formulário mobile-first, lista de relatórios e preview oficial da Obelisco Radical
+- Backend novo `tech_visit_reports.py` com CRUD completo em `/api/tech/visit-reports` + helper `/helpers/works`, sempre ligado ao `technician_id`
+- Novo seletor visual de serviços com ícones (`VisitServicePicker`), preview final (`VisitReportPreview`) e exportação PDF (`visitReportPdf.js`)
+- Atalhos integrados no dashboard técnico, detalhe da obra e navegação principal do portal técnico
+- Validação: pytest `test_tech_visit_reports.py` (1 passed) + smoke visual autenticado + testing agent iteration 64 (backend 100%, frontend 100%)
+
 ## 2026-08-11 — White Label / Branding por empresa concluído
 - `system_settings.branding` passa a suportar logo custom, reset e paleta automática por tenant
 - Novas APIs públicas/tenant-aware: `GET /api/public/branding`, `GET /api/logo`, `GET /api/settings/logo`

@@ -304,6 +304,33 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - auto_frontend_testing_agent: aprovado
   - deep_testing_backend_v2: `6/6` cenários aprovados
 
+## Atualização 2026-08-13 — Relação de Visita em Obra no Portal do Técnico
+- **Novo módulo exclusivo do Portal do Técnico**
+  - nova rota protegida `/tech/visitas`
+  - acesso rápido a partir do dashboard técnico e atalho dentro do detalhe da obra
+  - navegação técnica expandida com entrada **Visitas**
+- **Formulário mobile-first para uso em campo**
+  - secções de cabeçalho, escopo, lista dinâmica de circuitos e quadro de distribuição
+  - seletor visual de serviços com ícones em drawer, pesquisa e defaults automáticos por tipo
+  - upload de foto do quadro preparado para câmara móvel (`accept=image/*` + `capture=environment`) com otimização client-side
+- **Backend dedicado ao contexto técnico**
+  - novo módulo `backend/tech_visit_reports.py`
+  - endpoints:
+    - `GET /api/tech/visit-reports`
+    - `POST /api/tech/visit-reports`
+    - `GET /api/tech/visit-reports/{id}`
+    - `PUT /api/tech/visit-reports/{id}`
+    - `DELETE /api/tech/visit-reports/{id}`
+    - `GET /api/tech/visit-reports/helpers/works`
+  - cada relatório fica associado a `technician_id`, `technician_name` e respeita controlo de acesso por técnico
+- **Visual final oficial + PDF**
+  - novo componente `VisitReportPreview.jsx` com cabeçalho preto, detalhes mostarda, linhas zebradas e bloco do quadro com checkmarks amarelos
+  - novo gerador `visitReportPdf.js` com exportação PDF pronta para cliente/administração
+- **Validação formal**
+  - pytest novo: `/app/backend/tests/test_tech_visit_reports.py` → `1 passed`
+  - smoke test visual autenticado no preview: módulo carregado com sucesso
+  - testing agent iteration 64: backend `100%` + frontend `100%`
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -343,19 +370,19 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
 
 ## Backlog
 ### P0
-- Validar em produção após deploy: branding por tenant, empresa activa, isolamento por tenant e login técnico
+- Validação do utilizador em produção:
+  - totais de despesas
+  - email nativo Emergent
+  - push notifications em dispositivos físicos
 
 ### P1
-- Checklist de validação em produção pós-deploy:
-  - login admin
-  - branding/logo correcto no login e dashboard
-  - troca de empresa no seletor global
-  - criação de utilizador por tenant
-  - login técnico e contexto da empresa no portal técnico
 - Melhorias ao onboarding de nova conta:
   - wizard pós-registo para completar NIF, telefone e morada da empresa
 - Automação Máscara DIN (importar da Legenda)
 - Módulo Salarial Fase 2: recibos PDF
+- Possível extensão do módulo de visita:
+  - envio direto para administração por email
+  - associação automática a obra ao abrir pelo detalhe da obra com pré-preenchimento adicional
 - Exportar Custos Recorrentes
 - Code Quality Fase 4: reduzir componentes grandes remanescentes (`MateriaisPage`, `MascaraDinPage`, `DashboardPage`) + continuar type hints
 

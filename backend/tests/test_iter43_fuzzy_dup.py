@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv("/app/backend/.env")
 load_dotenv("/app/frontend/.env")
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dynamic-colors-2.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://saas-portal-21.preview.emergentagent.com").rstrip("/")
 
 sys.path.insert(0, "/app/backend")
 from bank_analysis import _extract_significant_words, _fuzzy_match_supplier  # noqa: E402

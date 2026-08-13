@@ -9,7 +9,7 @@ import uuid
 from PIL import Image
 
 # Backend URL from environment
-BASE_URL = "https://dynamic-colors-2.preview.emergentagent.com/api"
+BASE_URL = "https://saas-portal-21.preview.emergentagent.com/api"
 
 # Test credentials
 ADMIN_EMAIL = "admin@obelisco.pt"

@@ -7,7 +7,7 @@ import base64
 import io
 from PIL import Image
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://dynamic-colors-2.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://saas-portal-21.preview.emergentagent.com')
 
 def make_test_logo(rgb=(37, 99, 235)):
     """Create a test logo image as data URL"""

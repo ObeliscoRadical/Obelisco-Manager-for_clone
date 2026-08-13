@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import api from '../lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Package, Calendar, MapPin, ArrowRight, Truck, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { Package, Calendar, MapPin, ArrowRight, Truck, CheckCircle2, AlertTriangle, Clock, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STATUS_MAP = {
@@ -52,6 +52,19 @@ export default function TechDashboardPage() {
         </h1>
         <p className="text-zinc-400 text-sm mt-1">Guias de transporte atribuídas a si.</p>
       </div>
+
+      <Link to="/tech/visitas" className="block" data-testid="tech-visit-report-shortcut">
+        <Card className="bg-[linear-gradient(135deg,#111111_0%,#1f1f1f_100%)] border-yellow-500/30 hover:border-yellow-400/60 transition-colors">
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-yellow-300">Novo módulo</p>
+              <p className="mt-1 text-lg font-black text-white flex items-center gap-2"><FileText className="h-5 w-5 text-yellow-400" /> Relação de Visita em Obra</p>
+              <p className="mt-1 text-sm text-zinc-400">Abrir formulário mobile para campo, foto do quadro e PDF final.</p>
+            </div>
+            <ArrowRight className="h-5 w-5 text-yellow-400 shrink-0" />
+          </CardContent>
+        </Card>
+      </Link>
 
       {/* Filter tabs */}
       <div className="grid grid-cols-3 gap-2">

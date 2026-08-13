@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import {
   HardHat, ArrowLeft, Phone, MapPin, MessageSquare, Package as PackageIcon,
   CheckCircle2, Circle, Play, User, StickyNote, CalendarClock,
-  LogIn, LogOut, Loader2,
+  LogIn, LogOut, Loader2, FileText,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -239,7 +239,7 @@ export default function TechObraDetailPage() {
         )}
 
         {/* ACÇÕES RÁPIDAS */}
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Button
             data-testid="tech-obra-chat"
             onClick={() => nav('/tech/chat')}
@@ -253,6 +253,13 @@ export default function TechObraDetailPage() {
             className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs h-10 rounded-xl"
           >
             <PackageIcon className="h-4 w-4 mr-2" /> Guias de Transporte
+          </Button>
+          <Button
+            data-testid="tech-obra-visit-report"
+            onClick={() => nav(`/tech/visitas?workId=${workId}`)}
+            className="bg-yellow-500 hover:bg-yellow-400 text-zinc-950 text-xs h-10 rounded-xl"
+          >
+            <FileText className="h-4 w-4 mr-2" /> Relação de Visita
           </Button>
         </div>
 

@@ -3,7 +3,7 @@ import os
 import requests
 import pytest
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://dynamic-colors-2.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://saas-portal-21.preview.emergentagent.com").rstrip("/")
 ADMIN = {"email": "admin@obelisco.pt", "password": "obelisco2024"}
 
 
