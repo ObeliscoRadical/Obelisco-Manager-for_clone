@@ -331,6 +331,30 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - smoke test visual autenticado no preview: módulo carregado com sucesso
   - testing agent iteration 64: backend `100%` + frontend `100%`
 
+## Atualização 2026-08-13 — Bugfix auth no Portal Técnico (admin em Relação de Visita)
+- **Problema reportado em produção**
+  - admin recebia erro **"não autenticado"** ao abrir `/tech/visitas`
+  - impacto confirmado nos dois caminhos de entrada:
+    - menu **Visitas** no Portal Técnico
+    - botão **Relação de Visita** dentro do detalhe da obra
+- **Causa raiz**
+  - o interceptor frontend tratava todos os endpoints `/tech/*` como rotas sem refresh
+  - isso quebrava admins com `access_token` expirado dentro do Portal Técnico, apesar de terem `refresh_token` válido
+- **Correção aplicada**
+  - `frontend/src/lib/api.js` agora decide o refresh com base em:
+    - `obelisco_user_kind_session`
+    - existência de `refresh_token`
+  - comportamento final:
+    - **admin** em `/tech/*` → pode fazer auto-refresh
+    - **técnico real** em `/tech/*` → continua sem refresh (comportamento esperado)
+- **Validação formal**
+  - self-test visual: admin com token inválido + refresh válido continua a abrir `/tech/visitas`
+  - testing agent iteration 65: frontend `100%` (4/4)
+  - regressões verificadas:
+    - acesso direto admin a `/tech/visitas`
+    - acesso admin via botão na obra
+    - técnico real continua funcional sem refresh
+
 ## Atualização 2026-08-07
 - Entregue o novo bloco de **Tesouraria Preditiva** com endpoint `GET /api/bank-analysis/treasury/insights`
 - Novo parâmetro em **Definições > Tesouraria**: `treasury_settings.anomaly_threshold_pct`
@@ -374,6 +398,7 @@ Build "Obelisco Manager" - an internal management panel for Obelisco Radical (el
   - totais de despesas
   - email nativo Emergent
   - push notifications em dispositivos físicos
+- **Redeploy necessário em produção** para incluir o bugfix de auth do módulo Relação de Visita
 
 ### P1
 - Melhorias ao onboarding de nova conta:

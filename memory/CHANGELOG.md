@@ -1,3 +1,9 @@
+## 2026-08-13 — Bugfix auth: admin em /tech/visitas
+- Corrigido `frontend/src/lib/api.js`: endpoints `/tech/*` deixam de bloquear refresh para admins com `refresh_token` válido
+- Mantido comportamento correto para técnicos reais: sem refresh token, sem auto-refresh em rotas técnicas
+- Resolve o erro **"não autenticado"** reportado por admin ao abrir **Relação de Visita** via menu do Portal Técnico e via botão dentro da obra
+- Validação: smoke test com access token admin inválido + refresh válido e testing agent iteration 65 (4/4 frontend)
+
 ## 2026-08-13 — Relação de Visita em Obra no Portal do Técnico
 - Novo módulo técnico em `/tech/visitas` com formulário mobile-first, lista de relatórios e preview oficial da Obelisco Radical
 - Backend novo `tech_visit_reports.py` com CRUD completo em `/api/tech/visit-reports` + helper `/helpers/works`, sempre ligado ao `technician_id`

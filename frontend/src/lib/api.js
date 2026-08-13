@@ -4,6 +4,7 @@ import { devLog, safeSessionGetText, safeSessionRemove, safeSessionSetText } fro
 const ACCESS_KEY = 'obelisco_access_token_session';
 const REFRESH_KEY = 'obelisco_refresh_token_session';
 const ACTIVE_COMPANY_KEY = 'obelisco_active_company_id_session';
+const USER_KIND_KEY = 'obelisco_user_kind_session';
 const inMemoryTokens = { access: null, refresh: null };
 let inMemoryCompanyId = null;
 
@@ -94,14 +95,16 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
     const status = error.response?.status;
+    const refreshToken = tokenStore.getRefresh();
+    const currentUserKind = safeSessionGetText(USER_KIND_KEY, null);
 
     const isAuthEndpoint = original?.url?.includes('/auth/refresh') || original?.url?.includes('/auth/login') || original?.url?.includes('/auth/logout');
     // /auth/me e /tech/auth/me são probes de sessão — nunca devem accionar o refresh/clear/redirect
     const isSessionProbe = original?.url?.endsWith('/auth/me') || original?.url?.endsWith('/tech/auth/me');
-    // Endpoints do portal técnico não usam refresh token — deixa a UI decidir
     const isTechEndpoint = original?.url?.includes('/tech/');
+    const shouldSkipRefreshForTechEndpoint = isTechEndpoint && (currentUserKind === 'tech' || !refreshToken);
 
-    if (status === 401 && !original._retry && !isAuthEndpoint && !isSessionProbe && !isTechEndpoint) {
+    if (status === 401 && !original._retry && !isAuthEndpoint && !isSessionProbe && !shouldSkipRefreshForTechEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           pendingQueue.push({ resolve: () => resolve(api(original)), reject });
@@ -111,7 +114,6 @@ api.interceptors.response.use(
       original._retry = true;
       isRefreshing = true;
       try {
-        const refreshToken = tokenStore.getRefresh();
         const body = refreshToken ? { refresh_token: refreshToken } : {};
         const { data } = await api.post('/auth/refresh', body);
         if (data.access_token) tokenStore.set(data.access_token, null);

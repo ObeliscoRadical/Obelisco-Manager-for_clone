@@ -1,0 +1,71 @@
+{
+  "summary": "Iteration 65: Bug Fix Verification - Admin 'não autenticado' error on /tech/visitas. ALL 4 TESTS PASSED. The axios interceptor fix correctly allows auto-refresh for admin users accessing /tech/* endpoints when they have a valid refresh token, while still blocking refresh for real technicians (who don't have refresh tokens).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/frontend/src/lib/api.js"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "api.js interceptor fix is correct: shouldSkipRefreshForTechEndpoint = isTechEndpoint && (currentUserKind === 'tech' || !refreshToken)",
+    "Admin users (kind='admin') with valid refresh tokens will trigger auto-refresh on /tech/* endpoints",
+    "Tech users (kind='tech') without refresh tokens will NOT trigger auto-refresh (expected behavior)",
+    "Session probes (/auth/me, /tech/auth/me) are correctly excluded from refresh logic"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only testing)",
+    "frontend": "100% (4/4 tests passed)"
+  },
+  "test_credentials": {
+    "admin": "admin@obelisco.pt / obelisco2024",
+    "tecnico": "d.oliveira1986@gmail.com / A24d22r04"
+  },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug fix for admin 'não autenticado' error on /tech/visitas verified. The interceptor now correctly handles admin users accessing tech portal endpoints by allowing auto-refresh when they have a valid refresh token. Key session storage keys: obelisco_access_token_session, obelisco_refresh_token_session, obelisco_user_kind_session (values: 'admin' or 'tech').",
+  "verification_results": {
+    "test_1_admin_direct_access": {
+      "description": "Login as admin and access /tech/visitas directly",
+      "status": "PASS",
+      "details": "Admin can access /tech/visitas without any authentication errors"
+    },
+    "test_2_admin_auto_refresh": {
+      "description": "Admin with invalid access token but valid refresh token accessing /tech/visitas",
+      "status": "PASS",
+      "details": "Interceptor correctly triggers auto-refresh, new access token is obtained, page loads successfully"
+    },
+    "test_3_admin_obra_path": {
+      "description": "Admin accessing /tech/visitas via obra button (with workId parameter) after token invalidation",
+      "status": "PASS",
+      "details": "Auto-refresh works correctly for the obra path entry point as well"
+    },
+    "test_4_tecnico_regression": {
+      "description": "Técnico (real technician) login and access /tech/visitas normally",
+      "status": "PASS",
+      "details": "Técnico has no refresh token (refresh_token: null), user_kind: 'tech', and can still access /tech/visitas normally without triggering refresh logic"
+    }
+  },
+  "bug_fix_verification": {
+    "original_issue": "Admin users getting 'não autenticado' error when accessing /tech/visitas in production",
+    "root_cause": "Axios interceptor was treating all /tech/* endpoints as 'no refresh allowed', which broke admins with expired access tokens inside the Tech Portal",
+    "fix_applied": "Interceptor now uses user kind (from sessionStorage) + refresh token availability to determine if refresh should be skipped. Only skips for real technicians (kind='tech') or when no refresh token is available",
+    "fix_location": "/app/frontend/src/lib/api.js line 105",
+    "fix_code": "const shouldSkipRefreshForTechEndpoint = isTechEndpoint && (currentUserKind === 'tech' || !refreshToken);",
+    "verification_status": "VERIFIED - All scenarios tested and working correctly"
+  },
+  "features_tested": [
+    "Admin direct access to /tech/visitas",
+    "Admin auto-refresh on /tech/* endpoints with expired access token",
+    "Admin access via obra path with workId parameter",
+    "Técnico regression - normal access without refresh token dependency"
+  ]
+}
